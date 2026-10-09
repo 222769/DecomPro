@@ -177,9 +177,21 @@ test('serial-first mode captures unknown serials and confirmed records teach exa
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft)).toMatchObject({serial:'UNSEEN-001',model:'Manual model'});
 });
 
+test('blocked browser storage shows the app and an error instead of a blank screen',async({page})=>{
+ const failures=[];page.on('pageerror',error=>failures.push(error.message));
+ await page.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Storage blocked','SecurityError');}}));
+ await page.goto('/');
+ await expect(page.getByRole('heading',{name:'Make room for what’s next.'})).toBeVisible();
+ await expect(page.getByRole('alert')).toContainText('Saved data could not be loaded');
+ expect(failures).toEqual([]);
+});
+
 test('database setup keeps local records intact before connection',async({page})=>{
  await page.goto('/');await defaults(page);await item(page,'LOCAL-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('heading',{name:'Connect your Firebase database'})).toBeVisible();
+ await expect(page.getByLabel('Team account email')).toBeVisible();
+ await expect(page.getByLabel('Firebase public web app config (JSON)')).toBeHidden();
+ await page.getByText('Connection settings',{exact:true}).click();
  const config=JSON.parse(await page.getByLabel('Firebase public web app config (JSON)').inputValue());
  expect(config.projectId).toBe('decompro-236e9');
  expect(config.authDomain).toBe('decompro-236e9.firebaseapp.com');

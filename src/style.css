@@ -122,3 +122,6 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 #database-dialog { width:min(540px,calc(100vw - 32px));max-width:540px;max-height:85vh;overflow:auto; }#database-dialog textarea { width:100%;resize:vertical;border:1px solid #dfe5ef;border-radius:8px;padding:12px;font:11px ui-monospace,monospace;color:#203047;background:#fafbfe; }#database-dialog input { font-size:12px; }#database-error { color:#a74444; }
 .recognition-review { display:flex;gap:10px;align-items:flex-start;color:#d3e6ef;font-size:12px;line-height:1.7;text-align:left;margin:20px 0 0;padding:14px;background:#274c50;border-radius:9px; }.recognition-review input { width:18px;height:18px;flex:0 0 18px;margin:3px 0;accent-color:#91bafc; }
 .recognized-manufacturer { align-items:center; }.recognized-manufacturer input { background:#203c42;color:#e6fff5;border-color:#527f7b;max-width:220px;padding:8px;font-size:12px; }
+.connection-settings { margin: 18px 0; padding: 14px; border: 1px solid #dce3ed; border-radius: 12px; }
+.connection-settings summary { cursor: pointer; font-weight: 600; color: #344867; }
+.connection-settings[open] summary { margin-bottom: 14px; }

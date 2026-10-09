@@ -3,6 +3,7 @@ import './style.css';
 import { recognizeSerial, cleanExamples, examplesFromWorkbook } from './recognition';
 import { availableVoices, utteranceFor } from './speech';
 import { defaultFirebaseConfig } from './firebase-config';
+import { firebaseErrorMessage } from './firebase-errors';
 import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -26,11 +27,11 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 let state = { profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
 let sharedClient = null;
-let sharedLocked = localStorage.getItem('decompro.mode')==='shared';
+let sharedLocked = false;
 let saving=false, editingVersion=0;
 const localWorkspaceKey='decompro.localWorkspace';
 let search = '', editingId = null, pendingRestore = null;
-try { const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
+try { sharedLocked=localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function persist() { if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
 function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=utteranceFor(text,state.settings); speechSynthesis.speak(u); }
@@ -224,7 +225,7 @@ function openDatabase() {
  let saved={};try{saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');}catch{}
  saved.config ||= defaultFirebaseConfig;
  const dialog=document.querySelector('#database-dialog');
- dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Imports your preserved local register as historical records. Existing team items are not overwritten.</p>`:''}<form id="database-form"><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Web app config is public. Never paste an admin private key. Connecting preserves your local register separately; it does not silently upload it.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
+ dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Imports your preserved local register as historical records. Existing team items are not overwritten.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
  dialog.showModal();
  document.querySelector('#close-database').onclick=()=>dialog.close();
  document.querySelector('#disconnect-database')?.addEventListener('click',disconnectDatabase);
@@ -232,7 +233,7 @@ function openDatabase() {
  document.querySelector('#database-form').onsubmit=async e=>{
   e.preventDefault();const button=e.target.querySelector('.primary');button.disabled=true;
   try {const form=new FormData(e.target);await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'));}
-  catch(error){document.querySelector('#database-error').textContent=error.message;button.disabled=false;}
+  catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
 }
 async function activateDatabase(config,teamId,email,password) {
@@ -264,7 +265,7 @@ async function uploadLocal() {
   let added=0,blocked=0;
   for(const item of local.items){try{await sharedClient.write(item,0,{historicalImport:true});added++;}catch{blocked++;}}
   notice=`Imported ${added} historical records; ${blocked} not imported (duplicates, conflicts or errors). Your preserved local workspace is unchanged.`;render();
- }catch(error){document.querySelector('#database-error').textContent=error.message;button.disabled=false;}
+ }catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
 }
 async function resumeDatabase() {
  if(!sharedLocked)return;
