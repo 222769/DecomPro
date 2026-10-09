@@ -25,7 +25,7 @@ The supplied public Web app configuration for **decompro-236e9** is bundled in `
 
 1. Create a college-approved Firebase project, or use an existing approved project. Firestore and email/password Authentication are sufficient; this integration does not require Cloud Functions, Analytics, or paid services. Review current Firebase plan limits before importing large datasets. A free allowance is not an unlimited service or a guarantee of zero cost.
 2. Register a **Web app** and obtain its public `apiKey`, `authDomain`, `projectId` and `appId`. These identify the client project and are designed to appear in browser code. Never provide service-account JSON, private keys or admin credentials to the app.
-3. Enable **Authentication → Sign-in method → Email/Password**. Add technician accounts through your approved admin process. Add your deployed domain (for GitHub Pages, `222769.github.io`) to authorized domains where required. Do not send passwords in chat.
+3. Enable **Authentication → Sign-in method → Email/Password**. Add technician accounts through your approved admin process. Under **Authentication → Settings → Authorized domains**, add `decompro.hxali.com` and keep `222769.github.io` for the original Pages address. Enter hostnames only, without `https://` or a path. Do not send passwords in chat.
 4. Create the Firestore database in the region approved by your college. Use production/deny access defaults initially. After the emulator tests pass, deploy `firestore.rules` from this directory using the Firebase CLI (`firebase deploy --only firestore:rules --project YOUR_PROJECT_ID`) or publish it in the Firebase console Rules editor. The app does not deploy rules for you.
 5. Choose a team ID, for example `college-it`. In the console create `teams/college-it` with a name field, then create `teams/college-it/members/USER_UID` for each Firebase Authentication user. Each member document contains exactly:
 
@@ -34,6 +34,17 @@ The supplied public Web app configuration for **decompro-236e9** is bundled in `
 ```
 
 Use `role: "admin"` for your first administrator. Bootstrap membership in the trusted console; the public app cannot grant its first user admin access. `code` is what appears in the supplier's disposal column. Keep codes unique within your team. Set `active: false` to revoke a member's team access. Rules deny non-members, inactive members and unauthenticated visitors. Members can read their team's records; administrators can manage membership. The app currently uses the console for account and membership administration.
+
+For the first account, copy its **User UID** from **Authentication → Users**. In **Firestore Database → Data**, start collection `teams`, give its document the ID `college-it`, and add a string field `name` such as `IT Decommissioning`. Open that document and start subcollection `members`. Use the copied UID as the member document ID (not the email address or an automatically generated ID). Add these four fields:
+
+| Field | Firestore type | Value |
+|---|---|---|
+| `displayName` | string | Your name |
+| `code` | string | Your disposal initials |
+| `role` | string | `admin` for the first administrator |
+| `active` | boolean | `true` |
+
+The first membership path is `teams/college-it/members/YOUR_AUTH_USER_UID`. For Jawad, create a separate Authentication user and a separate member document with his UID, `displayName` of `Jawad`, `code` of `JA`, `role` of `technician`, and boolean `active` of `true`. These console steps can be completed while rules validation is pending; keep production/deny access rules until validation passes.
 
 6. Open **Database** in DecomPro. Paste the public Web app configuration as valid JSON, enter the team ID, then sign in with the technician's email/password. The membership document controls the displayed name/code. The chosen local profile cannot impersonate a shared account.
 7. Import the original XLSX once through **Settings → Import reference spreadsheet** while connected. This uploads only usable serial/model/manufacturer examples, not the entire supplier workbook or its finance/personnel data. Other connected members receive the references automatically.
