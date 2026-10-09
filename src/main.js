@@ -5,6 +5,7 @@ import builtInReferences from './reference-catalogue.json';
 import { availableVoices, utteranceFor } from './speech';
 import { defaultFirebaseConfig } from './firebase-config';
 import { firebaseErrorMessage } from './firebase-errors';
+import { createId } from './ids';
 import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -104,7 +105,7 @@ async function saveItem() {
  const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
  document.querySelector('#save-feedback').textContent=sharedClient?'Saving to the shared team database…':'Saving item…';
  try {
-  const item={...batch,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:crypto.randomUUID()};
+  const item={...batch,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
   if(sharedClient)await sharedClient.write(item);
   const next={...state,defaults:batch,items:[...state.items.filter(i=>i.id!==item.id),item],draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:0};
   // A local save must reach storage before clearing the scanned draft.

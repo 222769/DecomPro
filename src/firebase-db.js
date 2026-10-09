@@ -2,6 +2,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, getDoc, getDocs, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
+import { createId } from './ids.js';
 
 export function validateFirebaseConfig(value) {
  if(!value||typeof value!=='object'||'private_key' in value||'client_email' in value)throw Error('Use the public Firebase web app configuration, never a service-account key.');
@@ -46,7 +47,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   async logout(){client.stop();if(auth)await signOut(auth);},
   async write(item,expectedVersion=0,{deleted=false,historicalImport=false}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical local records.');
-   const serial=normalizeSerial(item.serial),newKey=deleted||serial==='N/A'?'':'s-'+serial.replaceAll('~','~~').replaceAll('/','~s'),row=doc(equipment,item.id),revisionId=crypto.randomUUID();
+   const serial=normalizeSerial(item.serial),newKey=deleted||serial==='N/A'?'':'s-'+serial.replaceAll('~','~~').replaceAll('/','~s'),row=doc(equipment,item.id),revisionId=createId();
    await runTransaction(db,async tx=>{
     const current=await tx.get(row),before=current.exists()?current.data():null;
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this record. Refresh the register and review their changes before retrying.');

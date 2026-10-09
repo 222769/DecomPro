@@ -63,6 +63,19 @@ test('10LL family fills Lenovo model for a new suffix and needs technician confi
  await expect(page.locator('tbody')).toContainText('10LLNEW123ABC');
 });
 
+test('saving works without crypto.randomUUID and produces distinct persistent IDs',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(window.crypto,'randomUUID',{value:undefined,configurable:true}));
+ await page.goto('/');await defaults(page);
+ for(const serial of ['ID-BROWSER-001','ID-BROWSER-002']) {
+  await item(page,serial);await page.getByRole('button',{name:'Save item & start next'}).click();
+  await expect(page.locator('tbody')).toContainText(serial);
+ }
+ const records=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items);
+ expect(new Set(records.map(item=>item.id)).size).toBe(2);
+ for(const record of records)expect(record.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+ await page.reload();await expect(page.locator('tbody')).toContainText('ID-BROWSER-002');
+});
+
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
  await page.goto('/');
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
