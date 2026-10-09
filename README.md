@@ -92,7 +92,9 @@ This uses browser speech, not Google Cloud Text-to-Speech. No Cloud API key or b
 
 ## Serial recognition and learning
 
-Import your supplier spreadsheet using **Settings → Import reference spreadsheet**. The importer finds Serial Number, Model and Manufacturer headings across worksheets, preserves text serials, and ignores incomplete/N/A examples. Importing teaches the catalogue; it does not add disposed equipment to the active register. The original attachment is not included in the public website or committed to GitHub.
+The site now includes 321 usable serial/model/manufacturer facts from the supplied Summer 2026 spreadsheet, with the owner's authorization to publish those facts. They are available in every browser, including shared Firebase mode, without an import step. The reference catalogue is public; it contains no disposal names, dates, finance columns, or other workbook fields. The original workbook itself is not published or committed.
+
+Add further supplier spreadsheets using **Add another spreadsheet** at the scan station or **Settings → Import reference spreadsheet**. The importer finds Serial Number, Model and Manufacturer headings across worksheets, preserves text serials, and ignores incomplete/N/A examples. Importing teaches the catalogue; it does not add disposed equipment to the active register. Additional imports stay in this browser, or are uploaded to the authenticated team when connected to Firebase.
 
 Serial number is always the first field. When a known serial is scanned, its model and manufacturer are prefilled; the next prompt is Barcode. Confirmed saved records also teach recognition, and editing their model/manufacturer immediately changes the evidence used by future lookups. Manufacturer is an item-level override, so recognising one item does not change the batch defaults. You can edit the suggested manufacturer directly and return to Model to correct it.
 

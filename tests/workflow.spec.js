@@ -34,6 +34,22 @@ test('asset numbers require A and four digits, normalize case, and permit N/A sk
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.at(-1).asset)).toBe('N/A');
 });
 
+test('built-in Summer reference recognises TG22681204 without import and keeps ambiguous patterns manual',async({page})=>{
+ await page.goto('/');
+ await expect(page.getByText('Serial recognition ready')).toBeVisible();
+ await scan(page,'tg22681204');
+ await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('Known serial: 10ET185A · Edgeio');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Edgeio');
+ await page.reload();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBe('10ET185A');
+ await page.getByRole('button',{name:'Previous field'}).click();await page.getByRole('button',{name:'Previous field'}).click();
+ await scan(page,'TG22681024');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('Reference data disagrees');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
+});
+
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
  await page.goto('/');
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
