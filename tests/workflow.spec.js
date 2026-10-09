@@ -7,7 +7,8 @@ async function defaults(page) {
 }
 async function scan(page,value) {await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
 async function item(page,serial='00001234') {
- await scan(page,'P2419H');await scan(page,serial);
+ await scan(page,serial);
+ if(await page.getByRole('heading',{name:'Model number',exact:true}).isVisible())await scan(page,'P2419H');
  await page.locator('#scan').press('Enter');await page.locator('#scan').press('Enter');
  await scan(page,'090011');await scan(page,'A0904');
 }
@@ -39,7 +40,7 @@ test('save uses typed batch defaults without requiring a separate Apply click',a
  await item(page,'DIRECT-SAVE-001');
  await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('tbody')).toContainText('DIRECT-SAVE-001');
- await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
  await page.reload();await expect(page.locator('tbody')).toContainText('DIRECT-SAVE-001');
 });
 
@@ -90,16 +91,28 @@ test('scanner, spoken prompts, profiles, persistence and exact Excel mapping',as
  await item(page);await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.getByRole('status')).toContainText('already in the register');expect(await page.locator('tbody tr').count()).toBe(1);
 });
-test('single empty Enter does not skip; progress survives refresh and previous field can be corrected',async({page})=>{
+test('single empty Enter does not skip; serial survives refresh and can be corrected',async({page})=>{
  await page.goto('/');await page.locator('#scan').press('Enter');
- await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
- await scan(page,'Model-old');await page.reload();
  await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Previous field'}).click();await expect(page.locator('#scan')).toHaveValue('Model-old');
- await scan(page,'Model-new');await page.getByRole('button',{name:'Skip · N/A'}).click();
+ await scan(page,'SERIAL-old');await page.reload();
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Previous field'}).click();await expect(page.locator('#scan')).toHaveValue('SERIAL-old');
+ await scan(page,'SERIAL-new');await page.getByRole('button',{name:'Skip · N/A'}).click();
  await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft)).toMatchObject({model:'Model-new',serial:'N/A'});
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft)).toMatchObject({serial:'SERIAL-new',model:'N/A'});
 });
+test('existing model-first drafts migrate without losing records or captured values',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'EXISTING-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));delete state.captureOrder;state.settings.serialFirst=false;state.draft={model:'Legacy model'};state.step=1;localStorage.setItem('decompro.v1',JSON.stringify(state));});
+ await page.reload();await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
+ await expect(page.locator('tbody')).toContainText('EXISTING-001');
+ await scan(page,'LEGACY-001');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBe('Legacy model');
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));delete state.captureOrder;state.draft={serial:'OLD-SERIAL-FIRST'};state.step=0;localStorage.setItem('decompro.v1',JSON.stringify(state));});
+ await page.reload();await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await scan(page,'Manual model');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+});
+
 test('unavailable data is not silently overwritten',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('decompro.v1','broken'));
  await page.goto('/');await expect(page.getByRole('alert')).toContainText('Storage has been paused');
@@ -133,7 +146,7 @@ test('trolley switching and adjustable scanning settings preserve existing recor
  await page.getByRole('button',{name:'Open settings'}).click();await expect(page.getByLabel('Batch model number')).toHaveValue('BATCH-MODEL');
  await page.getByLabel('Use one model for this batch').uncheck();await page.getByRole('button',{name:'Save settings'}).click();
  page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Clear current item'}).click();
- await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
 });
 
 test('search and saved-item editing do not change other records; export includes all items',async({page})=>{
@@ -155,17 +168,17 @@ test('search and saved-item editing do not change other records; export includes
 
 test('backup restore requires confirmation and retains trolley, settings and captured progress',async({page})=>{
  await page.goto('/');await defaults(page);await item(page,'BACKUP-001');await page.getByRole('button',{name:'Save item & start next'}).click();
- await scan(page,'IN-PROGRESS-MODEL');
+ await scan(page,'IN-PROGRESS-SERIAL');
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const path=await (await downloaded).path();
- await scan(page,'UNBACKED-SERIAL');
+ await scan(page,'UNBACKED-MODEL');
  await page.locator('#backup-file').setInputFiles(path);
  await expect(page.getByRole('heading',{name:'Restore this backup?'})).toBeVisible();
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('UNBACKED-SERIAL');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBe('UNBACKED-MODEL');
  await page.locator('#backup-file').setInputFiles(path);await page.getByRole('button',{name:'Replace workspace & restore'}).click();
- await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
- expect(state.draft).toEqual({model:'IN-PROGRESS-MODEL'});expect(state.items[0].trolley).toBe('Trolley 01');expect(state.settings.skipWindow).toBe(700);
+ expect(state.draft).toEqual({serial:'IN-PROGRESS-SERIAL'});expect(state.items[0].trolley).toBe('Trolley 01');expect(state.settings.skipWindow).toBe(700);
  const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
  await page.locator('#backup-file').setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{"app":"DecomPro","version":1,"state":{"items":[]}}')});
  await expect(page.getByRole('status')).toContainText('Backup was not restored');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);
@@ -177,7 +190,7 @@ test('speech settings affect prompts and can be tested without applying changes'
  await page.getByLabel('Speech speed').fill('1.2');await page.getByLabel('Volume').fill('0.5');
  await page.getByRole('button',{name:'Test voice'}).click();const trial=await page.evaluate(()=>window.prompts.at(-1));expect(trial.text).toBe('Next, serial number.');expect(trial.rate).toBeCloseTo(1.2);expect(trial.volume).toBe(.5);
  await page.getByRole('button',{name:'Save settings'}).click();await page.getByRole('button',{name:'Start scanning'}).click();
- const saved=await page.evaluate(()=>window.prompts.at(-1));expect(saved.text).toBe('Next, Model number');expect(saved.rate).toBeCloseTo(1.2);expect(saved.volume).toBe(.5);
+ const saved=await page.evaluate(()=>window.prompts.at(-1));expect(saved.text).toBe('Next, Serial number');expect(saved.rate).toBeCloseTo(1.2);expect(saved.volume).toBe(.5);
 });
 
 test('browser voice choice persists and falls back when unavailable; late voices preserve settings',async({page})=>{
@@ -200,7 +213,7 @@ test('browser voice choice persists and falls back when unavailable; late voices
  await page.getByRole('button',{name:'Test voice'}).click();expect(await page.evaluate(()=>window.prompts.at(-1))).toMatchObject({voiceURI:'device-en',lang:'en-US'});
 });
 
-test('spreadsheet training recognises serials at Model and keeps manufacturer per item',async({page})=>{
+test('spreadsheet training recognises the first serial and keeps manufacturer per item',async({page})=>{
  const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Reference');sheet.addRow(['Serial Number','Model','Manufacturer']);
  for(const serial of ['REF101','REF102','REF103'])sheet.addRow([serial,'Learned model','Learned maker']);
  const buffer=await book.xlsx.writeBuffer();
@@ -223,7 +236,7 @@ test('serial-first mode captures unknown serials and confirmed records teach exa
  await page.goto('/');await defaults(page);await item(page,'KNOWN-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await scan(page,'KNOWN-001');await expect(page.getByRole('status')).toContainText('Known serial');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item'}).click();
- await page.getByRole('button',{name:'Open settings'}).click();await page.getByLabel('Start each item with a serial lookup').check();await page.getByRole('button',{name:'Save settings'}).click();
+ await page.getByRole('button',{name:'Open settings'}).click();await expect(page.getByText('Each item starts with a serial lookup.')).toBeVisible();await page.getByRole('button',{name:'Save settings'}).click();
  await scan(page,'UNSEEN-001');await expect(page.getByRole('status')).toContainText('No reliable match');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
  await scan(page,'Manual model');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft)).toMatchObject({serial:'UNSEEN-001',model:'Manual model'});

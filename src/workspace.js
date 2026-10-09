@@ -9,7 +9,7 @@ export const defaultFields = [
   ['reason', 'Reason for disposal', 'text'],
   ['trolley', 'Caged trolley', 'text'],
 ];
-export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: false };
+export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: true };
 const text = (value, allowEmpty = false) => typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -62,7 +62,10 @@ export function validateWorkspace(value) {
       draft[key] = value.draft[key];
     }
   }
-  if (fields.slice(0, value.step).some(([key]) => !draft[key])) throw Error('The backup has inconsistent scanning progress.');
+  if (value.captureOrder !== undefined && value.captureOrder !== 'serial-first') throw Error('Unsupported scanning order.');
+  const oldFields = [fields[1],fields[0],...fields.slice(2)];
+  if ((value.captureOrder ? fields : oldFields).slice(0, value.step).some(([key]) => !draft[key])) throw Error('The backup has inconsistent scanning progress.');
+  const step = value.captureOrder ? value.step : value.step === 1 ? 0 : value.step === 0 && draft.serial ? 1 : value.step;
   const settings = { ...defaultSettings };
   if (value.settings !== undefined) {
     const input = value.settings;
@@ -78,7 +81,8 @@ export function validateWorkspace(value) {
   }
   if (value.referenceExamples !== undefined && !Array.isArray(value.referenceExamples)) throw Error('Invalid recognition catalogue.');
   const referenceExamples = cleanExamples(value.referenceExamples || []);
-  return { referenceExamples, profiles, active: value.active, defaults, items, draft, step: value.step, voice: value.voice, settings };
+  settings.serialFirst = true;
+  return { captureOrder:'serial-first', referenceExamples, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);
