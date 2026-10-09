@@ -30,7 +30,7 @@ let state = { captureOrder:'serial-first', profiles:[{name:'Jawad',code:'JA'}], 
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
 let sharedClient = null;
 let sharedLocked = false;
-let saving=false, editingVersion=0;
+let saving=false, exporting=false, editingVersion=0;
 const localWorkspaceKey='decompro.localWorkspace';
 let search = '', editingId = null, pendingRestore = null;
 try { sharedLocked=localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
@@ -51,7 +51,7 @@ function render() {
  ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
  ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>
  <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
- <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2>Ready for the next collection <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length?'disabled':''}>${icon('download')} Export Excel</button></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports all records in the 11 equipment columns, including records hidden by search. Backups also keep trolley details, profiles and captured progress.</div></section>
+ <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2>Ready for the next collection <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports all records in the 11 equipment columns, including records hidden by search. Backups also keep trolley details, profiles and captured progress.</div></section>
  <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="database-dialog"></dialog>`;
  bind(); updateRegister(); focus();
 }
@@ -316,8 +316,9 @@ async function resumeDatabase() {
 }
 function downloadFile(data,name,type) {
  const url=URL.createObjectURL(new Blob([data],{type}));
- const link=document.createElement('a');link.href=url;link.download=name;link.click();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const link=document.createElement('a');link.href=url;link.download=name;
+ document.body.append(link);
+ try {link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
 function downloadBackup() {
  downloadFile(JSON.stringify({app:'DecomPro',version:1,exportedAt:new Date().toISOString(),state},null,2),`DecomPro-backup-${today()}.json`,'application/json');
@@ -340,7 +341,35 @@ async function prepareRestore(e) {
   };
  } catch(error) {pendingRestore=null;notice=`Backup was not restored. ${error instanceof SyntaxError?'The file is not valid JSON.':error.message}`;render();}
 }
-async function exportExcel() { try {const {default:ExcelJS}=await import('exceljs');const workbook=new ExcelJS.Workbook();const sheet=workbook.addWorksheet('Sheet1');sheet.addRow(headers);for(const item of state.items)sheet.addRow(supplierRow(item));sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF164E3D'}};sheet.getRow(1).height=30;sheet.columns.forEach((c,i)=>c.width=i===1?28:22);sheet.getColumn(1).numFmt='dd/mm/yyyy';sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter='A1:K1';const data=await workbook.xlsx.writeBuffer();const url=URL.createObjectURL(new Blob([data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));const a=document.createElement('a');a.href=url;a.download=`Decom-${today()}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);notice='Excel exported. Keep this file as your session backup.';render();}catch {notice='Export failed. Your records are still in the register; please try again.';render();} }
+async function exportExcel() {
+ if(exporting)return;
+ const items=state.items.map(item=>({...item}));
+ if(!items.length){notice='There are no saved items to export. Save an item first; an unsaved scan is not included.';render();return;}
+ exporting=true;
+ const button=document.querySelector('#export');button.disabled=true;button.textContent='Preparing Excel…';
+ try {
+  const {default:ExcelJS}=await import('exceljs');
+  const workbook=new ExcelJS.Workbook(),sheet=workbook.addWorksheet('Sheet1');
+  sheet.addRow(headers);for(const item of items)sheet.addRow(supplierRow(item));
+  sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};
+  sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF164E3D'}};
+  sheet.getRow(1).height=30;sheet.columns.forEach((column,index)=>column.width=index===1?28:22);
+  sheet.getColumn(1).numFmt='dd/mm/yyyy';sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter='A1:K1';
+  const data=await workbook.xlsx.writeBuffer();
+  downloadFile(data,`Decom-${today()}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  notice=`Excel download started with ${items.length} saved item${items.length===1?'':'s'}.`;render();
+ }catch(error){
+  const detail=error?.message||'The browser could not create the Excel download.';
+  const reason=/dynamically imported|module script|preload/i.test(detail)?'The Excel component could not load. Refresh the app to load the latest version and retry.':detail;
+  const count=state.items.length;
+  notice=`Excel export failed: ${reason} ${count?`The current workspace contains ${count} saved item${count===1?'':'s'}. Use Backup to download the workspace.`:'There are no saved items in the current workspace.'}`;
+  render();
+ }finally {
+  exporting=false;
+  const button=document.querySelector('#export');if(button){button.disabled=!state.items.length;button.innerHTML=`${icon('download')} Export Excel`;}
+ }
+}
+
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&state.step===fields.length&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();saveItem();}});
 render();
 resumeDatabase();

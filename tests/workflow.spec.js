@@ -76,6 +76,27 @@ test('saving works without crypto.randomUUID and produces distinct persistent ID
  await page.reload();await expect(page.locator('tbody')).toContainText('ID-BROWSER-002');
 });
 
+test('empty register is not exported and unsaved scans remain available',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'UNSAVED-EXPORT-001');
+ await expect(page.getByRole('button',{name:'Export Excel',exact:true})).toBeDisabled();
+ await page.evaluate(()=>document.querySelector('#export').onclick());
+ await expect(page.getByRole('status')).toContainText('There are no saved items to export');
+ await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('UNSAVED-EXPORT-001');
+});
+
+test('export errors show the cause and reflect records removed while export was starting',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'EXPORT-REMOVED-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ let release,signal;const started=new Promise(resolve=>signal=resolve);
+ await page.route('**/exceljs*',async route=>{signal();await new Promise(resolve=>release=resolve);await route.abort();});
+ await page.getByRole('button',{name:'Export Excel',exact:true}).click();await started;
+ page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item EXPORT-REMOVED-001',exact:true}).click();
+ release();
+ await expect(page.getByRole('status')).toContainText('Excel component could not load');
+ await expect(page.getByRole('status')).toContainText('There are no saved items in the current workspace');
+ await expect(page.getByRole('button',{name:'Export Excel',exact:true})).toBeDisabled();
+});
+
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
  await page.goto('/');
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
