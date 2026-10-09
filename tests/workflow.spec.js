@@ -11,6 +11,28 @@ async function item(page,serial='00001234') {
  await page.locator('#scan').press('Enter');await page.locator('#scan').press('Enter');
  await scan(page,'090011');await scan(page,'A0904');
 }
+test('asset numbers require A and four digits, normalize case, and permit N/A skips',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'ASSET-001');
+ await page.getByRole('button',{name:'Previous field'}).click();
+ for(const value of ['1234','B1234','A123','A12345']) {
+  await scan(page,value);
+  await expect(page.getByRole('heading',{name:'Asset number',exact:true})).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('A followed by four digits');
+ }
+ await scan(page,'a0042');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('tbody')).toContainText('A0042');
+ await page.getByRole('button',{name:'Edit item ASSET-001',exact:true}).click();
+ await page.getByLabel('Asset number',{exact:true}).fill('B0042');
+ await page.getByRole('button',{name:'Save changes'}).click();
+ await expect(page.locator('#edit-error')).toContainText('A followed by four digits');
+ await page.getByLabel('Asset number',{exact:true}).fill('a1234');await page.getByRole('button',{name:'Save changes'}).click();
+ await expect(page.locator('tbody')).toContainText('A1234');
+ await item(page,'ASSET-002');await page.getByRole('button',{name:'Previous field'}).click();
+ await page.getByRole('button',{name:'Skip · N/A'}).click();
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.at(-1).asset)).toBe('N/A');
+});
+
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
  await page.goto('/');
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
