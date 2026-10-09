@@ -6,9 +6,19 @@ const examples=[101,102,103].map(n=>({serial:`ABC${n}`,model:'Desk 400',manufact
 test('exact serial normalization and conservative pattern inference',()=>{
  assert.equal(recognizeSerial(' abc101 ',examples).method,'exact');
  const guess=recognizeSerial('ABC104',examples);assert.equal(guess.method,'pattern');assert.equal(guess.model,'Desk 400');assert.equal(guess.support,3);
- assert.equal(recognizeSerial('ABC104',examples.slice(0,2)),null);
+ assert.equal(recognizeSerial('ABC104',examples.slice(0,2)).prefix,'ABC1');
+ assert.equal(recognizeSerial('ABC104',examples.slice(0,1)),null);
  assert.equal(recognizeSerial('ABC0104',examples),null);
  assert.equal(recognizeSerial('OTHER104',examples),null);
+});
+test('four-character prefixes recognise varying suffix shapes, with independent evidence and conflicts checked',()=>{
+ const family=['10LLPAR6WLV9038VC0','10LLPAR6WLV90372NY'].map(serial=>({serial,model:'TIO24D',manufacturer:'Lenovo'}));
+ const match=recognizeSerial('10LLNEW123ABC',family);
+ assert.equal(match.method,'pattern');assert.equal(match.prefix,'10LL');assert.equal(match.model,'TIO24D');assert.equal(match.manufacturer,'Lenovo');assert.equal(match.support,2);
+ assert.equal(recognizeSerial('10LLNEW123ABC',[family[0],family[0]]),null);
+ assert.equal(recognizeSerial('10LLNEW123ABC',[...family,{serial:'10LLOTHER123',model:'Other model',manufacturer:'Lenovo'}]).method,'conflict');
+ assert.equal(recognizeSerial(family[0].serial,[...family,{serial:'10LLOTHER123',model:'Other model',manufacturer:'Lenovo'}]).method,'exact');
+ assert.equal(recognizeSerial('20LLNEW123ABC',family),null);
 });
 test('duplicates do not inflate evidence and contradictory labels block guessing',()=>{
  assert.equal(cleanExamples([...examples,examples[0]]).length,3);

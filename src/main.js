@@ -64,7 +64,7 @@ function capture(value) {
   const match=value.toUpperCase()==='N/A'?null:recognizeSerial(value,[...builtInReferences,...state.referenceExamples,...state.items]);
   if(match&&match.method!=='conflict') {
    state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method==='pattern',recognitionConfirmed:false};state.step=2;
-   notice=`${match.method==='exact'?'Known serial':'Pattern suggestion'}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. Verify before saving.`;
+   notice=`${match.method==='exact'?'Known serial':`Pattern suggestion (prefix ${match.prefix})`}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. Verify before saving.`;
    lastEmpty=0;persist();render();speak(`Suggested model, ${match.model}. Manufacturer, ${match.manufacturer}. Next, barcode.`);return;
   }
   if(match?.method==='conflict'||(state.draft.serial&&state.draft.serial!==value)) {

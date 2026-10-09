@@ -20,6 +20,12 @@ export function recognizeSerial(value,examples) {
   return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', ')};
  };
  if(exact.length)return describe(exact,'exact');
+ // Manufacturer serial suffixes often mix letters/digits differently. A
+ // unanimous four-character family can still suggest a model across shapes.
+ if(serial.length>4) {
+  const prefix=serial.slice(0,4),matches=facts.filter(f=>f.serial.length>4&&f.serial.startsWith(prefix));
+  if(new Set(matches.map(f=>f.serial)).size>=2)return describe(matches,'pattern',prefix);
+ }
  // Conservative evidence: same complete shape, literal prefix, at least three
  // distinct examples and unanimous model/manufacturer. Never guess from brand alone.
  const compatible=facts.filter(f=>shape(f.serial)===shape(serial));

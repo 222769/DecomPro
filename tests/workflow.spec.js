@@ -50,6 +50,19 @@ test('built-in Summer reference recognises TG22681204 without import and keeps a
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
 });
 
+test('10LL family fills Lenovo model for a new suffix and needs technician confirmation',async({page})=>{
+ await page.goto('/');await scan(page,'10LLNEW123ABC');
+ await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('Pattern suggestion (prefix 10LL): TIO24D · Lenovo');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Lenovo');
+ for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');
+ await page.getByLabel('I checked the suggested model and manufacturer').check();
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('tbody')).toContainText('10LLNEW123ABC');
+});
+
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
  await page.goto('/');
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
