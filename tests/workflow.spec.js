@@ -11,6 +11,36 @@ async function item(page,serial='00001234') {
  await page.locator('#scan').press('Enter');await page.locator('#scan').press('Enter');
  await scan(page,'090011');await scan(page,'A0904');
 }
+test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
+ await page.goto('/');
+ await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
+ await item(page,'DIRECT-SAVE-001');
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('tbody')).toContainText('DIRECT-SAVE-001');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await page.reload();await expect(page.locator('tbody')).toContainText('DIRECT-SAVE-001');
+});
+
+test('missing batch defaults are explained beside Save and the draft is kept',async({page})=>{
+ await page.goto('/');await item(page,'MISSING-DEFAULT-001');
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('#save-feedback')).toContainText('Enter manufacturer before saving');
+ await expect(page.getByLabel('Manufacturer',{exact:true})).toBeFocused();
+ await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
+ await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('tbody')).toContainText('MISSING-DEFAULT-001');
+});
+
+test('failed local storage write keeps the scanned draft for retry or backup',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'RETAIN-DRAFT-001');
+ await page.evaluate(()=>{const setItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key==='decompro.v1')throw new DOMException('Full','QuotaExceededError');return setItem.call(this,key,value);};});
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
+ await expect(page.locator('tbody')).not.toContainText('RETAIN-DRAFT-001');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('RETAIN-DRAFT-001');
+});
+
 test('scanner, spoken prompts, profiles, persistence and exact Excel mapping',async({page})=>{
  await page.addInitScript(()=>{
   window.prompts=[];

@@ -125,3 +125,4 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .connection-settings { margin: 18px 0; padding: 14px; border: 1px solid #dce3ed; border-radius: 12px; }
 .connection-settings summary { cursor: pointer; font-weight: 600; color: #344867; }
 .connection-settings[open] summary { margin-bottom: 14px; }
+#save-feedback { font-size: 13px; line-height: 1.6; color: #dbe7ff; margin: 12px 0; }
