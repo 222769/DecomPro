@@ -19,7 +19,7 @@ For a production build, run `npm run build`. Deploy the generated `dist/` direct
 2. Fill in the batch defaults and click **Apply batch defaults**. Change the description/manufacturer when moving to a different equipment type, and update the disposal date each session. Enter `N/A` for a default you cannot supply.
 3. Configure the handheld scanner as a keyboard device with an Enter suffix. Click **Start scanning** to focus the capture box and enable the first spoken prompt.
 4. Scan **model → serial number → barcode → security etch → asset number**. Each captured value advances the field and speaks the next prompt. Type and press Enter if a label cannot be scanned.
-5. Double-click the scanner trigger to send **two empty Enter presses within 700 ms**. This records `N/A` and advances one field. A single empty Enter does not skip. The **Skip · N/A** button is an alternative.
+5. Double-click the scanner trigger to send **two empty Enter presses within the configured window (700 ms by default)**. This records `N/A` and advances one field. A single empty Enter does not skip. The **Skip · N/A** button is an alternative.
 6. Review the captured values. Use **Previous field** or a completed step to correct a value. Press Enter or click **Save item & start next** to record the item, then place it in the caged trolley. Non-`N/A` duplicate serial numbers are blocked within this register.
 7. Click **Export Excel** after every session. Export includes every recorded item, in capture order. Export does not clear the register. **Remove** deletes a record after confirmation.
 
@@ -29,11 +29,11 @@ Keep the scan box focused when scanning. Empty Enter presses must be generated b
 
 The uploaded `Decom 2026 - Summer.xlsx` was inspected as a data-format example. Export creates a new `Sheet1` with its exact 17 column headings and order, including both `Asset Number` columns. It does not append to the original file or include the example equipment records. Scanned asset numbers fill column I; column L and the other finance columns are genuinely blank. Identifiers remain text, preserving leading zeros. The selected technician's disposal initials fill column K, `Who disposed of it?`. Disposal dates are Excel dates formatted `dd/mm/yyyy`.
 
-Trolley is retained in the app register only, because the supplier workbook has no trolley column. Export formatting is newly generated; existing workbook formatting, formulas, and supplier metadata are not copied.
+Trolley is retained in the app register and JSON backups, because the supplier workbook has no trolley column. Export formatting is newly generated; existing workbook formatting, formulas, and supplier metadata are not copied.
 
 ## Storage and scope
 
-Items, captured field progress, profiles, and defaults persist in `localStorage` in the current browser and origin. Use a single tab for recording. Private browsing, clearing browser data, changing the host/port, or changing devices can remove or separate the records. Excel files are the session backup. If storage fails, the app shows an alert; in-memory records can still be exported. Invalid saved data is not overwritten automatically.
+Items, captured field progress, profiles, defaults, and settings persist in `localStorage` in the current browser and origin. Use a single tab for recording. Private browsing, clearing browser data, changing the host/port, or changing devices can remove or separate the records. Use JSON workspace backups for recovery and Excel files for the supplier. If storage fails, the app shows an alert; in-memory records can still be exported. Invalid saved data is not overwritten automatically.
 
 There is no shared database, secure sign-in, or Microsoft Lists connection in this version. No records are uploaded to a backend. A Microsoft Lists integration would require a tenant-approved app, permissions, a destination list, and a mapping that keeps the scanned asset number distinct from the finance asset number.
 
@@ -50,7 +50,7 @@ Physical scanner input and audible speech must still be checked on the team's de
 
 ## Publish a Netlify test site
 
-The prepared upload archive is `/workspace/artifacts/DecomPro-test-site.zip`. It contains only production HTML, CSS, and JavaScript, with no example equipment records or credentials.
+The prepared upload archive is `/workspace/artifacts/DecomPro-latest-site.zip`. It contains only production HTML, CSS, and JavaScript, with no example equipment records or credentials.
 
 1. Download and unzip the archive.
 2. Sign into your Netlify account at https://app.netlify.com/drop.
@@ -71,3 +71,15 @@ The workflow `.github/workflows/pages.yml` builds the locked dependencies with N
 4. Wait for both the build and deploy jobs to pass. Open the website URL shown by the deployment.
 
 The expected default address is `https://222769.github.io/DecomPro/`; it is only live after a successful deployment. Relative assets support this project path. GitHub Pages hosting eligibility depends on repository visibility and the account's plan. Switching from Netlify changes the storage origin, so export any Netlify test records first. Local profiles are not access controls; a public Pages site is accessible to anyone with its URL.
+
+## Settings, trolley changes and recovery
+
+Open **Settings** in the navigation to adjust spoken prompts, speech speed/volume, and the two-empty-Enter skip window. **Test voice** previews unsaved speed and volume. Save applies these settings to this browser.
+
+For identical equipment, enable **Use one model for this batch** and supply a model number. Each new item starts at Serial number with that model prefilled. The batch model is shown above the scan prompt. Captured current-item values are preserved when changing settings; the setting applies when starting a fresh item. You can still use Previous field to correct an individual model. Turn this setting off when switching to mixed equipment.
+
+Use **Change trolley** in the summary card to type a new trolley name or pick a previously used one. Counts beside previous names are totals in this register. Switching affects new saved items and leaves already recorded trolley assignments intact. Use **Edit** on a register row to move a recorded item, fix identifiers, or correct other export fields. Editing blocks a serial already used by another item, and preserves the recorded technician unless you explicitly change it.
+
+The register search matches equipment, model, manufacturer, identifiers, trolley, date or technician. Multiple search terms must all match the record. Search affects the displayed rows only; Excel still exports the entire register.
+
+**Backup** downloads a versioned DecomPro JSON file containing the entire workspace: items including trolley assignments, technicians, defaults, settings, and captured scanning progress. Treat it as equipment inventory data and store it appropriately. **Restore backup** accepts a valid DecomPro JSON backup, shows its record counts, and requires explicit confirmation before replacing this browser's current workspace. Cancel leaves current data intact. Download a backup of the current workspace before confirming if you need to preserve it. Invalid files are rejected, and a storage failure does not replace the current workspace. Restore is replacement, not merging or live synchronisation.

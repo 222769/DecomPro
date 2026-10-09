@@ -4,5 +4,5 @@ export function supplierRow(item) {
   return [new Date(item.date+'T12:00:00'),item.description,item.model,item.manufacturer,item.source,item.serial,item.barcode,item.etch,item.asset,item.reason,item.technician,null,null,null,null,null,null];
 }
 export function duplicateSerial(items, serial) {
-  return serial !== 'N/A' && items.some(i => i.serial.toLowerCase() === serial.toLowerCase());
+  return serial.trim().toUpperCase() !== 'N/A' && items.some(i => i.serial.toLowerCase() === serial.toLowerCase());
 }
