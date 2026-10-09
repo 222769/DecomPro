@@ -127,3 +127,23 @@ test('speech settings affect prompts and can be tested without applying changes'
  await page.getByRole('button',{name:'Save settings'}).click();await page.getByRole('button',{name:'Start scanning'}).click();
  const saved=await page.evaluate(()=>window.prompts.at(-1));expect(saved.text).toBe('Next, Model number');expect(saved.rate).toBeCloseTo(1.2);expect(saved.volume).toBe(.5);
 });
+
+test('browser voice choice persists and falls back when unavailable; late voices preserve settings',async({page})=>{
+ await page.addInitScript(()=>{
+  window.prompts=[];window.voices=[];window.voiceListeners={};
+  Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class {constructor(text){this.text=text;}}});
+  Object.defineProperty(window,'speechSynthesis',{value:{getVoices(){return window.voices;},addEventListener(type,callback){window.voiceListeners[type]=callback;},cancel(){},speak(u){window.prompts.push({text:u.text,voiceURI:u.voice?.voiceURI,lang:u.lang});}}});
+ });
+ await page.goto('/');await page.getByRole('button',{name:'Open settings'}).click();
+ await page.getByLabel('Speech speed').fill('1.3');
+ await page.evaluate(()=>{window.voices=[{name:'Google UK English Female',lang:'en-GB',voiceURI:'google-uk',localService:false},{name:'Device English',lang:'en-US',voiceURI:'device-en',localService:true}];window.voiceListeners.voiceschanged();});
+ await expect(page.getByLabel('Speech speed')).toHaveValue('1.3');
+ await expect(page.locator('#voice-info')).toContainText('Google-labelled voices are available');
+ await page.getByLabel('Prompt voice').selectOption('google-uk');await page.getByRole('button',{name:'Test voice'}).click();
+ expect(await page.evaluate(()=>window.prompts.at(-1))).toMatchObject({voiceURI:'google-uk',lang:'en-GB'});
+ await page.getByRole('button',{name:'Save settings'}).click();await page.reload();
+ await page.getByRole('button',{name:'Open settings'}).click();await expect(page.getByLabel('Prompt voice')).toHaveValue('google-uk');
+ await expect(page.locator('#voice-info')).toContainText('saved voice is unavailable');
+ await page.evaluate(()=>{window.voices=[{name:'Device English',lang:'en-US',voiceURI:'device-en',localService:true}];window.voiceListeners.voiceschanged();});
+ await page.getByRole('button',{name:'Test voice'}).click();expect(await page.evaluate(()=>window.prompts.at(-1))).toMatchObject({voiceURI:'device-en',lang:'en-US'});
+});

@@ -8,7 +8,7 @@ export const defaultFields = [
   ['reason', 'Reason for disposal', 'text'],
   ['trolley', 'Caged trolley', 'text'],
 ];
-export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '' };
+export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '' };
 const text = (value, allowEmpty = false) => typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -58,10 +58,11 @@ export function validateWorkspace(value) {
     if (!input || typeof input !== 'object' || !Number.isFinite(input.speechRate) || input.speechRate < .6 || input.speechRate > 1.5 ||
         !Number.isFinite(input.speechVolume) || input.speechVolume < 0 || input.speechVolume > 1 ||
         !Number.isInteger(input.skipWindow) || input.skipWindow < 300 || input.skipWindow > 1500 ||
+        (input.voiceURI !== undefined && !text(input.voiceURI, true)) ||
         typeof input.reuseModel !== 'boolean' || !text(input.batchModel, true) || (input.reuseModel && !input.batchModel.trim())) {
       throw Error('The workspace has invalid scanner or voice settings.');
     }
-    for (const key of Object.keys(defaultSettings)) settings[key] = input[key];
+    for (const key of Object.keys(defaultSettings)) if (input[key] !== undefined) settings[key] = input[key];
   }
   return { profiles, active: value.active, defaults, items, draft, step: value.step, voice: value.voice, settings };
 }

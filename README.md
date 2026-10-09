@@ -83,3 +83,9 @@ Use **Change trolley** in the summary card to type a new trolley name or pick a 
 The register search matches equipment, model, manufacturer, identifiers, trolley, date or technician. Multiple search terms must all match the record. Search affects the displayed rows only; Excel still exports the entire register.
 
 **Backup** downloads a versioned DecomPro JSON file containing the entire workspace: items including trolley assignments, technicians, defaults, settings, and captured scanning progress. Treat it as equipment inventory data and store it appropriately. **Restore backup** accepts a valid DecomPro JSON backup, shows its record counts, and requires explicit confirmation before replacing this browser's current workspace. Cancel leaves current data intact. Download a backup of the current workspace before confirming if you need to preserve it. Invalid files are rejected, and a storage failure does not replace the current workspace. Restore is replacement, not merging or live synchronisation.
+
+## Browser voice selection
+
+In Settings, choose **Prompt voice**, then **Test voice** and **Save settings**. DecomPro lists voices exposed by the browser, including Google-labelled voices when available. Automatic prefers British English, then another English voice. Lists can load asynchronously. A saved voice unavailable on a different device falls back to available English speech without losing the saved preference.
+
+This uses browser speech, not Google Cloud Text-to-Speech. No Cloud API key or billing account is needed. Browser-service voices may require Internet access; on-device voices are labelled separately. Availability depends on browser and operating system, so Google voices cannot be guaranteed. A Cloud integration would require a backend to protect credentials; never embed a Cloud API key in the GitHub Pages site. Check current voice-specific pricing at https://cloud.google.com/text-to-speech/pricing before choosing that route.

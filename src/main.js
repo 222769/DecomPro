@@ -1,5 +1,6 @@
 import { fields, headers, supplierRow, duplicateSerial } from './data';
 import './style.css';
+import { availableVoices, utteranceFor } from './speech';
 import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -26,7 +27,7 @@ let search = '', editingId = null, pendingRestore = null;
 try { const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function persist() { if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
-function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang='en-GB'; u.rate=state.settings.speechRate;u.volume=state.settings.speechVolume; speechSynthesis.speak(u); }
+function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=utteranceFor(text,state.settings); speechSynthesis.speak(u); }
 function prompt() { speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
 function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
@@ -100,22 +101,40 @@ function openTrolley() {
   state.defaults.trolley=trolley;notice=`New items will be recorded in ${trolley}.`;persist();render();
  };
 }
+function refreshVoiceChoices(preferred) {
+ const select=document.querySelector('#speech-voice');if(!select)return;
+ const selected=preferred??select.value,voices=availableVoices();
+ select.innerHTML=`<option value="">Automatic · prefer British English</option>${voices.map(v=>`<option value="${escape(v.voiceURI)}">${escape(v.name)} · ${escape(v.lang)}${v.localService?' · on device':' · browser service'}</option>`).join('')}`;
+ if(selected&&!voices.some(v=>v.voiceURI===selected))select.insertAdjacentHTML('beforeend',`<option value="${escape(selected)}">Saved voice unavailable · automatic fallback</option>`);
+ select.value=selected;updateVoiceInfo();
+}
+function updateVoiceInfo() {
+ const select=document.querySelector('#speech-voice'),info=document.querySelector('#voice-info');if(!select||!info)return;
+ const voices=availableVoices(),voice=voices.find(v=>v.voiceURI===select.value);
+ if(!('speechSynthesis' in window)){info.textContent='Speech is unavailable in this browser. Scanning still works.';return;}
+ if(select.value&&!voice){info.textContent='Your saved voice is unavailable on this device. Prompts use an available English voice until it returns.';return;}
+ if(voice)info.textContent=`${voice.localService?'This voice runs on your device.':'This browser-provided voice may need Internet access.'} No Google Cloud account or API key is used.`;
+ else info.textContent=`${voices.some(v=>/google/i.test(v.name))?'Google-labelled voices are available in this browser. Choose one above.':'No Google-labelled voices are currently available here. Try Chrome on your work device; voices depend on the browser and operating system.'} Automatic prefers British English, then another English voice.`;
+}
+window.speechSynthesis?.addEventListener?.('voiceschanged',()=>refreshVoiceChoices());
 function openSettings() {
  const settings=state.settings;
  const dialog=document.querySelector('#settings-dialog');
- dialog.innerHTML=`<form id="settings-form"><div class="eyebrow">YOUR SCAN STATION</div><h2>Make it work your way.</h2><p>Settings stay with this browser and are included in workspace backups.</p><div class="settings-section"><h3>${icon('voice')} Spoken prompts</h3><label class="toggle-label"><input type="checkbox" name="voice" ${state.voice?'checked':''}> Speak the next field</label><label for="speech-rate">Speech speed <output id="rate-value">${settings.speechRate}×</output></label><input id="speech-rate" name="speechRate" type="range" min="0.6" max="1.5" step="0.01" value="${settings.speechRate}"><label for="speech-volume">Volume <output id="volume-value">${Math.round(settings.speechVolume*100)}%</output></label><input id="speech-volume" name="speechVolume" type="range" min="0" max="1" step="0.05" value="${settings.speechVolume}"><button type="button" class="secondary" id="test-voice">${icon('voice')} Test voice</button></div><div class="settings-section"><h3>${icon('barcode')} Scanner controls</h3><label for="skip-window">Double-trigger window</label><select name="skipWindow" id="skip-window">${[300,500,700,1000,1500].map(ms=>`<option value="${ms}" ${ms===settings.skipWindow?'selected':''}>${ms/1000} seconds${ms===700?' (default)':''}</option>`).join('')}</select><p>Two empty Enter presses inside this window fill N/A and advance the field.</p></div><div class="settings-section"><h3>${icon('box')} Identical equipment</h3><label class="toggle-label"><input type="checkbox" id="reuse-model" name="reuseModel" ${settings.reuseModel?'checked':''}> Use one model for this batch</label><label for="batch-model">Batch model number</label><input id="batch-model" name="batchModel" value="${escape(settings.batchModel)}" maxlength="1000" placeholder="e.g. P2419H" ${settings.reuseModel?'required':''}><p>Prefills Model and starts each new item at Serial number. Turn this off when equipment changes. Captured values for your current item stay in place.</p></div><p id="settings-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-settings">Cancel</button><button class="primary">Save settings</button></div></form>`;
+ dialog.innerHTML=`<form id="settings-form"><div class="eyebrow">YOUR SCAN STATION</div><h2>Make it work your way.</h2><p>Settings stay with this browser and are included in workspace backups.</p><div class="settings-section"><h3>${icon('voice')} Spoken prompts</h3><label class="toggle-label"><input type="checkbox" name="voice" ${state.voice?'checked':''}> Speak the next field</label><label for="speech-voice">Prompt voice</label><select id="speech-voice" name="voiceURI"></select><p id="voice-info" aria-live="polite"></p><label for="speech-rate">Speech speed <output id="rate-value">${settings.speechRate}×</output></label><input id="speech-rate" name="speechRate" type="range" min="0.6" max="1.5" step="0.01" value="${settings.speechRate}"><label for="speech-volume">Volume <output id="volume-value">${Math.round(settings.speechVolume*100)}%</output></label><input id="speech-volume" name="speechVolume" type="range" min="0" max="1" step="0.05" value="${settings.speechVolume}"><button type="button" class="secondary" id="test-voice">${icon('voice')} Test voice</button></div><div class="settings-section"><h3>${icon('barcode')} Scanner controls</h3><label for="skip-window">Double-trigger window</label><select name="skipWindow" id="skip-window">${[300,500,700,1000,1500].map(ms=>`<option value="${ms}" ${ms===settings.skipWindow?'selected':''}>${ms/1000} seconds${ms===700?' (default)':''}</option>`).join('')}</select><p>Two empty Enter presses inside this window fill N/A and advance the field.</p></div><div class="settings-section"><h3>${icon('box')} Identical equipment</h3><label class="toggle-label"><input type="checkbox" id="reuse-model" name="reuseModel" ${settings.reuseModel?'checked':''}> Use one model for this batch</label><label for="batch-model">Batch model number</label><input id="batch-model" name="batchModel" value="${escape(settings.batchModel)}" maxlength="1000" placeholder="e.g. P2419H" ${settings.reuseModel?'required':''}><p>Prefills Model and starts each new item at Serial number. Turn this off when equipment changes. Captured values for your current item stay in place.</p></div><p id="settings-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-settings">Cancel</button><button class="primary">Save settings</button></div></form>`;
  dialog.showModal();
+ refreshVoiceChoices(settings.voiceURI);
+ document.querySelector('#speech-voice').onchange=updateVoiceInfo;
  document.querySelector('#cancel-settings').onclick=()=>dialog.close();
  document.querySelector('#reuse-model').onchange=e=>document.querySelector('#batch-model').required=e.target.checked;
  document.querySelector('#speech-rate').oninput=e=>document.querySelector('#rate-value').textContent=`${e.target.value}×`;
  document.querySelector('#speech-volume').oninput=e=>document.querySelector('#volume-value').textContent=`${Math.round(e.target.value*100)}%`;
  document.querySelector('#test-voice').onclick=()=>{
   if(!('speechSynthesis' in window)){document.querySelector('#settings-error').textContent='Speech is unavailable in this browser. Scanning still works.';return;}
-  speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance('Next, serial number.');utterance.lang='en-GB';utterance.rate=Number(document.querySelector('#speech-rate').value);utterance.volume=Number(document.querySelector('#speech-volume').value);speechSynthesis.speak(utterance);
+  speechSynthesis.cancel();const utterance=utteranceFor('Next, serial number.',{speechRate:Number(document.querySelector('#speech-rate').value),speechVolume:Number(document.querySelector('#speech-volume').value),voiceURI:document.querySelector('#speech-voice').value});speechSynthesis.speak(utterance);
  };
  document.querySelector('#settings-form').onsubmit=e=>{
   e.preventDefault();const data=new FormData(e.target);
-  const next={speechRate:Number(data.get('speechRate')),speechVolume:Number(data.get('speechVolume')),skipWindow:Number(data.get('skipWindow')),reuseModel:data.has('reuseModel'),batchModel:data.get('batchModel').trim()};
+  const next={speechRate:Number(data.get('speechRate')),speechVolume:Number(data.get('speechVolume')),skipWindow:Number(data.get('skipWindow')),reuseModel:data.has('reuseModel'),batchModel:data.get('batchModel').trim(),voiceURI:data.get('voiceURI')||''};
   if(next.reuseModel&&!next.batchModel){document.querySelector('#settings-error').textContent='Enter a batch model or turn off the identical equipment setting.';return;}
   state.settings=next;state.voice=data.has('voice');lastEmpty=0;
   if(!Object.keys(state.draft).length&&state.step===0)resetDraft();
