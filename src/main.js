@@ -2,6 +2,7 @@ import { fields, headers, supplierRow, duplicateSerial } from './data';
 import './style.css';
 import { recognizeSerial, cleanExamples, examplesFromWorkbook } from './recognition';
 import { availableVoices, utteranceFor } from './speech';
+import { defaultFirebaseConfig } from './firebase-config';
 import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -221,6 +222,7 @@ function openEditor(id) {
 }
 function openDatabase() {
  let saved={};try{saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');}catch{}
+ saved.config ||= defaultFirebaseConfig;
  const dialog=document.querySelector('#database-dialog');
  dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Imports your preserved local register as historical records. Existing team items are not overwritten.</p>`:''}<form id="database-form"><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Web app config is public. Never paste an admin private key. Connecting preserves your local register separately; it does not silently upload it.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
  dialog.showModal();

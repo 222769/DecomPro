@@ -180,6 +180,9 @@ test('serial-first mode captures unknown serials and confirmed records teach exa
 test('database setup keeps local records intact before connection',async({page})=>{
  await page.goto('/');await defaults(page);await item(page,'LOCAL-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('heading',{name:'Connect your Firebase database'})).toBeVisible();
+ const config=JSON.parse(await page.getByLabel('Firebase public web app config (JSON)').inputValue());
+ expect(config.projectId).toBe('decompro-236e9');
+ expect(config.authDomain).toBe('decompro-236e9.firebaseapp.com');
  await page.getByLabel('Firebase public web app config (JSON)').fill('{"private_key":"not-an-actual-key"}');await page.getByLabel('Team account email').fill('test@example.invalid');await page.getByLabel('Password',{exact:true}).fill('not-a-real-password');
  await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#database-error')).toContainText('never a service-account key');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(1);

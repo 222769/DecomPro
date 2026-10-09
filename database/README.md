@@ -21,6 +21,8 @@ The needed network domain has been saved in the environment configuration draft.
 
 ## Configure the project after validation
 
+The supplied public Web app configuration for **decompro-236e9** is bundled in `src/firebase-config.js` and prefilled in the Database dialog. A previously saved browser configuration takes precedence. Users still need to sign in; adding the configuration does not create accounts, enable Firestore, grant membership, or deploy rules. Analytics is not initialized: the inventory workflow uses Authentication and Firestore.
+
 1. Create a college-approved Firebase project, or use an existing approved project. Firestore and email/password Authentication are sufficient; this integration does not require Cloud Functions, Analytics, or paid services. Review current Firebase plan limits before importing large datasets. A free allowance is not an unlimited service or a guarantee of zero cost.
 2. Register a **Web app** and obtain its public `apiKey`, `authDomain`, `projectId` and `appId`. These identify the client project and are designed to appear in browser code. Never provide service-account JSON, private keys or admin credentials to the app.
 3. Enable **Authentication → Sign-in method → Email/Password**. Add technician accounts through your approved admin process. Add your deployed domain (for GitHub Pages, `222769.github.io`) to authorized domains where required. Do not send passwords in chat.
