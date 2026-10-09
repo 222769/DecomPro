@@ -28,7 +28,10 @@
   "homepage": "https://github.com/222769/DecomPro#readme",
   "dependencies": {
     "exceljs": "^4.4.0",
-    "firebase": "^13.0.0"
+    "firebase": "^13.0.0",
+    "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",

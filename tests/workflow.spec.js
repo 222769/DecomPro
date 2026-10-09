@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { headers } from '../src/data.js';
+import {readFile} from 'node:fs/promises';
 async function defaults(page) {
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
  await page.getByRole('button',{name:'Apply batch defaults'}).click();
@@ -95,6 +96,41 @@ test('export errors show the cause and reflect records removed while export was 
  await expect(page.getByRole('status')).toContainText('Excel component could not load');
  await expect(page.getByRole('status')).toContainText('There are no saved items in the current workspace');
  await expect(page.getByRole('button',{name:'Export Excel',exact:true})).toBeDisabled();
+});
+
+test('trolley management creates labels, barcode inventory views and retained collection history',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'TROLLEY-OLD-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();
+ await page.getByLabel('New trolley name').fill('Helpdesk collection 02');
+ await expect(page.getByLabel('Owning department')).toHaveValue('Helpdesk (Calderdale College)');
+ await page.getByRole('button',{name:'Create trolley',exact:true}).click();
+ const card=page.locator('.trolley-card').filter({hasText:'Helpdesk collection 02'});
+ const rows=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).trolleys);
+ expect(new Set(rows.map(t=>t.reference)).size).toBe(2);
+ const trolley=rows.find(t=>t.name==='Helpdesk collection 02');
+ const labelDownload=page.waitForEvent('download');await card.getByRole('button',{name:'PDF label',exact:true}).click();
+ const label=await labelDownload;expect(label.suggestedFilename()).toBe(`${trolley.reference}.pdf`);
+ const bytes=await readFile(await label.path());expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
+ expect(bytes.toString('latin1')).toContain('PROPERTY OF TSU');expect(bytes.toString('latin1')).toContain(trolley.reference);
+ await card.getByRole('button',{name:'Use trolley',exact:true}).click();
+ await item(page,'TROLLEY-NEW-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await scan(page,'DRAFT-TO-KEEP');
+ await scan(page,trolley.reference);
+ await expect(page.locator('#inventory-title')).toHaveText('Helpdesk collection 02 inventory');
+ await expect(page.locator('tbody')).toContainText('TROLLEY-NEW-001');await expect(page.locator('tbody')).not.toContainText('TROLLEY-OLD-001');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('DRAFT-TO-KEEP');
+ const inventoryDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();
+ const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(await (await inventoryDownload).path());expect(workbook.getWorksheet('Sheet1').rowCount).toBe(2);
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();
+ await card.getByRole('button',{name:'Mark collected',exact:true}).click();
+ await page.getByLabel('Decommission company').fill('Collection test company');await page.getByRole('button',{name:'Confirm collection',exact:true}).click();
+ await page.reload();await expect(page.locator('#trolley-inventory-banner')).toContainText('Collected by Collection test company');
+ const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+ expect(restored.trolleys.find(t=>t.id===trolley.id).status).toBe('collected');expect(restored.items).toHaveLength(2);
+ await page.getByLabel('Caged trolley').fill('Helpdesk collection 02');
+ await scan(page,'Test model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();
+ await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('#save-feedback')).toContainText('collected');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(2);
 });
 
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{

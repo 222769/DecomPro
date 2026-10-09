@@ -3,6 +3,7 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
 import { getFirestore, collection, doc, getDoc, getDocs, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
+import {validateTrolleys} from './trolleys.js';
 
 export function validateFirebaseConfig(value) {
  if(!value||typeof value!=='object'||'private_key' in value||'client_email' in value)throw Error('Use the public Firebase web app configuration, never a service-account key.');
@@ -34,15 +35,41 @@ export async function connectFirebase(config,teamId,email,password) {
  return createTeamStore(db,uid,teamId,membership.data(),auth);
 }
 export function createTeamStore(db,uid,teamId,member,auth=null) {
- const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials');
+ const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys');
  const versions=new Map(),stops=[];
+ const trolleyVersions=new Map();
+ const decodeTrolleys=snapshot=>validateTrolleys(snapshot.docs.map(row=>{trolleyVersions.set(row.id,row.data().version);return row.data().payload;}));
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
   profile:memberProfile,role:member.role,email:auth?.currentUser?.email||'',teamId,
   versionFor(id){return versions.get(id)||0;},
-  async load(){const [items,examples]=await Promise.all([getDocs(query(equipment,where('deleted','==',false))),getDocs(references)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data()))};},
-  listen(onItems,onExamples,onError){stops.push(onSnapshot(query(equipment,where('deleted','==',false)),s=>onItems(decode(s)),onError),onSnapshot(references,s=>onExamples(cleanExamples(s.docs.map(d=>d.data()))),onError));},
+  async load(){const [items,examples,cages]=await Promise.all([getDocs(query(equipment,where('deleted','==',false))),getDocs(references),getDocs(trolleys)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages)};},
+  listen(onItems,onExamples,onError,onTrolleys=()=>{}){stops.push(onSnapshot(query(equipment,where('deleted','==',false)),s=>onItems(decode(s)),onError),onSnapshot(references,s=>onExamples(cleanExamples(s.docs.map(d=>d.data()))),onError),onSnapshot(trolleys,s=>onTrolleys(decodeTrolleys(s)),onError));},
+  trolleyVersionFor(id){return trolleyVersions.get(id)||0;},
+  async writeTrolley(trolley,expectedVersion=0,{historicalImport=false}={}) {
+   if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical collection details.');
+   trolley=validateTrolleys([trolley])[0];
+   if(trolley.status==='collected') {
+    const snapshot=await getDocs(query(equipment,where('deleted','==',false)));
+    const legacy=snapshot.docs.filter(row=>!row.data().payload.trolleyId&&row.data().payload.trolley===trolley.name);
+    if(legacy.length) {
+     const names=await getDocs(query(trolleys,where('payload.name','==',trolley.name)));
+     if(names.size!==1)throw Error('Legacy equipment uses an ambiguous trolley name. Assign those items to the correct reference before collection.');
+     for(const row of legacy)await client.write({...row.data().payload,trolleyId:trolley.id},row.data().version);
+    }
+   }
+   const row=doc(trolleys,trolley.id),revisionId=createId();
+   await runTransaction(db,async tx=>{
+    const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this trolley. Reopen trolley management and review the latest details.');
+    if(before?.payload.status==='collected')throw Error('This trolley has already been collected. Its history is locked.');
+    const payload={...trolley,collectedBy:trolley.status==='collected'?(historicalImport?trolley.collectedBy:member.code):''};
+    const after={payload,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
+    tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:payload.status==='collected'?'collect':before?'update':'create',at:serverTimestamp()});
+   });
+   trolleyVersions.set(trolley.id,expectedVersion+1);
+  },
   stop(){stops.splice(0).forEach(stop=>stop());},
   async logout(){client.stop();if(auth)await signOut(auth);},
   async write(item,expectedVersion=0,{deleted=false,historicalImport=false}={}) {
@@ -55,6 +82,11 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     const oldKey=before?.serialKey||'';
     const claim=newKey?await tx.get(doc(serials,newKey)):null;
     if(claim?.exists()&&claim.data().itemId!==item.id)throw Error('This serial number is already recorded by the team.');
+    for(const trolleyId of new Set([item.trolleyId,before?.payload.trolleyId].filter(Boolean))) {
+     const trolley=await tx.get(doc(trolleys,trolleyId));
+     if(!trolley.exists()||trolley.data().payload.status!=='open')throw Error('This trolley is unavailable or collected. Select an open trolley.');
+     if(trolleyId===item.trolleyId&&trolley.data().payload.name!==item.trolley)throw Error('Trolley details changed. Select the trolley again before saving.');
+    }
     const payload={...item,technician:before?before.payload.technician:historicalImport?item.technician:member.code};
     const after={payload,serialKey:newKey,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId,deleted,historicalImport:before?.historicalImport||historicalImport};
     tx.set(row,after);

@@ -4,6 +4,7 @@ service cloud.firestore {
   function membership(team) { return get(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)).data; }
   function member(team) { return request.auth != null && exists(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)) && membership(team).active == true && membership(team).role in ['admin','technician']; }
   function admin(team) { return member(team) && membership(team).role == 'admin'; }
+  function openTrolley(team,p) { return ('trolleyId' in p) && (p.trolleyId is string && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open' && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.name==p.trolley); }
   function itemShape(p) {
    return p.keys().hasAll(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley'])
     && p.id is string && p.date is string && p.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
@@ -41,17 +42,50 @@ service cloud.firestore {
     allow create: if member(team) && valid(request.resource.data) && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && request.resource.data.version==1 && request.resource.data.deleted==false
      && (!request.resource.data.historicalImport || admin(team))
      && (request.resource.data.payload.technician==membership(team).code || (admin(team) && request.resource.data.historicalImport))
-     && claim(request.resource.data) && revision(request.resource.data)
+     && openTrolley(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==null;
     allow update: if member(team) && !resource.data.deleted && valid(request.resource.data)
      && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
      && request.resource.data.historicalImport==resource.data.historicalImport && request.resource.data.payload.technician==resource.data.payload.technician
-     && request.resource.data.version==resource.data.version+1 && claim(request.resource.data) && revision(request.resource.data)
+     && request.resource.data.version==resource.data.version+1 && (!('trolleyId' in resource.data.payload) || openTrolley(team,resource.data.payload)) && openTrolley(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
     allow delete: if false;
     match /revisions/{revision} {
      allow read: if member(team);
      allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','edit','remove'] && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)).data && request.resource.data.after.revisionId==revision;
+     allow update, delete: if false;
+    }
+   }
+   match /trolleys/{id} {
+    function valid(d) {
+     let p=d.payload;
+     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
+      && p.keys().hasOnly(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company'])
+      && p.id==id && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+      && p.reference=='TSU-'+id.upper().replace('-','')
+      && p.name is string && p.name.size()>0 && p.name.size()<=1000
+      && p.department is string && p.department.size()>0 && p.department.size()<=100
+      && p.createdAt is string && p.createdAt.size()>0 && p.collectedAt is string && p.collectedBy is string && p.company is string
+      && p.status in ['open','collected']
+      && (p.status=='open' ? p.collectedAt=='' && p.collectedBy=='' && p.company=='' : p.collectedAt.size()>0 && p.collectedBy.size()>0 && (p.collectedBy==membership(team).code || admin(team)) && p.company.size()>0 && p.company.size()<=100)
+      && d.version is int && d.createdBy is string && d.updatedBy==request.auth.uid && d.updatedAt==request.time && d.revisionId is string;
+    }
+    function audit(d) {
+     let r=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(d.revisionId)).data;
+     return r.actor==request.auth.uid && r.after==d && r.at==request.time;
+    }
+    allow read: if member(team);
+    allow create: if member(team) && valid(request.resource.data) && request.resource.data.payload.status=='open' && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
+    allow update: if member(team) && resource.data.payload.status=='open' && valid(request.resource.data)
+     && request.resource.data.version==resource.data.version+1 && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
+     && request.resource.data.payload.id==resource.data.payload.id && request.resource.data.payload.reference==resource.data.payload.reference && request.resource.data.payload.name==resource.data.payload.name && request.resource.data.payload.createdAt==resource.data.payload.createdAt
+     && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
+    allow delete: if false;
+    match /revisions/{revision} {
+     allow read: if member(team);
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','update','collect']
+      && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)).data && request.resource.data.after.revisionId==revision;
      allow update, delete: if false;
     }
    }

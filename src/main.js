@@ -6,6 +6,7 @@ import { availableVoices, utteranceFor } from './speech';
 import { defaultFirebaseConfig } from './firebase-config';
 import { firebaseErrorMessage } from './firebase-errors';
 import { createId } from './ids';
+import {createTrolley,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
 import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -26,7 +27,7 @@ const icons = {
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||icons.box}</svg>`;
 const key = 'decompro.v1';
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-let state = { captureOrder:'serial-first', profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[] };
+let state = { captureOrder:'serial-first', activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
 let sharedClient = null;
 let sharedLocked = false;
@@ -34,6 +35,12 @@ let saving=false, exporting=false, editingVersion=0;
 const localWorkspaceKey='decompro.localWorkspace';
 let search = '', editingId = null, pendingRestore = null;
 try { sharedLocked=localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
+if(!sharedLocked) {
+ for(const name of new Set([state.defaults.trolley,...state.items.map(item=>item.trolley)]))if(name&&!state.trolleys.some(t=>t.name===name))state.trolleys.push(createTrolley(name));
+ for(const item of state.items)if(!item.trolleyId)item.trolleyId=state.trolleys.find(t=>t.name===item.trolley)?.id;
+}
+let trolleyViewId=readTrolleyHash();
+function readTrolleyHash(){return location.hash.match(/^#trolley\/([A-Za-z0-9-]+)$/)?.[1]||'';}
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function persist() { if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
 function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=utteranceFor(text,state.settings); speechSynthesis.speak(u); }
@@ -42,21 +49,27 @@ function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
  const current=fields[state.step]; const profile=state.profiles.find(p=>p.code===state.active);
  document.querySelector('#app').innerHTML=`
- <aside><a class="brand" href="#"><span class="brand-mark">${icon('barcode')}</span><span>Decom<span class="brand-light">Pro</span></span></a><div class="workspace">IT OPERATIONS</div><a class="nav active" href="#station">${icon('grid')} Scan station <span class="nav-active-dot"></span></a><a class="nav" href="#inventory">${icon('list')} Collection register <span>${state.items.length}</span></a><button class="nav settings-nav" id="settings" aria-label="Open settings">${icon('settings')}<span class="settings-nav-label">Settings</span></button><button class="nav settings-nav" id="database" aria-label="Shared database">${icon('box')}<span class="settings-nav-label">Database</span></button><div class="aside-bottom"><span class="dot"></span> ${sharedClient?'Shared Firebase workspace':sharedLocked?'Shared workspace · reconnect':'Local workspace'}<p>${sharedClient?escape(sharedClient.email):'Export or back up after each session.'}</p></div></aside>
+ <aside><a class="brand" href="#"><span class="brand-mark">${icon('barcode')}</span><span>Decom<span class="brand-light">Pro</span></span></a><div class="workspace">IT OPERATIONS</div><a class="nav active" href="#station">${icon('grid')} Scan station <span class="nav-active-dot"></span></a><a class="nav" href="#inventory">${icon('list')} Collection register <span>${state.items.length}</span></a><button class="nav settings-nav" id="settings" aria-label="Open settings">${icon('settings')}<span class="settings-nav-label">Settings</span></button><button class="nav settings-nav" id="manage-trolleys">${icon('box')}<span class="settings-nav-label">Trolleys</span></button><button class="nav settings-nav" id="database" aria-label="Shared database">${icon('box')}<span class="settings-nav-label">Database</span></button><div class="aside-bottom"><span class="dot"></span> ${sharedClient?'Shared Firebase workspace':sharedLocked?'Shared workspace · reconnect':'Local workspace'}<p>${sharedClient?escape(sharedClient.email):'Export or back up after each session.'}</p></div></aside>
  <main><div class="breadcrumb">Workspace <span>/</span> Decommissioning</div><header><div><div class="eyebrow">OUT WITH THE OLD. ON WITH THE NEW.</div><h1>Make room for what’s next<span>.</span></h1><p>Your scan station for a smoother, simpler collection day.</p></div><div class="profile"><label for="profile">Technician profile</label><select id="profile" ${sharedLocked?'disabled':''}>${state.profiles.map(p=>`<option value="${escape(p.code)}" ${p.code===state.active?'selected':''}>${escape(p.name)} · ${escape(p.code)}</option>`).join('')}</select><button class="text-button" id="add-profile" ${sharedLocked?'disabled':''}>${icon('plus')} Add technician</button></div></header>
  ${storageError?`<div class="alert error" role="alert">${escape(storageError)}</div>`:''}${notice?`<div class="alert" role="status">${escape(notice)}</div>`:''}
- <div class="stats"><div><div class="stat-icon mint">${icon('box')}</div><div class="stat-content"><span>READY FOR COLLECTION</span><strong>${state.items.length}<small> items recorded</small></strong></div></div><div><div class="stat-icon blue">${icon('grid')}</div><div class="stat-content"><span>CURRENT TROLLEY</span><strong>${escape(state.defaults.trolley)}</strong><button class="text-button trolley-switch" id="change-trolley">Change trolley ${icon('arrow')}</button></div></div><div><div class="stat-icon peach">${icon('user')}</div><div class="stat-content"><span>DISPOSAL RECORDED BY</span><strong>${escape(profile?.name||'Select technician')}<small>${escape(profile?.code||'')}</small></strong></div></div></div>
+ <div class="stats"><div><div class="stat-icon mint">${icon('box')}</div><div class="stat-content"><span>ITEMS IN REGISTER</span><strong>${state.items.length}<small> items recorded</small></strong></div></div><div><div class="stat-icon blue">${icon('grid')}</div><div class="stat-content"><span>CURRENT TROLLEY</span><strong>${escape(state.defaults.trolley)}</strong><button class="text-button trolley-switch" id="change-trolley">Change trolley ${icon('arrow')}</button></div></div><div><div class="stat-icon peach">${icon('user')}</div><div class="stat-content"><span>DISPOSAL RECORDED BY</span><strong>${escape(profile?.name||'Select technician')}<small>${escape(profile?.code||'')}</small></strong></div></div></div>
  <div class="station-layout"><section id="station" class="card station"><div class="section-top"><span class="eyebrow"><span class="station-dot"></span> SCAN STATION</span><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><div class="recognition-library"><span><strong>Serial recognition ready</strong> · ${builtInReferences.length} built-in spreadsheet references</span><button id="add-reference" class="text-button">Add another spreadsheet</button></div><div class="steps">${fields.map((f,i)=>`<button class="step ${i===state.step?'current':''} ${i<state.step?'complete':''}" data-step="${i}" ${i>state.step?'disabled':''}><span>${i<state.step?icon('check'):i+1}</span>${escape(f[1].replace(' number',''))}</button>`).join('')}</div>
  ${state.settings.reuseModel?`<div class="batch-model-chip">Batch model <strong>${escape(state.settings.batchModel)}</strong></div>`:''}<div class="scan-icon">${icon(current?'barcode':'check')}</div><div class="scan-label">${current?`FIELD ${state.step+1} OF ${fields.length}`:'READY TO RECORD'}</div><h2>${current?escape(current[1]):'Review this equipment'}</h2><p>${current?'Scan the label or type its value, then press Enter.':'Check the values below, then save this item to the collection register.'}</p>
  ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
  ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>
  <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
- <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2>Ready for the next collection <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports all records in the 11 equipment columns, including records hidden by search. Backups also keep trolley details, profiles and captured progress.</div></section>
- <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="database-dialog"></dialog>`;
+ <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
+ <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog>`;
  bind(); updateRegister(); focus();
 }
 function capture(value) {
  value=value.trim();if(!value||state.step>=fields.length)return;
+ const scannedTrolley=findTrolley(value,state.trolleys);
+ if(scannedTrolley||/^TSU-[A-F0-9]{32}$/i.test(value)) {
+  if(scannedTrolley)viewTrolley(scannedTrolley.id);
+  else{notice='This trolley is not in the current workspace. Connect to its team database or restore its workspace backup.';render();}
+  return;
+ }
  if(fields[state.step][0]==='asset') {
   if(!validAssetNumber(value)){notice='Asset number must be A followed by four digits, for example A1234. If this is not applicable, use Skip to mark it as not applicable.';render();document.querySelector('#scan')?.focus();speak(notice);return;}
   value=normalizeAssetNumber(value);
@@ -105,7 +118,9 @@ async function saveItem() {
  const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
  document.querySelector('#save-feedback').textContent=sharedClient?'Saving to the shared team database…':'Saving item…';
  try {
-  const item={...batch,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
+  const trolley=await resolveTrolley(batch.trolley);
+  if(trolley.status==='collected')throw Error('This trolley has been collected. Select or create an open trolley before saving.');
+  const item={...batch,trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
   if(sharedClient)await sharedClient.write(item);
   const next={...state,defaults:batch,items:[...state.items.filter(i=>i.id!==item.id),item],draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:0};
   // A local save must reach storage before clearing the scanned draft.
@@ -126,6 +141,7 @@ function writable() {
 
 function bind() {
  document.querySelector('#database').onclick=openDatabase;
+ document.querySelector('#manage-trolleys').onclick=openTrolleyManager;
  document.querySelector('#settings').onclick=openSettings;
  document.querySelector('#add-reference').onclick=()=>{openSettings();document.querySelector('#reference-file').click();};
  document.querySelector('#change-trolley').onclick=openTrolley;
@@ -143,6 +159,7 @@ function bind() {
  document.querySelector('#defaults').addEventListener('input',e=>{
   if(!defaultFields.some(([key])=>key===e.target.name))return;
   if(e.target.name==='date'&&!validDate(e.target.value))return;
+  if(e.target.name==='trolley'&&state.trolleys.find(t=>t.id===state.activeTrolleyId)?.name!==e.target.value)state.activeTrolleyId='';
   state.defaults[e.target.name]=e.target.value;persist();
  });
  document.querySelector('#defaults').onsubmit=e=>{e.preventDefault();state.defaults=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,v.trim()]));notice='Batch defaults applied.';persist();render();};
@@ -151,7 +168,7 @@ function bind() {
   const button=e.target.closest('button');if(!button)return;
   if(button.dataset.edit) openEditor(button.dataset.edit);
   if(button.dataset.delete && writable() && confirm('Remove this item from the collection register?')) {
-   try {const item=state.items.find(i=>i.id===button.dataset.delete);if(sharedClient)await sharedClient.write(item,sharedClient.versionFor(item.id),{deleted:true});state.items=state.items.filter(i=>i.id!==button.dataset.delete);persist();render();}
+   try {const item=state.items.find(i=>i.id===button.dataset.delete);if(state.trolleys.some(t=>t.status==='collected'&&trolleyForItem(item,t)))throw Error('Collected trolley contents are locked and retained for history.');if(sharedClient)await sharedClient.write(item,sharedClient.versionFor(item.id),{deleted:true});state.items=state.items.filter(i=>i.id!==button.dataset.delete);persist();render();}
    catch(error){notice=`Removal failed. ${error.message}`;render();}
   }
  };
@@ -168,16 +185,82 @@ function resetDraft() {
  state.step=0;
 }
 function openTrolley() {
- const known=[...new Set([state.defaults.trolley,...state.items.map(item=>item.trolley)])];
+ const known=state.trolleys.filter(t=>t.status==='open').map(t=>t.name);
  const dialog=document.querySelector('#trolley-dialog');
  dialog.innerHTML=`<form id="trolley-form"><div class="eyebrow">COLLECTION TROLLEYS</div><h2>Switch to another trolley</h2><p>New records will use this trolley. Existing records stay where they are; use Edit to move an item.</p><label for="trolley-name">Trolley name</label><input id="trolley-name" name="trolley" list="known-trolleys" value="${escape(state.defaults.trolley)}" required maxlength="1000"><datalist id="known-trolleys">${known.map(name=>`<option value="${escape(name)}"></option>`).join('')}</datalist><div class="trolley-list">${known.map(name=>`<button type="button" class="secondary" data-trolley="${escape(name)}">${escape(name)} <span>${state.items.filter(item=>item.trolley===name).length} items</span></button>`).join('')}</div><p id="trolley-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley">Cancel</button><button class="primary">Use trolley</button></div></form>`;
  dialog.showModal();
  document.querySelector('#cancel-trolley').onclick=()=>dialog.close();
  dialog.querySelectorAll('[data-trolley]').forEach(button=>button.onclick=()=>document.querySelector('#trolley-name').value=button.dataset.trolley);
- document.querySelector('#trolley-form').onsubmit=e=>{
+ document.querySelector('#trolley-form').onsubmit=async e=>{
   e.preventDefault();const trolley=document.querySelector('#trolley-name').value.trim();
   if(!trolley){document.querySelector('#trolley-error').textContent='Enter a trolley name.';return;}
-  state.defaults.trolley=trolley;notice=`New items will be recorded in ${trolley}.`;persist();render();
+  try{const record=await resolveTrolley(trolley);if(record.status==='collected')throw Error('This trolley has been collected. Select or create an open trolley.');commitTrolleyWorkspace({...state,activeTrolleyId:record.id,defaults:{...state.defaults,trolley}});notice=`New items will be recorded in ${trolley}.`;render();}
+  catch(error){document.querySelector('#trolley-error').textContent=error.message;}
+ };
+}
+function commitTrolleyWorkspace(next) {
+ if(storageError&&!sharedClient)throw Error('Browser storage is unavailable. Back up your workspace before continuing.');
+ if(!sharedClient)localStorage.setItem(key,JSON.stringify(next));
+ state=next;if(sharedClient)persist();
+}
+async function resolveTrolley(name) {
+ name=name.trim();if(!name)throw Error('Enter a trolley name.');
+ const chosen=state.trolleys.find(t=>t.id===state.activeTrolleyId&&t.name.toLowerCase()===name.toLowerCase());if(chosen)return chosen;
+ const matches=state.trolleys.filter(t=>t.name.toLowerCase()===name.toLowerCase());
+ if(matches.length>1)throw Error('Several trolleys use this name. Select the correct reference in Trolleys.');
+ if(matches[0])return matches[0];
+ if(!writable())throw Error('Reconnect before creating a team trolley.');
+ const trolley=createTrolley(name);
+ if(sharedClient)await sharedClient.writeTrolley(trolley,0);
+ state.trolleys=[...state.trolleys.filter(t=>t.id!==trolley.id),trolley];
+ return trolley;
+}
+function viewTrolley(id) {
+ document.querySelector('#trolley-manager')?.close();
+ location.hash=`trolley/${id}`;trolleyViewId=id;
+ notice='Trolley inventory opened. Your scanned equipment draft is unchanged.';render();
+ document.querySelector('#inventory').scrollIntoView({behavior:'smooth'});
+}
+function openTrolleyManager() {
+ const dialog=document.querySelector('#trolley-manager');
+ dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Edit department</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
+ dialog.showModal();
+ document.querySelector('#close-trolley-manager').onclick=()=>dialog.close();
+ document.querySelector('#trolley-lookup-form').onsubmit=e=>{e.preventDefault();const record=findTrolley(document.querySelector('#trolley-lookup').value,state.trolleys);if(record)viewTrolley(record.id);else document.querySelector('#trolley-manager-error').textContent='Trolley not found in this workspace. Check the barcode or connect to the correct team.';};
+ document.querySelector('#create-trolley-form').onsubmit=async e=>{
+  e.preventDefault();if(!writable())return;
+  const data=new FormData(e.target),name=data.get('name').trim(),department=data.get('department').trim(),button=e.target.querySelector('button');
+  if(!name||!department)return;
+  if(state.trolleys.some(t=>t.name.toLowerCase()===name.toLowerCase())){document.querySelector('#trolley-manager-error').textContent='A trolley already uses that name. Choose a new name so histories stay distinct.';return;}
+  button.disabled=true;
+  try{const trolley=createTrolley(name,department);if(sharedClient)await sharedClient.writeTrolley(trolley,0);commitTrolleyWorkspace({...state,trolleys:[...state.trolleys.filter(t=>t.id!==trolley.id),trolley]});dialog.close();openTrolleyManager();}
+  catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+ };
+ dialog.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>viewTrolley(button.dataset.view));
+ dialog.querySelectorAll('[data-use]').forEach(button=>button.onclick=()=>{const trolley=state.trolleys.find(t=>t.id===button.dataset.use);try{if(!writable())return;if(trolley.status==='collected')throw Error('This trolley has been collected.');commitTrolleyWorkspace({...state,activeTrolleyId:trolley.id,defaults:{...state.defaults,trolley:trolley.name}});notice=`New items will be recorded in ${trolley.name}.`;render();}catch(error){document.querySelector('#trolley-manager-error').textContent=error.message;}});
+ dialog.querySelectorAll('[data-label]').forEach(button=>button.onclick=async()=>{
+  button.disabled=true;
+  try{if(!sharedClient)commitTrolleyWorkspace({...state});const trolley=state.trolleys.find(t=>t.id===button.dataset.label);const {trolleyLabel}=await import('./trolley-label');const url=new URL(location.href);url.hash=`trolley/${trolley.id}`;const data=await trolleyLabel(trolley,state.items.filter(item=>trolleyForItem(item,trolley)).length,url.href);downloadFile(data,`${trolley.reference}.pdf`,'application/pdf');}
+  catch(error){document.querySelector('#trolley-manager-error').textContent=`Label failed: ${error.message}`;}
+  finally{button.disabled=false;}
+ });
+ dialog.querySelectorAll('[data-collect],[data-details]').forEach(button=>button.onclick=()=>openTrolleyDetails(button.dataset.collect||button.dataset.details,Boolean(button.dataset.collect)));
+}
+function openTrolleyDetails(id,collecting) {
+ const trolley=state.trolleys.find(t=>t.id===id),expectedVersion=sharedClient?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');
+ dialog.innerHTML=`<form id="trolley-details-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>${collecting?'Mark trolley collected':'Edit trolley department'}</h2><p>${escape(trolley.name)} · ${state.items.filter(item=>trolleyForItem(item,trolley)).length} items</p>${collecting?'<p>Collection locks this trolley against new equipment and retains its inventory.</p><label for="collection-company">Decommission company</label><input id="collection-company" name="company" required maxlength="100" placeholder="Company collecting this trolley">':`<label for="edit-trolley-department">Owning department</label><input id="edit-trolley-department" name="department" required maxlength="100" value="${escape(trolley.department)}">`}<p id="trolley-manager-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley-details">Cancel</button><button class="primary">${collecting?'Confirm collection':'Save department'}</button></div></form>`;
+ document.querySelector('#cancel-trolley-details').onclick=()=>{dialog.close();openTrolleyManager();};
+ document.querySelector('#trolley-details-form').onsubmit=async e=>{
+  e.preventDefault();if(!writable())return;const button=e.target.querySelector('.primary');button.disabled=true;
+  try{
+   const data=new FormData(e.target);
+   const updated=collecting?{...trolley,status:'collected',company:data.get('company').trim(),collectedAt:new Date().toISOString(),collectedBy:sharedClient?.profile.code||state.active}:{...trolley,department:data.get('department').trim()};
+   if(sharedClient)await sharedClient.writeTrolley(updated,expectedVersion);
+   const trolleys=state.trolleys.map(row=>row.id===id?updated:row),defaults={...state.defaults};
+   let activeTrolleyId=state.activeTrolleyId;
+   if(collecting&&(activeTrolleyId===trolley.id||(!activeTrolleyId&&defaults.trolley===trolley.name))){const next=trolleys.find(row=>row.status==='open');defaults.trolley=next?.name||'';activeTrolleyId=next?.id||'';}
+   commitTrolleyWorkspace({...state,trolleys,defaults,activeTrolleyId});dialog.close();notice=collecting?'Trolley marked collected. Its inventory and reference are retained.':'Trolley department updated.';render();
+  }catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
 }
 function refreshVoiceChoices(preferred) {
@@ -234,8 +317,15 @@ async function importReference(e) {
  } catch(error){notice=`Reference import failed. ${error.message}`;render();}
 }
 function updateRegister() {
- const items=filteredItems(state.items,search);
- document.querySelector('#search-count').textContent=`Showing ${items.length} of ${state.items.length} items`;
+ const selected=state.trolleys.find(t=>t.id===trolleyViewId);
+ const scope=trolleyViewId?(selected?state.items.filter(item=>trolleyForItem(item,selected)):[]):state.items;
+ const items=filteredItems(scope,search);
+ document.querySelector('#inventory-title').textContent=selected?`${selected.name} inventory`:'Ready for the next collection';
+ const banner=document.querySelector('#trolley-inventory-banner');
+ banner.innerHTML=trolleyViewId?`<div class="trolley-inventory-banner"><div><strong>${selected?escape(selected.reference):'Trolley not found in this workspace'}</strong><p>${selected?`Property of TSU - ${escape(selected.department)} · ${selected.status==='collected'?`Collected by ${escape(selected.company)}`:'Open for equipment'}`:'Connect to the team database that owns this trolley.'}</p></div><button class="secondary" id="show-all-trolleys">Show all inventory</button></div>`:'';
+ document.querySelector('#show-all-trolleys')?.addEventListener('click',()=>{location.hash='inventory';});
+ document.querySelector('#search-count').textContent=`Showing ${items.length} of ${scope.length} items`;
+ document.querySelector('.register .count').textContent=scope.length;
  document.querySelector('#inventory tbody').innerHTML=items.map(item=>`<tr><td><strong>${escape(item.description)}</strong><span>${escape(item.manufacturer)} · ${escape(item.model)}</span></td><td>${escape(item.serial)}</td><td>${escape(item.asset)}</td><td><span class="tag">${escape(item.trolley)}</span></td><td>${escape(item.technician)}</td><td>${escape(item.date.split('-').reverse().join('/'))}</td><td><div class="row-actions"><button class="text-button" data-edit="${escape(item.id)}" aria-label="Edit item ${escape(item.serial)}">Edit</button><button class="text-button remove" data-delete="${escape(item.id)}" aria-label="Delete item ${escape(item.serial)}">Remove</button></div></td></tr>`).join('') || `<tr><td colspan="7" class="empty"><div class="empty-icon">${icon('box')}</div><strong>${search?'No equipment matches your search.':'A little less clutter starts here.'}</strong><span>${search?'Try another serial number, trolley or technician.':'Scan your first item to start your collection register.'}</span></td></tr>`;
 }
 function openEditor(id) {
@@ -256,7 +346,10 @@ function openEditor(id) {
   if(!validAssetNumber(values.asset)){error.textContent='Asset number must be A followed by four digits, for example A1234, or N/A.';document.querySelector('#edit-asset').focus();return;}
   values.asset=normalizeAssetNumber(values.asset);
   if(duplicateSerial(state.items.filter(item=>item.id!==editingId),values.serial)){error.textContent='This serial number belongs to another item. Check it before saving.';return;}
-  const updated={...item,...values};
+  let destination;
+  try{destination=values.trolley===item.trolley?state.trolleys.find(t=>t.id===item.trolleyId)||await resolveTrolley(values.trolley):await resolveTrolley(values.trolley);if(destination.status==='collected'||state.trolleys.some(t=>t.status==='collected'&&trolleyForItem(item,t)))throw Error('Collected trolley contents are locked. Choose an open trolley for new equipment.');}
+  catch(failure){error.textContent=failure.message;return;}
+  const updated={...item,...values,trolleyId:destination.id};
   const button=e.target.querySelector('button[type=submit]')||e.target.querySelector('.primary');button.disabled=true;
   try {if(sharedClient)await sharedClient.write(updated,editingVersion);state.items=state.items.map(row=>row.id===editingId?updated:row);notice='Equipment changes saved.';persist();render();}
   catch(failure){error.textContent=failure.message;button.disabled=false;}
@@ -282,11 +375,11 @@ async function activateDatabase(config,teamId,email,password) {
  const client=await connectFirebase(config,teamId,email,password);
  try {
   const records=await client.load();
-  const next=validateWorkspace({...state,profiles:[client.profile],active:client.profile.code,items:records.items,referenceExamples:records.examples});
+  const next=validateWorkspace({...state,activeTrolleyId:records.trolleys.some(t=>t.id===state.activeTrolleyId)?state.activeTrolleyId:'',profiles:[client.profile],active:client.profile.code,items:records.items,trolleys:records.trolleys,referenceExamples:records.examples});
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
   sharedClient?.stop();sharedClient=client;sharedLocked=true;state=next;notice='Connected to the shared Firebase team register.';persist();render();
-  client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('.register .count').textContent=items.length;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}});
+  client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){state.trolleys=trolleys;persist();updateRegister();}});
  }catch(error){client.stop();throw error;}
 }
 async function disconnectDatabase() {
@@ -303,8 +396,10 @@ async function uploadLocal() {
  try {
   const local=validateWorkspace(JSON.parse(localStorage.getItem(localWorkspaceKey)||'null'));
   if(!confirm(`Import ${local.items.length} historical local records? Each will be checked for duplicate IDs and serials.`)){button.disabled=false;return;}
-  let added=0,blocked=0;
-  for(const item of local.items){try{await sharedClient.write(item,0,{historicalImport:true});added++;}catch{blocked++;}}
+  let added=0,blocked=0;const newlyCreated=new Set(),failedTrolleys=new Set();
+  for(const trolley of local.trolleys){if(sharedClient.trolleyVersionFor(trolley.id))continue;try{await sharedClient.writeTrolley({...trolley,status:'open',collectedAt:'',collectedBy:'',company:''},0);newlyCreated.add(trolley.id);}catch{failedTrolleys.add(trolley.id);}}
+  for(const item of local.items){try{if(failedTrolleys.has(item.trolleyId))throw Error('Trolley import failed');await sharedClient.write(item,0,{historicalImport:true});added++;}catch{blocked++;failedTrolleys.add(item.trolleyId);}}
+  for(const trolley of local.trolleys.filter(t=>t.status==='collected'&&newlyCreated.has(t.id)&&!failedTrolleys.has(t.id))){try{await sharedClient.writeTrolley(trolley,1,{historicalImport:true});}catch{blocked++;}}
   notice=`Imported ${added} historical records; ${blocked} not imported (duplicates, conflicts or errors). Your preserved local workspace is unchanged.`;render();
  }catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
 }
@@ -343,7 +438,8 @@ async function prepareRestore(e) {
 }
 async function exportExcel() {
  if(exporting)return;
- const items=state.items.map(item=>({...item}));
+ const selected=state.trolleys.find(t=>t.id===trolleyViewId);
+ const items=(trolleyViewId?(selected?state.items.filter(item=>trolleyForItem(item,selected)):[]):state.items).map(item=>({...item}));
  if(!items.length){notice='There are no saved items to export. Save an item first; an unsaved scan is not included.';render();return;}
  exporting=true;
  const button=document.querySelector('#export');button.disabled=true;button.textContent='Preparing Excel…';
@@ -371,5 +467,6 @@ async function exportExcel() {
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&state.step===fields.length&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();saveItem();}});
+window.addEventListener('hashchange',()=>{trolleyViewId=readTrolleyHash();updateRegister();document.querySelector('#inventory')?.scrollIntoView({behavior:'smooth'});});
 render();
 resumeDatabase();

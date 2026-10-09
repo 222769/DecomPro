@@ -1,5 +1,6 @@
 import { fields } from './data';
 import { cleanExamples } from './recognition';
+import {validateTrolleys,createTrolley} from './trolleys.js';
 
 export const defaultFields = [
   ['date', 'Disposal date', 'date'],
@@ -39,6 +40,7 @@ export function validateWorkspace(value) {
     if (!item || !text(item.id) || ids.has(item.id) || !text(item.technician) || !validDate(item.date)) throw Error('The backup has invalid or repeated item IDs or dates.');
     ids.add(item.id);
     const clean = { id: item.id, technician: item.technician };
+    if(item.trolleyId!==undefined){if(!text(item.trolleyId))throw Error('Invalid equipment trolley reference.');clean.trolleyId=item.trolleyId;}
     for (const [key] of [...defaultFields, ...fields]) {
       if (!text(item[key])) throw Error('The backup has an incomplete equipment record.');
       clean[key] = item[key];
@@ -82,7 +84,14 @@ export function validateWorkspace(value) {
   if (value.referenceExamples !== undefined && !Array.isArray(value.referenceExamples)) throw Error('Invalid recognition catalogue.');
   const referenceExamples = cleanExamples(value.referenceExamples || []);
   settings.serialFirst = true;
-  return { captureOrder:'serial-first', referenceExamples, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  const trolleys=validateTrolleys(value.trolleys||[]);
+  if(value.trolleys===undefined) {
+   for(const name of new Set([defaults.trolley,...items.map(item=>item.trolley)]))if(name)trolleys.push(createTrolley(name));
+   for(const item of items)if(!item.trolleyId)item.trolleyId=trolleys.find(t=>t.name===item.trolley)?.id;
+  }
+  const activeTrolleyId=value.activeTrolleyId||'';
+  if(typeof activeTrolleyId!=='string'||(activeTrolleyId&&!trolleys.some(t=>t.id===activeTrolleyId)))throw Error('The selected trolley is not in this workspace.');
+  return { captureOrder:'serial-first', activeTrolleyId, trolleys, referenceExamples, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

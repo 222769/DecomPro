@@ -4,20 +4,20 @@ Firestore is the shared database; Firebase Authentication supplies account ident
 
 ## Validation status
 
-The integration and rules are prepared. A live Firebase project has not been connected or verified. The emulator download is currently blocked by the cloud environment's network policy for `storage.googleapis.com`, so the four database/rules tests have not run. Run and pass these tests before using the rules with real team records:
+The five database/rules tests pass against the local Firestore emulator, including trolley creation, department changes, conflict handling, collection locks and immutable history. A live Firebase connection and deployment of these updated rules have not been verified. Run the tests before deploying future rule changes:
 
 ```sh
 npm ci
 npm run test:database
 ```
 
-The test command starts a local Firestore emulator using a demo project; it does not deploy anything. It tests denied access, role escalation, transactional records/revisions, serial uniqueness, concurrent edits, retained removal history, escaping serial keys, and idempotent reference imports. Java 21 or later is required. In the current cloud workspace, use writable cache paths:
+The test command starts a local Firestore emulator using a demo project; it does not deploy anything. It tests denied access, role escalation, transactional records/revisions, serial uniqueness, concurrent edits, retained removal history, escaping serial keys, idempotent reference imports, trolley lifecycle changes, and denied equipment changes after collection. Java 21 or later is required. In the current cloud workspace, use writable cache paths:
 
 ```sh
 XDG_CONFIG_HOME=/workspace/.firebase-config FIREBASE_EMULATORS_PATH=/workspace/.firebase-emulators npm run test:database
 ```
 
-The needed network domain has been saved in the environment configuration draft. Saving that draft does not itself apply networking changes. The **Validate Firebase database** GitHub Actions workflow also runs these tests on pushes and pull requests; its result must be checked before deploying the rules. A submitted workflow is not evidence that its tests passed.
+The **Validate Firebase database** GitHub Actions workflow also runs these tests on pushes and pull requests. Check its result before deploying the rules to the live project.
 
 ## Configure the project after validation
 
@@ -56,6 +56,7 @@ The first membership path is `teams/college-it/members/YOUR_AUTH_USER_UID`. For 
 - `equipment/{id}/revisions/{revision}`: immutable before/after snapshots, actor, action and server time. Removal is a soft deletion and retains history.
 - `teams/{team}/serials/{key}`: canonical uppercase serial claim. Equipment and serial claim updates commit in the same Firestore transaction; rules bind the key to the actual serial, preventing another member from choosing a different key to bypass uniqueness. `N/A` has no unique claim. Slash/tilde characters are escaped rather than restricting manufacturers' serial formats.
 - `teams/{team}/references/{id}`: deduplicated spreadsheet facts and importing user/time. Conflicting labels can coexist and stop automatic recognition.
+- `teams/{team}/trolleys/{id}`: permanent reference, name, owning department, open/collected status, collection company/time/initials, optimistic version and authenticated write metadata. Its `revisions` subcollection retains immutable before/after history.
 - `teams/{team}/members/{uid}`: trusted name, initials, active state and role.
 
 Records use optimistic versions: a stale edit is rejected instead of overwriting another technician's update. Shared records and references have realtime listeners. All shared writes require an authenticated, active team member. Rules also require each record change to include an immutable audit revision, and protect the original disposal attribution against changes by ordinary client edits.
@@ -67,3 +68,9 @@ Connecting preserves the local workspace separately before displaying shared dat
 Shared drafts remain in this browser's local cache, and remote writes must succeed before a draft is cleared. If reconnecting fails, the cached team register becomes read-only until reconnection or a return to local mode. This is not an offline synchronization queue: shared saves require a working connection, and a transaction may wait or fail during an outage. Do not assume a save succeeded until it is confirmed. For reliable fully offline shared operation, an outbox/reconciliation workflow remains future work.
 
 Exports and backups contain the inventory data visible to the authenticated team member. They are not database backups with point-in-time recovery. Configure a college-approved backup/retention process for the live Firestore database separately.
+
+## Trolley migration and labels
+
+New shared equipment writes require a registered open trolley ID and matching trolley name. Existing equipment without an ID remains readable; editing it in the updated app assigns a registered ID. Marking a trolley collected first links matching legacy shared records to its ID so the database can enforce their inventory lock. If several trolleys share that name, collection stops and requires assigning those legacy items to the correct reference. Collected trolley records cannot be reopened or deleted through the app. PDF barcodes encode the permanent reference; QR codes select the ID in the website URL and require the same team workspace on another device.
+
+Local equipment imports create trolley records first, import their equipment, and restore historical collection details only when that trolley's equipment import has no failures. An administrator's import preserves historical initials while audit revisions identify the actual importing account. Failed rows remain in the preserved local workspace.
