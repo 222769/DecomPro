@@ -27,7 +27,7 @@ Keep the scan box focused when scanning. Empty Enter presses must be generated b
 
 ## Supplier workbook
 
-The uploaded `Decom 2026 - Summer.xlsx` was inspected as a data-format example. Export creates a new `Sheet1` with its exact 17 column headings and order, including both `Asset Number` columns. It does not append to the original file or include the example equipment records. Scanned asset numbers fill column I; column L and the other finance columns are genuinely blank. Identifiers remain text, preserving leading zeros. The selected technician's disposal initials fill column K, `Who disposed of it?`. Disposal dates are Excel dates formatted `dd/mm/yyyy`.
+The uploaded `Decom 2026 - Summer.xlsx` was inspected as a data-format example. Export creates a new `Sheet1` with the first 11 equipment columns, ending at `Who disposed of it?`. The duplicate empty Asset Number column and the five finance columns are omitted. It does not append to the original file or include the example equipment records. Scanned asset numbers fill column I. Identifiers remain text, preserving leading zeros. The selected technician's disposal initials fill column K, `Who disposed of it?`. Disposal dates are Excel dates formatted `dd/mm/yyyy`.
 
 Trolley is retained in the app register and JSON backups, because the supplier workbook has no trolley column. Export formatting is newly generated; existing workbook formatting, formulas, and supplier metadata are not copied.
 
@@ -108,4 +108,4 @@ The supplied workbook produced 321 distinct usable examples. Leave-one-serial-ou
 
 The optional Firebase integration uses Firestore, Firebase Authentication, team membership, serial claims, optimistic record versions and immutable change history. Live configuration and security-rule validation remain required; the app does not create a Firebase project or enable billing. See [database setup and validation](database/README.md).
 
-Local mode remains available. Firebase mode fixes technician identity to the signed-in membership; account administration is through Firebase's trusted console. Records and recognition examples are shared only after connection. The supplier export keeps its original 17 headings.
+Local mode remains available. Firebase mode fixes technician identity to the signed-in membership; account administration is through Firebase's trusted console. Records and recognition examples are shared only after connection. The supplier export includes the 11 equipment columns and omits the six unused trailing columns.

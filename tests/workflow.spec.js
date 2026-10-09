@@ -101,9 +101,12 @@ test('scanner, spoken prompts, profiles, persistence and exact Excel mapping',as
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel'}).click();
  const download=await downloaded;const book=new ExcelJS.Workbook();await book.xlsx.readFile(await download.path());
  const sheet=book.getWorksheet('Sheet1');expect(sheet.getRow(1).values.slice(1)).toEqual(headers);
+ expect(sheet.columnCount).toBe(11);expect(sheet.autoFilter).toBe('A1:K1');
+ expect(sheet.getRow(1).values.filter(value=>value==='Asset Number')).toHaveLength(1);
+ expect(sheet.getRow(1).values).not.toContain('Amt To Dispose');
  const row=sheet.getRow(2);expect(row.getCell(3).value).toBe('P2419H');expect(row.getCell(6).value).toBe('00001234');
  expect(row.getCell(7).value).toBe('N/A');expect(row.getCell(8).value).toBe('090011');expect(row.getCell(9).value).toBe('A0904');
- expect(row.getCell(11).value).toBe('AL');expect(row.getCell(12).value).toBeNull();expect(row.getCell(1).value).toBeInstanceOf(Date);
+ expect(row.getCell(11).value).toBe('AL');expect(row.getCell(1).value).toBeInstanceOf(Date);
  await item(page);await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.getByRole('status')).toContainText('already in the register');expect(await page.locator('tbody tr').count()).toBe(1);
 });
