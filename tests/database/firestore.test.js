@@ -68,3 +68,31 @@ test('trolley references, inventory and collection history commit together and r
  await assertFails(deleteDoc(revisions.docs[0].ref));await assertFails(deleteDoc(doc(db,`teams/college-it/trolleys/${trolley.id}`)));
  await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'teams/college-it/trolleys')));
 });
+
+test('two independent team clients receive live equipment, references and collection changes',async()=>{
+ const first=createTeamStore(context('tech'),'tech','college-it',member),second=createTeamStore(context('admin'),'admin','college-it',admin);
+ const events={items:[],trolleys:[],examples:[],phase:''},failures=[];
+ const waitFor=async predicate=>{const start=Date.now();while(!predicate()){if(failures.length)throw failures[0];if(Date.now()-start>10000)throw Error('Realtime team update was not received');await new Promise(resolve=>setTimeout(resolve,25));}};
+ second.listen(rows=>events.items=rows,rows=>events.examples=rows,error=>failures.push(error),rows=>events.trolleys=rows,phase=>events.phase=phase);
+ try {
+  await waitFor(()=>events.phase==='connected');
+  await first.write(sample('shared-live-item','LIVE0001'));await waitFor(()=>events.items.some(row=>row.id==='shared-live-item'));
+  assert.equal(events.items[0].technician,'TT');
+  await assert.rejects(second.write(sample('duplicate-other-device','LIVE0001')),/already recorded/);
+  await second.write({...events.items[0],model:'Correction from second device'},second.versionFor('shared-live-item'));
+  assert.equal((await first.load()).items[0].model,'Correction from second device');
+  await first.importExamples([{serial:'TEAMREF1',model:'Shared model',manufacturer:'Shared maker',source:'Excel'}]);await waitFor(()=>events.examples.some(row=>row.serial==='TEAMREF1'));
+  await first.writeTrolley({...initialTrolley,status:'collected',company:'Shared supplier',collectedAt:new Date().toISOString(),collectedBy:'TT'},1);
+  await waitFor(()=>events.trolleys.some(row=>row.id===initialTrolley.id&&row.status==='collected'));
+  await assert.rejects(second.write({...sample('late-second-device','LATE0002')}),/collected/);
+  assert.equal(failures.length,0);
+ }finally{first.stop();second.stop();}
+});
+
+test('server-confirmed loading rejects offline cached data and recovers after reconnect',async()=>{
+ const {disableNetwork,enableNetwork}=await import('firebase/firestore');
+ const db=context('tech'),client=createTeamStore(db,'tech','college-it',member);await client.write(sample());await client.load();
+ await disableNetwork(db);
+ try{await assert.rejects(client.load(),/offline|server|unavailable/i);}finally{await enableNetwork(db);}
+ assert.equal((await client.load()).items.length,1);
+});

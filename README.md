@@ -59,6 +59,12 @@ The workflow `.github/workflows/pages.yml` builds the locked dependencies with N
 
 The expected default address is `https://222769.github.io/DecomPro/`; it is only live after a successful deployment. Relative assets support this project path. GitHub Pages hosting eligibility depends on repository visibility and the account's plan. Switching from Netlify changes the storage origin, so export any Netlify test records first. Local profiles are not access controls; a public Pages site is accessible to anyone with its URL.
 
+## Connection status and collection history
+
+The banner above the station shows whether records are local, confirmed by Firebase, awaiting confirmation or offline. Shared changes pause when the browser reports it is offline; captured progress is kept for retry. Open **Database → Check connection** to read the team register directly from Firebase and confirm record/trolley/reference counts. Sign in on the other device to the same team and verify a test item appears there. See `database/README.md` for the full live acceptance test and publishing the tested rules.
+
+Open **Collection history** to search completed trolleys by name, reference, company, department or technician initials. Each entry shows the collection time in Europe/London, collecting company, initials and retained item count. **View inventory** opens that trolley's equipment and scoped Excel export. Shared changes update the history without clearing your equipment draft.
+
 ## Manage trolleys and print labels
 
 Open **Trolleys** in the navigation. Create a trolley with a descriptive name and owning department. Each trolley receives a permanent `TSU-` reference generated from a UUID; reused names do not reuse references. Existing local trolley names migrate into this register automatically. The default ownership is **Property of TSU - Helpdesk (Calderdale College)**.

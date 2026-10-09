@@ -367,3 +367,39 @@ test('database setup keeps local records intact before connection',async({page})
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(1);
  await page.getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('tbody')).toContainText('LOCAL-001');
 });
+
+test('collection history retains supplier, technician and inventory without changing the scan draft',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'HISTORY-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await scan(page,'UNSAVED-HISTORY-DRAFT');
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Mark collected',exact:true}).click();await page.getByLabel('Decommission company').fill('History supplier');await page.getByRole('button',{name:'Confirm collection'}).click();
+ await page.getByRole('link',{name:'Collection history',exact:true}).click();
+ await expect(page.locator('#collection-history')).toBeVisible();await expect(page.locator('#history-results')).toContainText('History supplier');await expect(page.locator('#history-results')).toContainText('JA');await expect(page.locator('#history-results')).toContainText('1 items');
+ await page.getByLabel('Search collected trolleys').fill('unmatched supplier');await expect(page.locator('#history-results')).toContainText('No collected trolleys match');await page.getByLabel('Search collected trolleys').fill('History supplier');
+ await page.reload();await expect(page.locator('#history-results')).toContainText('History supplier');
+ await page.locator('#history-results').getByRole('button',{name:'View inventory'}).click();await expect(page.locator('tbody')).toContainText('HISTORY-001');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('UNSAVED-HISTORY-DRAFT');
+});
+
+test('cached shared workspace shows offline recovery guidance and keeps scanned progress',async({page})=>{
+ await page.goto('/');await scan(page,'OFFLINE-DRAFT');
+ await page.evaluate(()=>localStorage.setItem('decompro.mode','shared'));
+ await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:"export async function connectFirebase(){throw Error('Offline test');}"}));
+ await page.reload();await expect(page.locator('#connection-status')).toContainText('Offline · team changes paused');await expect(page.locator('#connection-status')).toContainText('captured item stays here');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('OFFLINE-DRAFT');
+ await page.getByRole('button',{name:'Change trolley'}).click();await expect(page.getByRole('status')).toContainText('You are offline');
+});
+
+test('connection check reports server results and failures while retaining the scanned item',async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Team technician',code:'TT'},role:'admin',email:'team@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,onConnection){onConnection('connected');},async load(){if(window.failConnectionCheck){const error=Error('Database unavailable');error.code='unavailable';throw error;}return {items:[],trolleys:[],examples:[]};}};}
+ `}));
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('team@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await expect(page.locator('#connection-status')).toContainText('confirmed by Firebase');
+ await scan(page,'CHECK-CONNECTION-DRAFT');
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Check connection',exact:true}).click();await expect(page.locator('#connection-check-result')).toContainText('Firebase confirmed 0 equipment records, 0 trolleys');
+ await page.evaluate(()=>window.failConnectionCheck=true);await page.getByRole('button',{name:'Check connection',exact:true}).click();await expect(page.locator('#connection-check-result')).toContainText('Connection check failed');await expect(page.locator('#connection-check-result')).toContainText('captured item has been kept');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CHECK-CONNECTION-DRAFT');
+ await page.evaluate(()=>window.failConnectionCheck=false);await page.getByRole('button',{name:'Check connection',exact:true}).click();await expect(page.locator('#connection-check-result')).toContainText('Firebase confirmed');await expect(page.locator('#connection-status')).toContainText('confirmed by Firebase');
+});

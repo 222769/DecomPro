@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, getDoc, getDocs, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDoc, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
 import {validateTrolleys} from './trolleys.js';
@@ -44,8 +44,17 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const client={
   profile:memberProfile,role:member.role,email:auth?.currentUser?.email||'',teamId,
   versionFor(id){return versions.get(id)||0;},
-  async load(){const [items,examples,cages]=await Promise.all([getDocs(query(equipment,where('deleted','==',false))),getDocs(references),getDocs(trolleys)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages)};},
-  listen(onItems,onExamples,onError,onTrolleys=()=>{}){stops.push(onSnapshot(query(equipment,where('deleted','==',false)),s=>onItems(decode(s)),onError),onSnapshot(references,s=>onExamples(cleanExamples(s.docs.map(d=>d.data()))),onError),onSnapshot(trolleys,s=>onTrolleys(decodeTrolleys(s)),onError));},
+  async load(){const [items,examples,cages]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages)};},
+  listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{}) {
+   const confirmed=new Set();
+   const receive=(key,callback)=>snapshot=>{
+    try{callback(snapshot);if(!snapshot.metadata.fromCache&&!snapshot.metadata.hasPendingWrites)confirmed.add(key);else confirmed.delete(key);onConnection(confirmed.size===3?'connected':'syncing');}
+    catch(error){onError(error);}
+   };
+   stops.push(onSnapshot(query(equipment,where('deleted','==',false)),{includeMetadataChanges:true},receive('items',s=>onItems(decode(s))),onError),
+    onSnapshot(references,{includeMetadataChanges:true},receive('references',s=>onExamples(cleanExamples(s.docs.map(d=>d.data())))),onError),
+    onSnapshot(trolleys,{includeMetadataChanges:true},receive('trolleys',s=>onTrolleys(decodeTrolleys(s))),onError));
+  },
   trolleyVersionFor(id){return trolleyVersions.get(id)||0;},
   async writeTrolley(trolley,expectedVersion=0,{historicalImport=false}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical collection details.');

@@ -4,7 +4,7 @@ Firestore is the shared database; Firebase Authentication supplies account ident
 
 ## Validation status
 
-The five database/rules tests pass against the local Firestore emulator, including trolley creation, department changes, conflict handling, collection locks and immutable history. A live Firebase connection and deployment of these updated rules have not been verified. Run the tests before deploying future rule changes:
+The seven database/rules tests pass against the local Firestore emulator, including trolley creation, department changes, conflict handling, collection locks, immutable history, realtime updates between two independent team clients, and offline loading/reconnection. A live Firebase connection and deployment of these updated rules have not been verified. Run the tests before deploying future rule changes:
 
 ```sh
 npm ci
@@ -74,3 +74,18 @@ Exports and backups contain the inventory data visible to the authenticated team
 New shared equipment writes require a registered open trolley ID and matching trolley name. Existing equipment without an ID remains readable; editing it in the updated app assigns a registered ID. Marking a trolley collected first links matching legacy shared records to its ID so the database can enforce their inventory lock. If several trolleys share that name, collection stops and requires assigning those legacy items to the correct reference. Collected trolley records cannot be reopened or deleted through the app. PDF barcodes encode the permanent reference; QR codes select the ID in the website URL and require the same team workspace on another device.
 
 Local equipment imports create trolley records first, import their equipment, and restore historical collection details only when that trolley's equipment import has no failures. An administrator's import preserves historical initials while audit revisions identify the actual importing account. Failed rows remain in the preserved local workspace.
+
+## Confirm the live team connection
+
+Publish the tested `database/firestore.rules` in the Firebase project's Firestore Rules editor. The current cloud credentials cannot authenticate to `decompro-236e9`, so emulator success does not establish that the live project is configured.
+
+After the Pages deployment succeeds:
+
+1. Open the same DecomPro website on two devices. Sign in through **Database** with each technician's Firebase account and team ID `college-it`.
+2. On each device select **Database → Check connection**. It reads equipment, trolleys and imported references directly from the server and reports counts. Initial connection also requires server-confirmed data; cached data is not reported as a successful connection.
+3. Create a clearly named test trolley on device A, record one test item, and confirm both appear on device B. Attempt the same serial on device B: it should be rejected.
+4. Confirm an edit on device B appears on device A, then print the trolley label and scan its barcode on the work device.
+5. Mark the test trolley collected. Confirm both devices show its company, date, initials and contents under **Collection history**, and reject changes to its equipment. Retain this identifiable test collection until your retention process determines how to handle it.
+6. Disconnect the network. The banner should show **Offline · team changes paused**. Captured progress remains here; saves require reconnection. Restore the network and use **Check connection** to confirm access again.
+
+The connection banner distinguishes local storage, confirmed shared access, cached/reconnecting data and offline operation. Its confirmation time records the most recent server response in this session; it is not a guarantee of uninterrupted connectivity. Browser backups include only the loaded workspace and remain distinct from a complete database backup including revisions and membership.
