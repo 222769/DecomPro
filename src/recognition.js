@@ -1,0 +1,50 @@
+const meaningful = value => typeof value === 'string' && value.trim() && !/^(n\/?a|unknown|none|-|not known)$/i.test(value.trim());
+export const normalizeSerial = value => String(value ?? '').trim().toUpperCase();
+const labelKey = fact => `${fact.model.trim().toLowerCase()}\u0000${fact.manufacturer.trim().toLowerCase()}`;
+const shape = serial => serial.replace(/[A-Z]/g,'A').replace(/[0-9]/g,'9');
+export function cleanExamples(examples) {
+ const unique=new Map();
+ for(const row of examples) {
+  if(!meaningful(row.serial)||!meaningful(row.model)||!meaningful(row.manufacturer))continue;
+  const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:typeof row.source==='string'?row.source:'Confirmed record'};
+  unique.set(`${fact.serial}\u0000${labelKey(fact)}`,fact);
+ }
+ return [...unique.values()];
+}
+export function recognizeSerial(value,examples) {
+ const serial=normalizeSerial(value);if(!meaningful(serial))return null;
+ const facts=cleanExamples(examples),exact=facts.filter(f=>f.serial===serial);
+ const describe=(matches,method,prefix='')=>{
+  const labels=new Set(matches.map(labelKey));
+  if(labels.size!==1)return {method:'conflict',support:matches.length};
+  return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', ')};
+ };
+ if(exact.length)return describe(exact,'exact');
+ // Conservative evidence: same complete shape, literal prefix, at least three
+ // distinct examples and unanimous model/manufacturer. Never guess from brand alone.
+ const compatible=facts.filter(f=>shape(f.serial)===shape(serial));
+ for(let length=Math.min(8,serial.length-3);length>=3;length--) {
+  const prefix=serial.slice(0,length),matches=compatible.filter(f=>f.serial.startsWith(prefix));
+  if(new Set(matches.map(f=>f.serial)).size<3)continue;
+  return describe(matches,'pattern',prefix);
+ }
+ return null;
+}
+export async function examplesFromWorkbook(buffer) {
+ const {default:ExcelJS}=await import('exceljs');
+ const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(buffer);
+ const rows=[];let usableSheets=0;
+ for(const sheet of workbook.worksheets) {
+  let columns=null,start=0;
+  for(let r=1;r<=Math.min(30,sheet.rowCount);r++) {
+   const found={};sheet.getRow(r).eachCell((cell,c)=>{const label=cell.text.trim().toLowerCase().replace(/\s+/g,' ');if(['serial number','model','manufacturer'].includes(label))found[label]=c;});
+   if(found['serial number']&&found.model&&found.manufacturer){columns=found;start=r+1;break;}
+  }
+  if(!columns)continue;usableSheets++;
+  for(let r=start;r<=sheet.rowCount;r++) {
+   const row=sheet.getRow(r);rows.push({serial:row.getCell(columns['serial number']).text,model:row.getCell(columns.model).text,manufacturer:row.getCell(columns.manufacturer).text,source:`Excel · ${sheet.name}`});
+  }
+ }
+ if(!usableSheets)throw Error('No sheet has Serial Number, Model and Manufacturer headings.');
+ return cleanExamples(rows);
+}

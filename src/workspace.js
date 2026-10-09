@@ -1,4 +1,5 @@
 import { fields } from './data';
+import { cleanExamples } from './recognition';
 
 export const defaultFields = [
   ['date', 'Disposal date', 'date'],
@@ -8,7 +9,7 @@ export const defaultFields = [
   ['reason', 'Reason for disposal', 'text'],
   ['trolley', 'Caged trolley', 'text'],
 ];
-export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '' };
+export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: false };
 const text = (value, allowEmpty = false) => typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -51,6 +52,16 @@ export function validateWorkspace(value) {
       draft[key] = value.draft[key];
     }
   }
+  if (value.draft.manufacturer !== undefined) {
+    if (!text(value.draft.manufacturer, true)) throw Error('Invalid recognized manufacturer.');
+    draft.manufacturer = value.draft.manufacturer;
+  }
+  for (const key of ['recognitionNeedsReview','recognitionConfirmed']) {
+    if (value.draft[key] !== undefined) {
+      if (typeof value.draft[key] !== 'boolean') throw Error('Invalid recognition review state.');
+      draft[key] = value.draft[key];
+    }
+  }
   if (fields.slice(0, value.step).some(([key]) => !draft[key])) throw Error('The backup has inconsistent scanning progress.');
   const settings = { ...defaultSettings };
   if (value.settings !== undefined) {
@@ -58,13 +69,16 @@ export function validateWorkspace(value) {
     if (!input || typeof input !== 'object' || !Number.isFinite(input.speechRate) || input.speechRate < .6 || input.speechRate > 1.5 ||
         !Number.isFinite(input.speechVolume) || input.speechVolume < 0 || input.speechVolume > 1 ||
         !Number.isInteger(input.skipWindow) || input.skipWindow < 300 || input.skipWindow > 1500 ||
+        (input.serialFirst !== undefined && typeof input.serialFirst !== 'boolean') ||
         (input.voiceURI !== undefined && !text(input.voiceURI, true)) ||
         typeof input.reuseModel !== 'boolean' || !text(input.batchModel, true) || (input.reuseModel && !input.batchModel.trim())) {
       throw Error('The workspace has invalid scanner or voice settings.');
     }
     for (const key of Object.keys(defaultSettings)) if (input[key] !== undefined) settings[key] = input[key];
   }
-  return { profiles, active: value.active, defaults, items, draft, step: value.step, voice: value.voice, settings };
+  if (value.referenceExamples !== undefined && !Array.isArray(value.referenceExamples)) throw Error('Invalid recognition catalogue.');
+  const referenceExamples = cleanExamples(value.referenceExamples || []);
+  return { referenceExamples, profiles, active: value.active, defaults, items, draft, step: value.step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

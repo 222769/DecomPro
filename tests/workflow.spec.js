@@ -147,3 +147,41 @@ test('browser voice choice persists and falls back when unavailable; late voices
  await page.evaluate(()=>{window.voices=[{name:'Device English',lang:'en-US',voiceURI:'device-en',localService:true}];window.voiceListeners.voiceschanged();});
  await page.getByRole('button',{name:'Test voice'}).click();expect(await page.evaluate(()=>window.prompts.at(-1))).toMatchObject({voiceURI:'device-en',lang:'en-US'});
 });
+
+test('spreadsheet training recognises serials at Model and keeps manufacturer per item',async({page})=>{
+ const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Reference');sheet.addRow(['Serial Number','Model','Manufacturer']);
+ for(const serial of ['REF101','REF102','REF103'])sheet.addRow([serial,'Learned model','Learned maker']);
+ const buffer=await book.xlsx.writeBuffer();
+ await page.goto('/');page.on('dialog',d=>d.accept());
+ await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'training.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(buffer)});
+ await expect(page.locator('.alert[role="status"]')).toContainText('Imported 3 reference examples');
+ await expect(page.locator('#search-count')).toHaveText('Showing 0 of 0 items');
+ await scan(page,'REF101');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('Known serial');
+ await scan(page,'N/A');await scan(page,'N/A');await scan(page,'N/A');await page.getByRole('button',{name:'Save item & start next'}).click();
+ const first=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[0]);expect(first.model).toBe('Learned model');expect(first.manufacturer).toBe('Learned maker');expect(first.serial).toBe('REF101');
+ await scan(page,'REF104');await expect(page.getByRole('status')).toContainText('Pattern suggestion');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ await page.reload();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.manufacturer)).toBe('Learned maker');
+ await scan(page,'N/A');await scan(page,'N/A');await scan(page,'N/A');await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.getByRole('status')).toContainText('tick the confirmation');
+ await page.getByLabel('Manufacturer for this item').fill('Corrected maker');await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[1].manufacturer)).toBe('Corrected maker');
+});
+
+test('serial-first mode captures unknown serials and confirmed records teach exact matches',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'KNOWN-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await scan(page,'KNOWN-001');await expect(page.getByRole('status')).toContainText('Known serial');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item'}).click();
+ await page.getByRole('button',{name:'Open settings'}).click();await page.getByLabel('Start each item with a serial lookup').check();await page.getByRole('button',{name:'Save settings'}).click();
+ await scan(page,'UNSEEN-001');await expect(page.getByRole('status')).toContainText('No reliable match');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await scan(page,'Manual model');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft)).toMatchObject({serial:'UNSEEN-001',model:'Manual model'});
+});
+
+test('database setup keeps local records intact before connection',async({page})=>{
+ await page.goto('/');await defaults(page);await item(page,'LOCAL-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('heading',{name:'Connect your Firebase database'})).toBeVisible();
+ await page.getByLabel('Firebase public web app config (JSON)').fill('{"private_key":"not-an-actual-key"}');await page.getByLabel('Team account email').fill('test@example.invalid');await page.getByLabel('Password',{exact:true}).fill('not-a-real-password');
+ await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#database-error')).toContainText('never a service-account key');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(1);
+ await page.getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('tbody')).toContainText('LOCAL-001');
+});

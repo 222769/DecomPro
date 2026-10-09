@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function membership(team) { return get(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)).data; }
+  function member(team) { return request.auth != null && exists(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)) && membership(team).active == true && membership(team).role in ['admin','technician']; }
+  function admin(team) { return member(team) && membership(team).role == 'admin'; }
+  function itemShape(p) {
+   return p.keys().hasAll(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley'])
+    && p.id is string && p.date is string && p.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+    && p.description is string && p.description.size()>0 && p.model is string && p.model.size()>0
+    && p.manufacturer is string && p.manufacturer.size()>0 && p.source is string && p.source.size()>0
+    && p.serial is string && p.serial.size()>0 && p.barcode is string && p.barcode.size()>0
+    && p.etch is string && p.etch.size()>0 && p.asset is string && p.asset.size()>0
+    && p.reason is string && p.reason.size()>0 && p.technician is string && p.trolley is string && p.trolley.size()>0;
+  }
+  match /teams/{team} {
+   allow read: if member(team);
+   allow write: if false;
+   match /members/{uid} {
+    allow read: if member(team);
+    allow create, update: if admin(team) && request.resource.data.keys().hasOnly(['displayName','code','role','active']) && request.resource.data.displayName is string && request.resource.data.displayName.size()>0 && request.resource.data.code is string && request.resource.data.code.size()>0 && request.resource.data.role in ['admin','technician'] && request.resource.data.active is bool;
+    allow delete: if admin(team) && request.auth.uid != uid;
+   }
+   match /equipment/{item} {
+    function valid(d) {
+     return d.keys().hasOnly(['payload','serialKey','version','createdBy','updatedBy','createdAt','updatedAt','revisionId','deleted','historicalImport'])
+      && itemShape(d.payload) && d.payload.id==item && d.serialKey is string && d.version is int
+      && d.createdBy is string && d.updatedBy==request.auth.uid && d.updatedAt==request.time
+      && d.revisionId is string && d.deleted is bool && d.historicalImport is bool
+      && (d.deleted || d.payload.serial.upper()=='N/A' ? d.serialKey=='' : d.serialKey=='s-'+d.payload.serial.upper().replace('~','~~').replace('/','~s'));
+    }
+    function claim(d) {
+     return d.serialKey=='' || (getAfter(/databases/$(database)/documents/teams/$(team)/serials/$(d.serialKey)).data.itemId==item
+      && getAfter(/databases/$(database)/documents/teams/$(team)/serials/$(d.serialKey)).data.serial==d.payload.serial.upper());
+    }
+    function revision(d) {
+     let r=getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(d.revisionId)).data;
+     return r.actor==request.auth.uid && r.after==d && r.at==request.time;
+    }
+    allow read: if member(team);
+    allow create: if member(team) && valid(request.resource.data) && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && request.resource.data.version==1 && request.resource.data.deleted==false
+     && (!request.resource.data.historicalImport || admin(team))
+     && (request.resource.data.payload.technician==membership(team).code || (admin(team) && request.resource.data.historicalImport))
+     && claim(request.resource.data) && revision(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==null;
+    allow update: if member(team) && !resource.data.deleted && valid(request.resource.data)
+     && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
+     && request.resource.data.historicalImport==resource.data.historicalImport && request.resource.data.payload.technician==resource.data.payload.technician
+     && request.resource.data.version==resource.data.version+1 && claim(request.resource.data) && revision(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
+    allow delete: if false;
+    match /revisions/{revision} {
+     allow read: if member(team);
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','edit','remove'] && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)).data && request.resource.data.after.revisionId==revision;
+     allow update, delete: if false;
+    }
+   }
+   match /serials/{key} {
+    allow read: if member(team);
+    allow create, update: if member(team) && request.resource.data.keys().hasOnly(['itemId','serial']) && request.resource.data.serial is string && request.resource.data.serial==request.resource.data.serial.upper()
+     && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(request.resource.data.itemId)).data.serialKey==key
+     && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(request.resource.data.itemId)).data.payload.serial.upper()==request.resource.data.serial
+     && (!exists(/databases/$(database)/documents/teams/$(team)/serials/$(key)) || resource.data.itemId==request.resource.data.itemId);
+    allow delete: if member(team) && (getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(resource.data.itemId)).data.deleted || getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(resource.data.itemId)).data.serialKey!=key);
+   }
+   match /references/{reference} {
+    allow read: if member(team);
+    allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','source','importedBy','importedAt'])
+     && request.resource.data.serial is string && request.resource.data.serial.size()>0 && request.resource.data.model is string && request.resource.data.model.size()>0
+     && request.resource.data.manufacturer is string && request.resource.data.manufacturer.size()>0 && request.resource.data.source is string
+     && request.resource.data.importedBy==request.auth.uid && request.resource.data.importedAt==request.time;
+    allow delete: if admin(team);
+   }
+  }
+ }
+}

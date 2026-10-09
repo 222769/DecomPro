@@ -35,7 +35,7 @@ Trolley is retained in the app register and JSON backups, because the supplier w
 
 Items, captured field progress, profiles, defaults, and settings persist in `localStorage` in the current browser and origin. Use a single tab for recording. Private browsing, clearing browser data, changing the host/port, or changing devices can remove or separate the records. Use JSON workspace backups for recovery and Excel files for the supplier. If storage fails, the app shows an alert; in-memory records can still be exported. Invalid saved data is not overwritten automatically.
 
-There is no shared database, secure sign-in, or Microsoft Lists connection in this version. No records are uploaded to a backend. A Microsoft Lists integration would require a tenant-approved app, permissions, a destination list, and a mapping that keeps the scanned asset number distinct from the finance asset number.
+Local mode uses browser profiles and does not upload records. An optional Firebase team integration is now prepared, but needs live project setup and security-rule validation; see database/README.md. Microsoft Lists is not connected. A Microsoft Lists integration would require a tenant-approved app, permissions, a destination list, and a mapping that keeps the scanned asset number distinct from the finance asset number.
 
 ## Validation
 
@@ -89,3 +89,21 @@ The register search matches equipment, model, manufacturer, identifiers, trolley
 In Settings, choose **Prompt voice**, then **Test voice** and **Save settings**. DecomPro lists voices exposed by the browser, including Google-labelled voices when available. Automatic prefers British English, then another English voice. Lists can load asynchronously. A saved voice unavailable on a different device falls back to available English speech without losing the saved preference.
 
 This uses browser speech, not Google Cloud Text-to-Speech. No Cloud API key or billing account is needed. Browser-service voices may require Internet access; on-device voices are labelled separately. Availability depends on browser and operating system, so Google voices cannot be guaranteed. A Cloud integration would require a backend to protect credentials; never embed a Cloud API key in the GitHub Pages site. Check current voice-specific pricing at https://cloud.google.com/text-to-speech/pricing before choosing that route.
+
+## Serial recognition and learning
+
+Import your supplier spreadsheet using **Settings → Import reference spreadsheet**. The importer finds Serial Number, Model and Manufacturer headings across worksheets, preserves text serials, and ignores incomplete/N/A examples. Importing teaches the catalogue; it does not add disposed equipment to the active register. The original attachment is not included in the public website or committed to GitHub.
+
+When a known serial is scanned at **Model**, its model and manufacturer are prefilled and that value is stored as Serial; the next prompt is Barcode. Confirmed saved records also teach recognition, and editing their model/manufacturer immediately changes the evidence used by future lookups. Manufacturer is an item-level override, so recognising one item does not change the batch defaults. You can edit the suggested manufacturer directly and return to Model to correct it.
+
+For previously unseen serials, recognition uses the complete letter/digit/punctuation shape and a literal prefix of at least three characters, with at least three distinct examples and unanimous model/manufacturer labels. Re-importing or repeating a serial does not inflate the evidence. Conflicts do not autofill. Pattern guesses can be wrong; they are labelled as suggestions and require a separate checked confirmation against the physical equipment before saving. Saved, reviewed records become further evidence. No remote AI service or paid inference API is used.
+
+Enable **Start each item with a serial lookup** if you want serial-first scanning even for unknown equipment. Unknown serials are retained while you supply Model manually, then the workflow skips the already captured Serial field. With this setting off, an unmatched first scan is treated as Model. Identical-model batch mode explicitly starts at Serial and takes precedence over serial-first lookup.
+
+The supplied workbook produced 321 distinct usable examples. Leave-one-serial-out evaluation yielded 52 correct pattern suggestions, 1 incorrect suggestion, 102 conflicting cases and 166 no-match cases. These are observations on this workbook, not a promised accuracy rate for future equipment. This is why pattern suggestions need physical verification.
+
+## Shared team database
+
+The optional Firebase integration uses Firestore, Firebase Authentication, team membership, serial claims, optimistic record versions and immutable change history. Live configuration and security-rule validation remain required; the app does not create a Firebase project or enable billing. See [database setup and validation](database/README.md).
+
+Local mode remains available. Firebase mode fixes technician identity to the signed-in membership; account administration is through Firebase's trusted console. Records and recognition examples are shared only after connection. The supplier export keeps its original 17 headings.
