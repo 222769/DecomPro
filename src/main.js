@@ -57,7 +57,7 @@ function render() {
 function capture(value) {
  value=value.trim();if(!value||state.step>=fields.length)return;
  if(fields[state.step][0]==='asset') {
-  if(!validAssetNumber(value)){notice='Asset number must be A followed by four digits, for example A1234. Use Skip for N/A.';render();document.querySelector('#scan')?.focus();speak(notice);return;}
+  if(!validAssetNumber(value)){notice='Asset number must be A followed by four digits, for example A1234. If this is not applicable, use Skip to mark it as not applicable.';render();document.querySelector('#scan')?.focus();speak(notice);return;}
   value=normalizeAssetNumber(value);
  }
  if(state.step===0) {
