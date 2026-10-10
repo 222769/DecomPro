@@ -16,7 +16,7 @@ test('bulk selection survives filters, moves together, preserves attribution and
  await page.getByLabel('Select item MOVE-001',{exact:true}).check();
  await page.getByLabel('Search collection register').fill('MOVE-002');await page.getByLabel('Select visible equipment').check();
  await expect(page.locator('#bulk-move-tools')).toContainText('2 selected');
- await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley').selectOption(destination.id);
+ await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley',{exact:true}).selectOption(destination.id);
  await expect(page.locator('#move-preview')).toContainText('2 items to move');await page.getByRole('button',{name:'Confirm move',exact:true}).click();
  await expect(page.locator('.alert[role=status]')).toContainText('2 items moved');
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
@@ -32,14 +32,14 @@ test('bulk selection survives filters, moves together, preserves attribution and
 test('ready sources are rejected and locked destinations are unavailable without changing records',async({page})=>{
  const {destination,locked}=await seed(page);const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
  await page.getByLabel('Select item MOVE-LOCKED',{exact:true}).check();await page.getByRole('button',{name:'Move to trolley'}).click();
- expect(await page.getByLabel('Destination trolley').locator('option').evaluateAll(options=>options.map(o=>o.value))).not.toContain(locked.id);
- await page.getByLabel('Destination trolley').selectOption(destination.id);await expect(page.locator('#bulk-move-error')).toContainText('ready or collected');await expect(page.getByRole('button',{name:'Confirm move'})).toBeDisabled();
+ expect(await page.getByLabel('Destination trolley',{exact:true}).locator('option').evaluateAll(options=>options.map(o=>o.value))).not.toContain(locked.id);
+ await page.getByLabel('Destination trolley',{exact:true}).selectOption(destination.id);await expect(page.locator('#bulk-move-error')).toContainText('ready or collected');await expect(page.getByRole('button',{name:'Confirm move'})).toBeDisabled();
  expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);
 });
 
 test('failed browser storage leaves the entire selected batch and scan intact',async({page})=>{
  const {destination}=await seed(page);const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
- await page.getByLabel('Select item MOVE-001',{exact:true}).check();await page.getByLabel('Select item MOVE-002',{exact:true}).check();await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley').selectOption(destination.id);
+ await page.getByLabel('Select item MOVE-001',{exact:true}).check();await page.getByLabel('Select item MOVE-002',{exact:true}).check();await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley',{exact:true}).selectOption(destination.id);
  await page.evaluate(()=>{Storage.prototype.setItem=()=>{throw new DOMException('Storage full','QuotaExceededError');};});
  await page.getByRole('button',{name:'Confirm move'}).click();await expect(page.locator('#bulk-move-error')).toContainText('Items not moved');
  expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await expect(page.locator('#bulk-move-tools')).toContainText('2 selected');
@@ -53,9 +53,9 @@ test('shared moves show partial confirmation, retry only remaining selections an
  `}));
  await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('ali@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
  await page.getByLabel('Select item MOVE-001',{exact:true}).check();await page.getByLabel('Select item MOVE-002',{exact:true}).check();
- await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley').selectOption(destination.id);await page.getByRole('button',{name:'Confirm move'}).click();
+ await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley',{exact:true}).selectOption(destination.id);await page.getByRole('button',{name:'Confirm move'}).click();
  await expect(page.locator('#bulk-move-error')).toContainText('1 move confirmed');await expect(page.locator('#bulk-move-error')).toContainText('Another technician changed');await expect(page.locator('#bulk-move-tools')).toContainText('1 selected');
- await page.locator('#cancel-bulk-move').click();await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley').selectOption(destination.id);await page.getByRole('button',{name:'Confirm move'}).click();
+ await page.locator('#cancel-bulk-move').click();await page.getByRole('button',{name:'Move to trolley'}).click();await page.getByLabel('Destination trolley',{exact:true}).selectOption(destination.id);await page.getByRole('button',{name:'Confirm move'}).click();
  await expect(page.locator('.alert[role=status]')).toContainText('1 item moved');expect(await page.evaluate(()=>window.moveCalls.map(row=>row.id))).toEqual(['move-0','move-1','move-1']);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('UNFINISHED');
  await page.getByRole('button',{name:'Move history for MOVE-002',exact:true}).click();await expect(page.locator('#move-history-results')).toContainText('Source trolley → Destination trolley');await expect(page.locator('#move-history-results')).toContainText('Ali');

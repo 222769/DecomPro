@@ -203,3 +203,10 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .collection-review-filters select{width:100%;min-width:0}
 .collection-review :is(.readiness-card,.collection-review-item) .secondary{margin-right:12px;margin-bottom:8px}
 @media(max-width:700px){.collection-review-trolleys,.collection-review-filters{grid-template-columns:1fr}.collection-review .section-top{align-items:flex-start;flex-direction:column;gap:12px}.collection-review h2{font-size:22px}.review-trolley-card{padding:16px}}
+
+/* Keep every navigation action reachable on shorter desktop displays. */
+@media(min-width:901px){
+ aside{display:flex;flex-direction:column;overflow-y:auto}
+ aside>*{flex-shrink:0}
+ aside .aside-bottom{position:static;margin-top:auto}
+}

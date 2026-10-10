@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 for (const failure of ['entry download','download','initialization']) {
   test(`startup recovery preserves browser records after ${failure} failure`,async({page})=>{
     await page.addInitScript(()=>{if(!localStorage.getItem('decompro.recovery-test'))localStorage.setItem('decompro.recovery-test','preserved equipment');});
-    const asset=failure==='entry download'?'**/src/bootstrap.js':'**/src/main.js';
+    const asset=failure==='entry download'?'**/src/bootstrap.js*':'**/src/main.js*';
     await page.route(asset,route=>failure!=='initialization'
       ?route.abort()
       :route.fulfill({contentType:'application/javascript',body:'throw new Error("Workspace initialization test failure");'}));

@@ -45,13 +45,13 @@ let readinessSession=0;
 let collectionReviewTrolley="all",collectionReviewKind="all";
 let connectionPhase='syncing',lastConfirmedAt='',historySearch='';
 let sharedLocked = false;
-let saving=false, exporting=false, editingVersion=0;
+let saving=false, exporting=false;
 const localWorkspaceKey='decompro.localWorkspace';
 let librarySearch='',libraryFilter='all',libraryLimit=40;
 let pendingImport=null,importBusy=false,importLimit=60,importFilter='all';
 let summaryExpanded=false,missingDetailsOnly=false;
 const selectedEquipment=new Set();
-let search = '', editingId = null, pendingRestore = null;
+let search = '', pendingRestore = null;
 try { sharedLocked=localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
 if(!sharedLocked) {
  for(const name of new Set([state.defaults.trolley,...state.items.map(item=>item.trolley)]))if(name&&!state.trolleys.some(t=>t.name===name))state.trolleys.push(createTrolley(name));
@@ -211,7 +211,15 @@ function bind() {
   if(button.dataset.moves)openMoveHistory(button.dataset.moves);
   if(button.dataset.edit) openEditor(button.dataset.edit);
   if(button.dataset.delete && writable() && confirm('Remove this item from the collection register?')) {
-   try {const item=state.items.find(i=>i.id===button.dataset.delete);if(state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before changing equipment.');if(sharedClient)await sharedClient.write(item,sharedClient.versionFor(item.id),{deleted:true});state.items=state.items.filter(i=>i.id!==button.dataset.delete);persist();render();}
+   const client=sharedClient;button.disabled=true;
+   try {
+    const item=state.items.find(i=>i.id===button.dataset.delete);if(!item)return;
+    if(state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before changing equipment.');
+    if(client)await client.write(item,client.versionFor(item.id),{deleted:true});
+    if(client!==sharedClient)throw Error('Workspace changed. Reconnect to confirm the removal.');
+    commitTrolleyWorkspace({...state,items:state.items.filter(i=>i.id!==item.id)});
+    notice='Equipment removed from the register.';render();
+   }
    catch(error){notice=`Removal failed. ${error.message}`;render();}
   }
  };
@@ -762,39 +770,46 @@ async function checkSharedConnection() {
 function openEditor(id) {
  if(!writable())return;
  const item=state.items.find(item=>item.id===id);if(!item)return;
- editingVersion=sharedClient?.versionFor(id)||0;
- editingId=id;
+ const client=sharedClient,version=client?.versionFor(id)||0;
+ let busy=false;
  const dialog=document.querySelector('#edit-dialog');
  dialog.innerHTML=`<form id="edit-form"><div class="eyebrow">COLLECTION REGISTER</div><h2>Edit equipment</h2><p>Correct the saved record without rescanning it.</p><div class="edit-grid">${[...defaultFields,...fields.map(([key,label])=>[key,label,'text'])].map(([key,label,type])=>`<div><label for="edit-${key}">${escape(label)}</label><input id="edit-${key}" name="${key}" type="${type}" value="${escape(item[key])}" maxlength="1000" required></div>`).join('')}<div><label for="edit-technician">Recorded technician</label><select id="edit-technician" name="technician" ${sharedClient?'disabled':''}>${[...new Set([item.technician,...state.profiles.map(p=>p.code)])].map(code=>`<option value="${escape(code)}" ${code===item.technician?'selected':''}>${escape(state.profiles.find(p=>p.code===code)?.name||code)} · ${escape(code)}</option>`).join('')}</select></div></div>${item.recognitionNeedsReview?`<label class="review-check"><input type="checkbox" id="edit-recognition-confirmed" ${item.recognitionConfirmed?'checked':''}> I checked the model and manufacturer against this equipment.</label>`:''}<p id="edit-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-edit">Cancel</button><button class="primary">Save changes</button></div></form>`;
  dialog.showModal();
- document.querySelector('#cancel-edit').onclick=()=>dialog.close();
+ dialog.oncancel=e=>{if(busy)e.preventDefault();};
+ document.querySelector('#cancel-edit').onclick=()=>{if(!busy)dialog.close();};
  if(item.recognitionNeedsReview)for(const id of ['edit-model','edit-manufacturer','edit-serial'])document.querySelector('#'+id).oninput=()=>{document.querySelector('#edit-recognition-confirmed').checked=false;};
  document.querySelector('#edit-form').onsubmit=async e=>{
-  e.preventDefault();
-  const values=Object.fromEntries([...new FormData(e.target)].map(([key,value])=>[key,value.trim()]));
-  if(sharedClient)values.technician=item.technician;
-  const error=document.querySelector('#edit-error');
+  e.preventDefault();if(busy)return;
+  const form=e.target,error=dialog.querySelector('#edit-error');
+  if(client!==sharedClient||(sharedLocked&&(!client||navigator.onLine===false))){error.textContent='Reconnect to Firebase and reopen this record before saving.';return;}
+  const values=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,value.trim()]));
+  if(client)values.technician=item.technician;
   if(Object.values(values).some(value=>!value)||!validDate(values.date)){error.textContent='Complete each field, using N/A where needed, and enter a valid date.';return;}
-  if(!validAssetNumber(values.asset)){error.textContent='Asset number must be A followed by four digits, for example A1234, or N/A.';document.querySelector('#edit-asset').focus();return;}
+  if(!validAssetNumber(values.asset)){error.textContent='Asset number must be A followed by four digits, for example A1234, or N/A.';dialog.querySelector('#edit-asset').focus();return;}
   values.asset=normalizeAssetNumber(values.asset);
-  if(duplicateSerial(state.items.filter(item=>item.id!==editingId),values.serial)){error.textContent='This serial number belongs to another item. Check it before saving.';return;}
-  let destination;
-  try{destination=values.trolley===item.trolley?state.trolleys.find(t=>t.id===item.trolleyId)||await resolveTrolley(values.trolley):await resolveTrolley(values.trolley);if(destination.status!=='open'||state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before editing.');}
-  catch(failure){error.textContent=failure.message;return;}
-  const updated={...item,...values,trolleyId:destination.id,...(item.recognitionNeedsReview?{recognitionConfirmed:document.querySelector('#edit-recognition-confirmed').checked}:{})};
-  if(updated.readinessNotes){updated.readinessNotes={...updated.readinessNotes};for(const field of readinessFields)if(values[field]!==item[field])delete updated.readinessNotes[field];}
-  const button=e.target.querySelector('button[type=submit]')||e.target.querySelector('.primary');button.disabled=true;
+  if(duplicateSerial(state.items.filter(row=>row.id!==item.id),values.serial)){error.textContent='This serial number belongs to another item. Check it before saving.';return;}
+  const confirmed=dialog.querySelector('#edit-recognition-confirmed')?.checked;
+  const controls=[...form.querySelectorAll('input,select,button')],disabled=controls.map(control=>control.disabled);
+  busy=true;controls.forEach(control=>control.disabled=true);error.textContent='Saving equipment changes…';
   try {
-   if(sharedClient)await sharedClient.write(updated,editingVersion);
-   const next={...state,items:state.items.map(row=>row.id===editingId?updated:row)};
-   if(!sharedClient) {
+   if(!client&&!sameRecord(state.items.find(row=>row.id===item.id),item))throw Error('This record changed. Reopen it before saving.');
+   const destination=values.trolley===item.trolley?state.trolleys.find(t=>t.id===item.trolleyId)||await resolveTrolley(values.trolley):await resolveTrolley(values.trolley);
+   if(client!==sharedClient)throw Error('Workspace changed. Reopen this record before saving.');
+   if(destination.status!=='open'||state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before editing.');
+   const updated={...item,...values,trolleyId:destination.id,...(item.recognitionNeedsReview?{recognitionConfirmed:confirmed}:{})};
+   if(updated.readinessNotes){updated.readinessNotes={...updated.readinessNotes};for(const field of readinessFields)if(values[field]!==item[field])delete updated.readinessNotes[field];}
+   if(client)await client.write(updated,version);
+   if(client!==sharedClient)throw Error('Workspace changed after saving. Reconnect to retrieve the confirmed record.');
+   const next={...state,items:state.items.map(row=>row.id===item.id?updated:row)};
+   if(!client) {
     if(item.trolleyId!==updated.trolleyId){const row=movePlan(state.items,state.trolleys,[item.id],updated.trolleyId)[0];next.trolleyMoves=[...(state.trolleyMoves||[]),localMoveEvent(row,state.profiles.find(p=>p.code===state.active))];}
     if(storageError)throw Error('Browser storage is unavailable. Back up before changing equipment.');
     localStorage.setItem(key,JSON.stringify(next));
    }
-   state=next;notice='Equipment changes saved.';persist();render();
-  }
-  catch(failure){error.textContent=failure.message;button.disabled=false;}
+   state=next;notice='Equipment changes saved.';if(client)persist();render();
+  }catch(failure){error.textContent=failure.message;}
+  finally{busy=false;controls.forEach((control,index)=>control.disabled=disabled[index]);}
+
  };
 }
 function openDatabase() {
@@ -940,7 +955,7 @@ async function prepareRestore(e) {
   document.querySelector('#confirm-restore').onclick=()=>{
    try {localStorage.setItem(key,JSON.stringify(pendingRestore));}
    catch {document.querySelector('#restore-error').textContent='Browser storage is unavailable or full. Your current workspace has not been replaced.';return;}
-   state=pendingRestore;pendingRestore=null;storageError='';search='';scanning=false;lastEmpty=0;notice='Backup restored. Select Start scanning when you are ready.';render();
+   state=pendingRestore;pendingRestore=null;storageError='';search='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';scanning=false;lastEmpty=0;notice='Backup restored. Select Start scanning when you are ready.';location.hash='inventory';render();
   };
  } catch(error) {pendingRestore=null;notice=`Backup was not restored. ${error instanceof SyntaxError?'The file is not valid JSON.':error.message}`;render();}
 }
