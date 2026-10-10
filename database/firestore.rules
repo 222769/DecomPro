@@ -4,6 +4,21 @@ service cloud.firestore {
   function membership(team) { return get(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)).data; }
   function member(team) { return request.auth != null && exists(/databases/$(database)/documents/teams/$(team)/members/$(request.auth.uid)) && membership(team).active == true && membership(team).role in ['admin','technician']; }
   function admin(team) { return member(team) && membership(team).role == 'admin'; }
+  function handoverPeer(team,p,index) {
+   let other=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.handover.trolleyIds[index])).data.payload;
+   return other.status=='collected' && other.handover==p.handover && other.company==p.company && other.collectedAt==p.collectedAt && other.collectedBy==p.collectedBy;
+  }
+  function handoverValid(team,p) {
+   return !('handover' in p) || (p.status=='collected' && p.handover is map && p.handover.keys().hasOnly(['id','trolleyIds'])
+    && p.handover.id is string && p.handover.id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    && p.handover.trolleyIds is list && p.handover.trolleyIds.size()>0 && p.handover.trolleyIds.size()<=6
+    && p.handover.id==p.handover.trolleyIds[0]
+    && p.id in p.handover.trolleyIds && p.handover.trolleyIds.toSet().size()==p.handover.trolleyIds.size()
+    && (p.id!=p.handover.id ? handoverPeer(team,p,0) :
+     (p.handover.trolleyIds.size()<2 || handoverPeer(team,p,1))
+     && (p.handover.trolleyIds.size()<3 || handoverPeer(team,p,2)) && (p.handover.trolleyIds.size()<4 || handoverPeer(team,p,3))
+     && (p.handover.trolleyIds.size()<5 || handoverPeer(team,p,4)) && (p.handover.trolleyIds.size()<6 || handoverPeer(team,p,5))));
+  }
   function openTrolley(team,p) { return ('trolleyId' in p) && (p.trolleyId is string && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open' && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.name==p.trolley); }
   function inventoryTouch(team,p) {
    let before=get(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
@@ -78,7 +93,8 @@ service cloud.firestore {
     function valid(d) {
      let p=d.payload;
      return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
-      && p.keys().hasOnly(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company','readyAt','readyBy'])
+      && p.keys().hasOnly(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company','readyAt','readyBy','handover'])
+      && handoverValid(team,p)
       && p.id==id && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
       && p.reference=='TSU-'+id.upper().replace('-','')
       && p.name is string && p.name.size()>0 && p.name.size()<=1000
@@ -103,7 +119,7 @@ service cloud.firestore {
      && (request.resource.data.payload.status=='collected' ? resource.data.payload.status=='ready' || admin(team) : true)
      && (resource.data.payload.status=='ready' ?
       (request.resource.data.payload.status=='open' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','readyAt','readyBy'])) ||
-      (request.resource.data.payload.status=='collected' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','collectedAt','collectedBy','company'])) : true)
+      (request.resource.data.payload.status=='collected' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','collectedAt','collectedBy','company','handover'])) : true)
      && request.resource.data.version==resource.data.version+1 && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
      && request.resource.data.payload.id==resource.data.payload.id && request.resource.data.payload.reference==resource.data.payload.reference && request.resource.data.payload.name==resource.data.payload.name && request.resource.data.payload.createdAt==resource.data.payload.createdAt
      && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;

@@ -1,4 +1,5 @@
 import {createId} from './ids.js';
+import {validateHandoverLink} from './handover-data.js';
 
 export const defaultDepartment='Helpdesk (Calderdale College)';
 export function createTrolley(name,department=defaultDepartment) {
@@ -16,7 +17,9 @@ export function validateTrolleys(records=[]) {
   const readyAt=row.readyAt??'',readyBy=row.readyBy??'';
   if(typeof readyAt!=='string'||typeof readyBy!=='string'||(row.status==='ready'&&(!Number.isFinite(Date.parse(readyAt))||!readyBy.trim()))||(row.status==='open'&&(readyAt||readyBy))||Boolean(readyAt)!==Boolean(readyBy)||(readyAt&&!Number.isFinite(Date.parse(readyAt))))throw Error('Invalid trolley readiness details.');
   ids.add(row.id);references.add(row.reference);
-  return {...Object.fromEntries(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company'].map(field=>[field,row[field]])),...(row.readyAt!==undefined||row.readyBy!==undefined||row.status==='ready'?{readyAt,readyBy}:{})};
+  const handover=row.handover===undefined?null:validateHandoverLink(row.handover);
+  if(handover&&(row.status!=='collected'||!handover.trolleyIds.includes(row.id)))throw Error('Invalid trolley handover assignment.');
+  return {...Object.fromEntries(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company'].map(field=>[field,row[field]])),...(row.readyAt!==undefined||row.readyBy!==undefined||row.status==='ready'?{readyAt,readyBy}:{}),...(handover?{handover}:{})};
  });
 }
 export function trolleyForItem(item,trolley) {

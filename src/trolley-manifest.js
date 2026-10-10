@@ -8,14 +8,16 @@ const text=value=>String(value??'').replace(/\s+/g,' ').trim();
 const dateTime=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Europe/London',dateStyle:'medium',timeStyle:'short'});
 
 // This is a snapshot of the supplied register, not a write or a collection action.
-export async function trolleyManifest(trolley,register,url,{cached=false,printedAt=new Date().toISOString()}={}) {
+export async function trolleyManifest(trolley,register,url,{cached=false,printedAt=new Date().toISOString(),document:existingPdf=null,handover=null}={}) {
  const items=register.filter(item=>trolleyForItem(item,trolley)),review=checkReadiness(trolley,register);
- const pdf=new jsPDF({unit:'mm',format:'a4'}),left=16,right=194,bottom=273;
+ const pdf=existingPdf||new jsPDF({unit:'mm',format:'a4'}),left=16,right=194,bottom=273;
+ if(existingPdf)pdf.addPage();
+ const firstPage=pdf.getNumberOfPages();
  const columns=[['#',8],['Serial number',42],['Asset',20],['Manufacturer',31],['Model',51],['Disposed by',26]];
  const barcode=document.createElement('canvas');
  JsBarcode(barcode,trolley.reference,{format:'CODE128',width:3,height:70,displayValue:false,margin:8});
  const barcodeImage=barcode.toDataURL('image/png'),qr=await QRCode.toDataURL(url,{width:300,margin:2,errorCorrectionLevel:'M'});
- pdf.setProperties({title:`Trolley inventory manifest - ${trolley.reference}`,author:'TSU - '+text(trolley.department),subject:'IT equipment collection handover'});
+ if(!existingPdf)pdf.setProperties({title:`Trolley inventory manifest - ${trolley.reference}`,author:'TSU - '+text(trolley.department),subject:'IT equipment collection handover'});
  let y;
  function line(value,size=9,bold=false,width=right-left) {
   pdf.setFont('helvetica',bold?'bold':'normal');pdf.setFontSize(size);
@@ -33,8 +35,8 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
   y=77;
   if(first) {
    line(trolley.name,11,true);
-   line('Collection company: '+(trolley.status==='collected'?trolley.company:'________________________________________'));
-   line('Collection date: '+(trolley.status==='collected'?dateTime(trolley.collectedAt)+' (UK time)':'________________________________________'));
+   line('Collection company: '+(trolley.status==='collected'?trolley.company:handover?.company||'________________________________________'));
+   line('Collection date: '+(trolley.status==='collected'?dateTime(trolley.collectedAt)+' (UK time)':handover?dateTime(handover.collectedAt)+' (UK time; planned)':'________________________________________'));
    if(trolley.status==='collected')line('Collection recorded by: '+trolley.collectedBy);
    if(trolley.readyAt)line('Readiness checked: '+dateTime(trolley.readyAt)+' (UK time) by '+trolley.readyBy);
    if(trolley.status!=='collected'&&review.unresolved.length)line(`READINESS ISSUES: ${review.unresolved.length} unresolved - review before handover.`,9,true);
@@ -81,11 +83,12 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
  line('Check the equipment and item count before signing. * indicates a continued row.',8);
  for(const label of ['Released by (name / signature)','Received by (name / signature)','Handover date / time']){y+=8;line(label+': __________________________________________',9);}
  const pages=pdf.getNumberOfPages();
- for(let page=1;page<=pages;page++) {
+ for(let page=firstPage;page<=pages;page++) {
   pdf.setPage(page);pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(80,92,110);
-  pdf.text(trolley.reference,left,282);pdf.text(`Page ${page} of ${pages}`,right,282,{align:'right'});
+  pdf.text(trolley.reference,left,282);pdf.text(`Page ${page-firstPage+1} of ${pages-firstPage+1}`,right,282,{align:'right'});
   pdf.text(`Printed ${dateTime(printedAt)} (UK time) | ${cached?'Cached snapshot':'Register snapshot'} at printing`,left,287);
-  pdf.text('QR viewers must sign in to the same team workspace. Local records stay in their browser.',left,292);
+  pdf.text(handover?`Handover ${handover.reference} | QR viewers must sign in to the same team.`:'QR viewers must sign in to the same team workspace. Local records stay in their browser.',left,292);
  }
- return pdf.output('arraybuffer');
+ // A combined handover serializes once after all trolley sections are added.
+ return existingPdf?pdf:pdf.output('arraybuffer');
 }

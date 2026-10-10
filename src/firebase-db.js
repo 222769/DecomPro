@@ -7,6 +7,7 @@ import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
 import {validateTrolleys} from './trolleys.js';
 import {validateCorrections,correctionKey} from './reference-library.js';
+import {validateHandoverLink} from './handover-data.js';
 
 export function validateFirebaseConfig(value) {
  if(!value||typeof value!=='object'||'private_key' in value||'client_email' in value)throw Error('Use the public Firebase web app configuration, never a service-account key.');
@@ -89,6 +90,24 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    correctionVersions.set(payload.serial,expectedVersion+1);
   },
   trolleyVersionFor(id){return trolleyVersions.get(id)||0;},
+  async collectHandover(pack,expectedVersions) {
+   const link=validateHandoverLink({id:pack.id,trolleyIds:pack.trolleyIds});
+   const records=await client.load();
+   for(const id of link.trolleyIds){const trolley=records.trolleys.find(t=>t.id===id);if(!trolley||trolley.status!=='ready'||!checkReadiness(trolley,records.items,{shared:true}).canReady||client.trolleyVersionFor(id)!==expectedVersions[id])throw Error('A selected trolley changed or is not ready. Prepare a fresh handover pack before collecting.');}
+   const payloads=[];
+   await runTransaction(db,async tx=>{
+    payloads.length=0;
+    const snapshots=[];for(const id of link.trolleyIds)snapshots.push(await tx.get(doc(trolleys,id)));
+    for(const snapshot of snapshots){
+     if(!snapshot.exists()||snapshot.data().version!==expectedVersions[snapshot.id]||snapshot.data().payload.status!=='ready')throw Error('A trolley changed after the pack was prepared. No trolleys were collected. Refresh and prepare another pack.');
+     const before=snapshot.data(),payload=validateTrolleys([{...before.payload,status:'collected',company:pack.company,collectedAt:pack.collectedAt,collectedBy:member.code,handover:link}])[0],revisionId=createId();
+     const after={...before,payload,version:before.version+1,updatedBy:uid,updatedAt:serverTimestamp(),revisionId};
+     tx.set(snapshot.ref,after);tx.set(doc(snapshot.ref,'revisions',revisionId),{actor:uid,before,after,action:'collect',at:serverTimestamp()});payloads.push(payload);
+    }
+   });
+   for(const trolley of payloads)trolleyVersions.set(trolley.id,expectedVersions[trolley.id]+1);
+   return payloads;
+  },
   async readinessSnapshot(id) {
    const row=doc(trolleys,id),before=await getDocFromServer(row);
    if(!before.exists())throw Error('This trolley is no longer available.');

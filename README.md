@@ -75,6 +75,14 @@ Local moves save the whole selected batch and its history together in browser st
 
 Use **Moves** on an equipment row to see its trolley changes and who made them. Shared history is retrieved from server revisions; local history starts with this update, also records trolley changes through Edit, and is included in JSON backups. It cannot reconstruct older local moves that were never recorded. Moves preserve the original disposal initials and the current scan draft. Equipment selection does not change Excel export scope.
 
+### Collection handover packs
+
+Open **Trolleys → Prepare handover pack** or use the same action in **Collection history**. Enter the company and collection time, select up to six ready trolleys and download the combined PDF. It includes a unique `COL-` reference, an overview of trolley/item totals, every selected inventory, recorded missing-detail exceptions, barcode/QR links and spaces for handover signatures. Printing leaves trolley statuses unchanged. Editing the company, time or trolley selection requires a new PDF before confirmation.
+
+After checking the pack and the equipment leaving the college, tick the confirmation and choose **Mark selected collected**. Local collection saves the whole group together in browser storage. Shared collection commits all selected trolleys and their immutable audit revisions in one Firestore transaction, with readiness and version checks. A concurrent reopen or inventory change rejects the collection group. If a network response cannot confirm success, check the latest database state and collection history before retrying. This feature uses Firestore and does not require Blaze or Cloud Functions.
+
+Collection history retains the linked trolley group, company, collection time, initials and inventories. Search by `COL-` reference or company and download the retained PDF again. Handwritten signatures remain on the printed copy; the app regenerates PDFs from retained records. Cached shared reprints are marked as snapshots. JSON backups preserve handover links. Collected equipment stays locked, and the current scan is preserved.
+
 ### Trolley setup and labels
 
 Open **Trolleys** in the navigation. Create a trolley with a descriptive name and owning department. Each trolley receives a permanent `TSU-` reference generated from a UUID; reused names do not reuse references. Existing local trolley names migrate into this register automatically. The default ownership is **Property of TSU - Helpdesk (Calderdale College)**.

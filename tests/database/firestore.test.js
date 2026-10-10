@@ -5,6 +5,7 @@ import {initializeTestEnvironment,assertFails} from '@firebase/rules-unit-testin
 import {doc,setDoc,getDoc,getDocs,collection,deleteDoc,writeBatch,serverTimestamp} from 'firebase/firestore';
 import {createTeamStore} from '../../src/firebase-db.js';
 import {createTrolley} from '../../src/trolleys.js';
+import {createHandover,handoverGroups} from '../../src/handover-data.js';
 const initialTrolley=createTrolley('Trolley 01');
 let env;
 const member={displayName:'Test Technician',code:'TT',role:'technician',active:true};
@@ -36,6 +37,32 @@ test('conflicting edits are rejected and removal retains audit history',async()=
  await first.write({...sample(),model:'Corrected model'},2,{deleted:true});
  assert.equal((await first.load()).items.length,0);assert.equal((await getDocs(collection(db,'teams/college-it/equipment/equipment-1/revisions'))).size,3);
  await assertFails(deleteDoc(doc(db,'teams/college-it/equipment/equipment-1')));
+});
+async function readyGroup(client,count) {
+ const group=[initialTrolley,...Array.from({length:count-1},(_,i)=>createTrolley(`Pack trolley ${i+2}`))];
+ for(const [index,trolley] of group.entries()){
+  if(index)await client.writeTrolley(trolley);
+  await client.write({...sample(`pack-item-${index}`,`PACK-${index}`),trolleyId:trolley.id,trolley:trolley.name});
+  await client.writeTrolley({...trolley,status:'ready',readyAt:new Date().toISOString(),readyBy:'TT'},client.trolleyVersionFor(trolley.id));
+ }
+ return group;
+}
+test('six-trolley handover collects atomically, retains linked history and prevents later changes',async()=>{
+ const client=createTeamStore(context('tech'),'tech','college-it',member),group=await readyGroup(client,6),ids=group.map(t=>t.id),pack=createHandover(ids,'Supplier',new Date().toISOString()),versions=Object.fromEntries(ids.map(id=>[id,client.trolleyVersionFor(id)]));
+ const updated=await client.collectHandover(pack,versions);assert.equal(updated.length,6);
+ const records=await client.load(),saved=handoverGroups(records.trolleys);assert.equal(saved.length,1);assert.equal(saved[0].complete,true);assert.equal(saved[0].collectedBy,'TT');
+ for(const trolley of updated){assert.equal(trolley.company,'Supplier');assert.equal(trolley.status,'collected');const audits=await getDocs(collection(context('tech'),`teams/college-it/trolleys/${trolley.id}/revisions`));assert.equal(audits.docs.filter(d=>d.data().action==='collect').length,1);}
+ await assert.rejects(client.collectHandover(pack,versions),/not ready/);
+ await assert.rejects(client.write({...records.items[0],model:'Changed'},client.versionFor(records.items[0].id)),/collected/);
+ await assertFails(getDocs(collection(context('outsider'),'teams/college-it/trolleys')));
+});
+test('handover rejects a concurrent reopen without collecting any other trolley; rules reject incomplete linked groups',async()=>{
+ const client=createTeamStore(context('tech'),'tech','college-it',member),group=await readyGroup(client,2),ids=group.map(t=>t.id),pack=createHandover(ids,'Supplier',new Date().toISOString()),versions=Object.fromEntries(ids.map(id=>[id,client.trolleyVersionFor(id)]));
+ const db=context('tech'),row=doc(db,`teams/college-it/trolleys/${ids[0]}`),before=(await getDoc(row)).data(),revisionId='incomplete-pack',after={...before,payload:{...before.payload,status:'collected',collectedAt:pack.collectedAt,collectedBy:'TT',company:pack.company,handover:{id:pack.id,trolleyIds:ids}},version:before.version+1,updatedAt:serverTimestamp(),updatedBy:'tech',revisionId};
+ const forged=writeBatch(db);forged.set(row,after);forged.set(doc(row,'revisions',revisionId),{actor:'tech',before,after,action:'collect',at:serverTimestamp()});await assertFails(forged.commit());
+ const load=client.load.bind(client);client.load=async()=>{const records=await load();const other=createTeamStore(context('admin'),'admin','college-it',admin);await other.writeTrolley({...records.trolleys.find(t=>t.id===ids[1]),status:'open',readyAt:'',readyBy:''},versions[ids[1]]);return records;};
+ await assert.rejects(client.collectHandover(pack,versions),/changed after/);
+ const fresh=await load();assert.equal(fresh.trolleys.find(t=>t.id===ids[0]).status,'ready');assert.equal(fresh.trolleys.find(t=>t.id===ids[1]).status,'open');assert.equal(handoverGroups(fresh.trolleys).length,0);
 });
 test('trolley moves preserve disposal attribution, expose immutable actor history and reject stale or locked inventories',async()=>{
  const first=createTeamStore(context('tech'),'tech','college-it',member),second=createTeamStore(context('admin'),'admin','college-it',admin);
