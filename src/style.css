@@ -138,3 +138,4 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 @media(max-width:700px){.connection-status{align-items:flex-start;flex-direction:column;padding:14px;}.history-card dl{grid-template-columns:repeat(2,minmax(0,1fr));}.history-card{padding:16px;}}
 @media(max-width:900px){aside{flex-wrap:wrap;justify-content:flex-start;gap:6px;}aside .brand{margin-right:auto;}}
 @media(max-width:700px){aside{padding:14px 16px;}aside .brand{width:100%;margin:0 0 6px;}}
+.model-candidates { text-align:left;margin:20px 0;padding:16px;border:1px solid #476479;border-radius:12px;background:#203852;color:#d8e5f4; }.model-candidates strong { color:#fff;font-size:13px; }.model-candidates p { font-size:11px;line-height:1.7;margin:8px 0;color:#c4d8ef; }.model-candidates label { display:block;margin:12px 0 6px;font-size:11px; }.model-candidates select { width:100%;margin-bottom:12px; }.model-candidates .secondary { background:#eaf0ff;color:#203852; }

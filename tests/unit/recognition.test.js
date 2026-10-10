@@ -34,3 +34,11 @@ test('spreadsheet importer maps headers across sheets and preserves string ident
  const second=workbook.addWorksheet('Notes');second.addRow(['Notes']);
  const rows=await examplesFromWorkbook(await workbook.xlsx.writeBuffer());assert.equal(rows.length,1);assert.equal(rows[0].serial,'000123');assert.equal(rows[0].model,'Example model');
 });
+
+test('specific consistent prefixes can resolve a mixed four-character family',()=>{
+ const family=[{serial:'ABCDPRO1001',model:'Pro display',manufacturer:'Example'},{serial:'ABCDPRO1XYZ',model:'Pro display',manufacturer:'Example'},{serial:'ABCDPRO1777',model:'Pro display',manufacturer:'Example'},{serial:'ABCDLITE001',model:'Lite display',manufacturer:'Example'},{serial:'ABCDLITEABC',model:'Lite display',manufacturer:'Example'}];
+ const result=recognizeSerial('ABCDPRO1999',family);assert.equal(result.method,'pattern');assert.equal(result.model,'Pro display');assert.equal(result.support,3);assert.equal(result.prefix,'ABCDPRO1');
+ const conflict=recognizeSerial('ABCDNEW9999',family);assert.equal(conflict.method,'conflict');assert.equal(conflict.prefix,'ABCD');assert.equal(conflict.candidates.length,2);
+ assert.equal(recognizeSerial('ABCDPRO1999',[...family,{serial:'ABCDPRO1666',model:'Different Pro',manufacturer:'Example'}]).method,'conflict');
+ assert.equal(recognizeSerial('ABCDPRO1999',[family[0],family[0],family[3]]).method,'conflict');
+});

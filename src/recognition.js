@@ -16,16 +16,21 @@ export function recognizeSerial(value,examples) {
  const facts=cleanExamples(examples),exact=facts.filter(f=>f.serial===serial);
  const describe=(matches,method,prefix='')=>{
   const labels=new Set(matches.map(labelKey));
-  if(labels.size!==1)return {method:'conflict',support:matches.length};
+  if(labels.size!==1){const grouped=new Map();for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set()};candidate.serials.add(fact.serial);grouped.set(key,candidate);}return {method:'conflict',support:new Set(matches.map(f=>f.serial)).size,prefix,candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};}
   return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', ')};
  };
  if(exact.length)return describe(exact,'exact');
- // Manufacturer serial suffixes often mix letters/digits differently. A
- // unanimous four-character family can still suggest a model across shapes.
- if(serial.length>4) {
-  const prefix=serial.slice(0,4),matches=facts.filter(f=>f.serial.length>4&&f.serial.startsWith(prefix));
-  if(new Set(matches.map(f=>f.serial)).size>=2)return describe(matches,'pattern',prefix);
+ // Try the most specific family first. A mixed broad prefix must not hide
+ // a narrower unanimous family. Leave at least three variable suffix characters.
+ let conflict=null;
+ for(let length=serial.length>4?Math.max(4,Math.min(12,serial.length-3)):0;length>=4;length--) {
+  const prefix=serial.slice(0,length),matches=facts.filter(f=>f.serial.length>=length+(length===4?1:3)&&f.serial.startsWith(prefix));
+  if(new Set(matches.map(f=>f.serial)).size<(length>4?3:2))continue;
+  const result=describe(matches,'pattern',prefix);
+  if(result.method!=='conflict')return result;
+  conflict ||= result;
  }
+ if(conflict)return conflict;
  // Conservative evidence: same complete shape, literal prefix, at least three
  // distinct examples and unanimous model/manufacturer. Never guess from brand alone.
  const compatible=facts.filter(f=>shape(f.serial)===shape(serial));

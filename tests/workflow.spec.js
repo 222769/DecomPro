@@ -48,7 +48,7 @@ test('built-in Summer reference recognises TG22681204 without import and keeps a
  await page.getByRole('button',{name:'Previous field'}).click();await page.getByRole('button',{name:'Previous field'}).click();
  await scan(page,'TG22681024');
  await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
- await expect(page.getByRole('status')).toContainText('Reference data disagrees');
+ await expect(page.getByRole('status')).toContainText('Several reference models match');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
 });
 
@@ -403,4 +403,15 @@ test('connection check reports server results and failures while retaining the s
  await page.evaluate(()=>window.failConnectionCheck=true);await page.getByRole('button',{name:'Check connection',exact:true}).click();await expect(page.locator('#connection-check-result')).toContainText('Connection check failed');await expect(page.locator('#connection-check-result')).toContainText('captured item has been kept');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CHECK-CONNECTION-DRAFT');
  await page.evaluate(()=>window.failConnectionCheck=false);await page.getByRole('button',{name:'Check connection',exact:true}).click();await expect(page.locator('#connection-check-result')).toContainText('Firebase confirmed');await expect(page.locator('#connection-status')).toContainText('confirmed by Firebase');
+});
+
+test('a new serial uses the specific prefix family and conflicting families offer reviewed choices',async({page})=>{
+ const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('References');sheet.addRow(['Serial Number','Model','Manufacturer']);
+ for(const serial of ['ZZQQPRO1001','ZZQQPRO1XYZ','ZZQQPRO1777'])sheet.addRow([serial,'Pro display','Example maker']);for(const serial of ['ZZQQLITE001','ZZQQLITEABC'])sheet.addRow([serial,'Lite display','Example maker']);
+ await page.goto('/');page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'families.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await expect(page.locator('.alert[role="status"]')).toContainText('Imported 5 reference examples');
+ await scan(page,'ZZQQPRO1999');await expect(page.getByRole('status')).toContainText('Pattern suggestion');await expect(page.getByRole('status')).toContainText('Pro display');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Clear current item'}).click();await scan(page,'ZZQQNEW9999');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('.model-candidates')).toContainText('Prefix ZZQQ');
+ const option=page.locator('#model-candidate option').filter({hasText:'Lite display'});await page.locator('#model-candidate').selectOption(await option.getAttribute('value'));await page.getByRole('button',{name:'Use selected model'}).click();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');
+ for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('Lite display');
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[0]);expect(saved.serial).toBe('ZZQQNEW9999');expect(saved.manufacturer).toBe('Example maker');await scan(page,'ZZQQNEW9999');await expect(page.getByRole('status')).toContainText('Known serial');
 });
