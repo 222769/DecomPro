@@ -172,6 +172,18 @@ test('two personal technician accounts retrieve and update the same register, re
  const owner=createTeamStore(context('admin'),'admin','college-it',admin);
  assert.equal((await owner.listMembers()).find(row=>row.uid==='jawad').code,'JA');
  await assert.rejects(first.listMembers(),/administrator/);
- await setDoc(doc(context('admin'),'teams/college-it/members/jawad'),{...jawad,active:false});
+ await assertFails(setDoc(doc(context('admin'),'teams/college-it/members/jawad'),{...jawad,active:false}));
+ await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/members/jawad'),{...jawad,active:false}));
  await assert.rejects(createTeamStore(context('jawad'),'jawad','college-it',jawad).load(),/permission/i);
+});
+
+test('browser clients cannot bypass account administration or rewrite its audit, even with an admin membership',async()=>{
+ const db=context('admin');
+ await assertFails(setDoc(doc(db,'teams/college-it/members/new-person'),{displayName:'New person',code:'NP',role:'admin',active:true}));
+ await assertFails(setDoc(doc(db,'teams/college-it/members/admin'),{...admin,role:'technician'}));
+ await assertFails(deleteDoc(doc(db,'teams/college-it/members/tech')));
+ await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/memberAudit/test-event'),{actor:'admin',uid:'tech',action:'update',at:new Date()}));
+ assert.equal((await getDocs(collection(db,'teams/college-it/memberAudit'))).size,1);
+ await assertFails(getDocs(collection(context('tech'),'teams/college-it/memberAudit')));
+ await assertFails(deleteDoc(doc(db,'teams/college-it/memberAudit/test-event')));
 });

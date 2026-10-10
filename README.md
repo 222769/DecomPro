@@ -141,3 +141,7 @@ There is no universal public serial-to-model database connected to DecomPro. Man
 ## Team access and recovery
 
 Open **Database → Team access checklist** as an administrator to see current memberships and the personal-account setup steps. Each technician uses their own Firebase login; local profile selection cannot change shared attribution. **Import local equipment** previews the preserved local register, explains duplicates and failed rows, and supports safe retries. The import preserves historical initials and restores collected trolley history only when the whole inventory matches. Spreadsheet references and reviewed corrections are transferred separately through Settings. Save messages distinguish browser storage from Firebase confirmation; pending shared scans are retained until the save succeeds. JSON backup recovery is tested in a separate browser context.
+
+## Administrator account management
+
+Signed-in administrators see **Admin** in the navigation. They can create a technician account or link an existing Firebase account, edit names/roles/team access and generate private password setup/reset links. Initials stay fixed to preserve disposal attribution. The backend rechecks current permissions, rejects stale edits, retains audit history and prevents self lockout. Account administration requires deployment of the Cloud Function described in [functions/README.md](functions/README.md); Pages publication alone does not enable it.

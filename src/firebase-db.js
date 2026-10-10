@@ -1,6 +1,7 @@
 import {checkReadiness,validateReadinessNotes} from './readiness.js';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import {getFunctions,httpsCallable} from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
@@ -45,7 +46,11 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
-  profile:memberProfile,role:member.role,projectId:db.app.options.projectId,email:auth?.currentUser?.email||'',teamId,
+  uid,profile:memberProfile,role:member.role,projectId:db.app.options.projectId,email:auth?.currentUser?.email||'',teamId,
+  async adminAction(data) {
+   if(member.role!=='admin')throw Error('Only an active team administrator can manage users.');
+   return (await httpsCallable(getFunctions(db.app,'europe-west2'),'decomproAdmin')({...data,teamId})).data;
+  },
   async listMembers() {
    if(member.role!=='admin')throw Error('Only a team administrator can open the account checklist.');
    const snapshot=await getDocsFromServer(collection(root,'members'));

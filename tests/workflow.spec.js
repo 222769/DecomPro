@@ -645,7 +645,7 @@ test('a shared save shows pending confirmation and retains the scan until Fireba
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CONFIRMEDTEAM001');
  await page.evaluate(()=>window.confirmTeamSave());await expect(page.getByRole('status').filter({hasText:'Item saved to Firebase'})).toBeVisible();
  await expect(page.locator('tbody')).toContainText('CONFIRMEDTEAM001');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[0].technician)).toBe('JA');
- await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('button',{name:'Team access checklist'})).toHaveCount(0);
+ await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('button',{name:'Team access checklist'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Administration',exact:true})).toHaveCount(0);
 });
 
 test('an administrator can check active memberships and find the personal account setup steps',async({page})=>{
@@ -690,4 +690,31 @@ for(const extra of [false,true])test(`historical collection import retries witho
  expect(await page.evaluate(()=>window.historyWrites)).toBe(1);expect(await page.evaluate(()=>window.historyAttempts)).toBe(extra?1:2);
  expect(await page.evaluate(()=>window.historyFixture.trolleys[0].status)).toBe(extra?'open':'collected');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.localWorkspace')))).toEqual(JSON.parse(original));
+});
+
+test('admin section creates personal accounts, edits access, generates private links and keeps links out of browser storage',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){window.adminCalls=[];window.adminUsers=[{uid:'owner',displayName:'Administrator',email:'admin@example.invalid',code:'AD',role:'admin',active:true},{uid:'jawad',displayName:'Jawad',email:'jawad@example.invalid',code:'JA',role:'technician',active:true}];window.adminRevision=0;return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async adminAction(data){window.adminCalls.push(data);if(data.action==='list'){if(window.adminUnavailable){const error=Error('Function unavailable');error.code='functions/unavailable';throw error;}return {users:structuredClone(window.adminUsers),revision:window.adminRevision};}if(data.revision!==window.adminRevision)throw Error('Another administrator changed the accounts. Refresh users.');window.adminRevision++;if(data.action==='create'){window.adminUsers.push({...data,uid:'new-user'});return {uid:'new-user',message:'Account created.',setupLink:'https://example.invalid/private-setup-token'};}if(data.action==='update'){const user=window.adminUsers.find(user=>user.uid===data.uid);Object.assign(user,data);return {message:'Team access updated.'};}return {message:'Password reset link ready.',setupLink:'https://example.invalid/private-reset-token'};}};}
+ `}));
+ await page.goto('/');await expect(page.getByRole('button',{name:'Administration',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
+ await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-users')).toContainText('Jawad');
+ await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Technician name',{exact:true}).fill('New technician');await page.getByLabel('Account email',{exact:true}).fill('new@example.invalid');await page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true}).fill('NT');await page.getByRole('button',{name:'Create user account',exact:true}).click();
+ await expect(page.getByLabel('Setup or reset link')).toHaveValue('https://example.invalid/private-setup-token');await expect(page.locator('#admin-users')).toContainText('new@example.invalid');
+ await page.getByRole('button',{name:'Edit Jawad',exact:true}).click();await expect(page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true})).toHaveAttribute('readonly','');await page.getByLabel('Active team access',{exact:true}).uncheck();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Save user changes',exact:true}).click();
+ await expect(page.locator('.admin-user').filter({hasText:'Jawad'})).toContainText('Inactive access');
+ await page.locator('.admin-user').filter({hasText:'Jawad'}).getByRole('button',{name:'Password reset link',exact:true}).click();await expect(page.getByLabel('Setup or reset link')).toHaveValue('https://example.invalid/private-reset-token');
+ expect(await page.evaluate(()=>Object.keys(localStorage).map(key=>localStorage.getItem(key)).join('').includes('private-reset-token'))).toBe(false);
+ await page.locator('#admin-close').click();await expect(page.locator('#admin-dialog')).toBeEmpty();
+ await page.evaluate(()=>window.adminUnavailable=true);await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-status')).toContainText('administration service is unavailable');
+});
+
+test('admin errors retain account form details for correction',async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async adminAction(data){if(data.action==='list')return {users:[],revision:0};throw Error('Those disposal initials already belong to another member.');}};}
+ `}));
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
+ await page.getByRole('button',{name:'Administration',exact:true}).click();await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Technician name',{exact:true}).fill('Keep these details');await page.getByLabel('Account email',{exact:true}).fill('keep@example.invalid');await page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true}).fill('AD');await page.getByRole('button',{name:'Create user account',exact:true}).click();
+ await expect(page.locator('#admin-form-error')).toContainText('initials already belong');await expect(page.getByLabel('Technician name',{exact:true})).toHaveValue('Keep these details');
 });

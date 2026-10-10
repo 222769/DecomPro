@@ -32,8 +32,13 @@ service cloud.firestore {
    allow write: if false;
    match /members/{uid} {
     allow read: if member(team);
-    allow create, update: if admin(team) && request.resource.data.keys().hasOnly(['displayName','code','role','active']) && request.resource.data.displayName is string && request.resource.data.displayName.size()>0 && request.resource.data.code is string && request.resource.data.code.size()>0 && request.resource.data.role in ['admin','technician'] && request.resource.data.active is bool;
-    allow delete: if admin(team) && request.auth.uid != uid;
+    // Account changes pass through the authenticated administration service.
+    // Console/Admin SDK access remains available for trusted bootstrapping.
+    allow write: if false;
+   }
+   match /memberAudit/{event} {
+    allow read: if admin(team);
+    allow write: if false;
    }
    match /equipment/{item} {
     function valid(d) {

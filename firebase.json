@@ -1,4 +1,24 @@
 {
-  "firestore": {"rules": "database/firestore.rules"},
-  "emulators": {"firestore": {"port": 8085}, "ui": {"enabled": false}, "singleProjectMode": true}
+  "firestore": {
+    "rules": "database/firestore.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8085
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true,
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    }
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  }
 }
