@@ -37,6 +37,26 @@ test('conflicting edits are rejected and removal retains audit history',async()=
  assert.equal((await first.load()).items.length,0);assert.equal((await getDocs(collection(db,'teams/college-it/equipment/equipment-1/revisions'))).size,3);
  await assertFails(deleteDoc(doc(db,'teams/college-it/equipment/equipment-1')));
 });
+test('trolley moves preserve disposal attribution, expose immutable actor history and reject stale or locked inventories',async()=>{
+ const first=createTeamStore(context('tech'),'tech','college-it',member),second=createTeamStore(context('admin'),'admin','college-it',admin);
+ const destination=createTrolley('Bulk destination');await first.writeTrolley(destination);
+ const item=sample();await first.write(item);await second.load();
+ const moved={...item,trolleyId:destination.id,trolley:destination.name};
+ await second.write(moved,second.versionFor(item.id));
+ const saved=(await first.load()).items[0];assert.equal(saved.technician,'TT');assert.equal(saved.trolleyId,destination.id);
+ const history=await first.moveHistory(item.id);assert.equal(history.length,1);assert.equal(history[0].actor.name,admin.displayName);assert.equal(history[0].actor.code,'admin');assert.equal(history[0].from.name,initialTrolley.name);assert.equal(history[0].to.name,destination.name);
+ await assert.rejects(first.write(item,1),/Another technician/);
+ await env.withSecurityRulesDisabled(async c=>{
+  const ref=doc(c.firestore(),`teams/college-it/trolleys/${destination.id}`),row=(await getDoc(ref)).data();
+  await setDoc(ref,{...row,payload:{...row.payload,status:'ready',readyAt:new Date().toISOString(),readyBy:'TT'}});
+ });
+ await assert.rejects(first.write(item,2),/ready or collected/);
+ const other=sample('other','OTHER-SERIAL');await first.write(other);
+ await assert.rejects(first.write({...other,trolleyId:destination.id,trolley:destination.name},1),/ready or collected/);
+ assert.equal((await first.moveHistory(item.id)).length,1);
+ await assertFails(deleteDoc(doc(context('tech'),`teams/college-it/equipment/${item.id}/revisions/${history[0].id}`)));
+ await assertFails(getDocs(collection(context('outsider'),`teams/college-it/equipment/${item.id}/revisions`)));
+});
 test('serial index escaping is collision-free and spreadsheet examples are idempotent',async()=>{
  const client=createTeamStore(context('tech'),'tech','college-it',member);
  await client.write(sample('with-slash','AB/C~D'));await client.write(sample('literal-escape','AB~sC~D'));

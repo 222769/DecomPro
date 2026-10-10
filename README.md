@@ -67,6 +67,16 @@ Open **Collection history** to search completed trolleys by name, reference, com
 
 ## Manage trolleys and print labels
 
+### Move equipment between trolleys
+
+Select equipment using the register checkboxes, then choose **Move to trolley**. The header checkbox selects visible rows; selected items stay selected when you search or switch inventory views. The toolbar counts the full selection, including hidden rows. Preview the destination and confirm. Items already in that trolley are left unchanged. Both source and destination must be open; reopen a ready trolley before moving equipment. Collected inventories remain locked.
+
+Local moves save the whole selected batch and its history together in browser storage. Shared moves use the existing Firestore transactions, version checks, serial claims and immutable revisions, and do not require Cloud Functions or Blaze. Each item saves separately: a partial failure reports confirmed moves and retains the remaining selection. Close the preview, check the latest register and retry only the remaining items. An unconfirmed network failure must be checked against Firebase before assuming it did not save.
+
+Use **Moves** on an equipment row to see its trolley changes and who made them. Shared history is retrieved from server revisions; local history starts with this update, also records trolley changes through Edit, and is included in JSON backups. It cannot reconstruct older local moves that were never recorded. Moves preserve the original disposal initials and the current scan draft. Equipment selection does not change Excel export scope.
+
+### Trolley setup and labels
+
 Open **Trolleys** in the navigation. Create a trolley with a descriptive name and owning department. Each trolley receives a permanent `TSU-` reference generated from a UUID; reused names do not reuse references. Existing local trolley names migrate into this register automatically. The default ownership is **Property of TSU - Helpdesk (Calderdale College)**.
 
 - **Use trolley** assigns new items to it. Existing items retain their assignments.

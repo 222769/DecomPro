@@ -57,6 +57,13 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    return snapshot.docs.map(row=>({uid:row.id,...row.data()}));
   },
   versionFor(id){return versions.get(id)||0;},
+  async moveHistory(id) {
+   const snapshot=await getDocsFromServer(collection(doc(equipment,id),'revisions'));
+   const rows=snapshot.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.before&&!r.after.deleted&&(r.before.payload.trolleyId&&r.after.payload.trolleyId?r.before.payload.trolleyId!==r.after.payload.trolleyId:r.before.payload.trolley!==r.after.payload.trolley));
+   const actors=new Map();
+   for(const actor of new Set(rows.map(row=>row.actor))){const account=await getDocFromServer(doc(root,'members',actor));actors.set(actor,account.exists()?(account.data().displayName||actor):actor);}
+   return rows.map(r=>({id:r.id,from:{id:r.before.payload.trolleyId||'',name:r.before.payload.trolley},to:{id:r.after.payload.trolleyId||'',name:r.after.payload.trolley},actor:{name:actors.get(r.actor),code:r.actor},at:r.at.toDate().toISOString()})).sort((a,b)=>b.at.localeCompare(a.at));
+  },
   async load(){const [items,examples,cages,edits]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys),getDocsFromServer(corrections)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages),corrections:decodeCorrections(edits)};},
   listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{},onCorrections=()=>{}) {
    const confirmed=new Set();
