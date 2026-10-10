@@ -1,3 +1,4 @@
+import {validateEvidence} from './recognition-evidence.js';
 import { fields } from './data';
 import { cleanExamples } from './recognition';
 import {validateTrolleys,createTrolley} from './trolleys.js';
@@ -59,7 +60,8 @@ export function validateWorkspace(value) {
     if (!text(value.draft.manufacturer, true)) throw Error('Invalid recognized manufacturer.');
     draft.manufacturer = value.draft.manufacturer;
   }
-  for (const key of ['recognitionNeedsReview','recognitionConfirmed']) {
+  if(value.draft.recognitionEvidence!==undefined)draft.recognitionEvidence=validateEvidence(value.draft.recognitionEvidence);
+  for (const key of ['recognitionNeedsReview','recognitionConfirmed','recognitionCorrected']) {
     if (value.draft[key] !== undefined) {
       if (typeof value.draft[key] !== 'boolean') throw Error('Invalid recognition review state.');
       draft[key] = value.draft[key];

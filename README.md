@@ -109,6 +109,16 @@ Serial-first scanning is now the default for every item, including existing brow
 
 The supplied workbook produced 321 usable facts covering 320 distinct serials. Leave-one-serial-out evaluation of the current recognition yielded 88 correct suggestions, 7 incorrect suggestions, 126 conflicting cases and 99 no-match cases. The new single-reference fallback contributed two suggestions with different model labels from the withheld facts; it cannot establish model accuracy from serial proximity alone. These are observations on this workbook, not a promised accuracy rate for future equipment. Pattern and similar-serial suggestions require physical verification before saving. With manufacturer-only recognition enabled, 121 withheld serials received brand-only suggestions: 120 matched their withheld manufacturer and one differed. Manufacturer-only results also require label verification; these figures describe this workbook only.
 
+## Evidence and corrections during scanning
+
+The scan station displays **Recognition evidence** for exact matches, prefix suggestions, similar serials and conflicting families. It shows the literal prefix or exact serial, distinct supporting serial count, nearby reference when relevant, and sources from built-in Excel, imported Excel, saved equipment or reviewed corrections. Duplicate facts from several sources retain their provenance without counting as extra serials. Inferred manufacturer/model details and uncertain models are labelled explicitly; no numerical confidence score is invented.
+
+Evidence is a snapshot of the lookup used for the captured item and is preserved in browser storage and JSON backups. Later library changes do not silently replace that explanation. Rescanning the serial captures current evidence.
+
+Use **This suggestion is wrong** to enter checked model/manufacturer details and confirm the physical label. Cancelling leaves the draft intact. Applying preserves barcode, security etching, asset number and other captured fields. In local mode or for a shared administrator, **Save a reviewed reference for future scans** can also publish a correction for that serial with a reason; shared changes use the existing version checks and immutable audit history. Ordinary shared technicians can correct the current item, then save the equipment record to teach team recognition. Applying a correction does not itself add an equipment record. Existing equipment and original reference facts are retained.
+
+The card retains the original suggestion evidence after correction and identifies the checked values now in use. Editing the model or manufacturer after checking requires a fresh confirmation before saving.
+
 ## Review the reference library
 
 Open **Settings → Model recognition → Manage reference library**. Search by serial, prefix, model, manufacturer or source, and filter conflicting serials, reviewed corrections or exclusions. Original spreadsheet and saved-equipment facts remain visible as evidence.

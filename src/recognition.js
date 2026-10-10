@@ -7,7 +7,9 @@ export function cleanExamples(examples) {
  for(const row of examples) {
   if(!meaningful(row.serial)||!meaningful(row.model)||!meaningful(row.manufacturer))continue;
   const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:typeof row.source==='string'?row.source:'Confirmed record'};
-  unique.set(`${fact.serial}\u0000${labelKey(fact)}`,fact);
+  const key=`${fact.serial}\u0000${labelKey(fact)}`,previous=unique.get(key);
+  if(previous)fact.source=[...new Set([...previous.source.split(' | '),...fact.source.split(' | ')])].join(' | ');
+  unique.set(key,fact);
  }
  return [...unique.values()];
 }
@@ -19,9 +21,9 @@ export function recognizeSerial(value,examples) {
   if(labels.size!==1){
    const grouped=new Map(),manufacturers=new Set(matches.map(f=>f.manufacturer.toLowerCase()));
    for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set()};candidate.serials.add(fact.serial);grouped.set(key,candidate);}
-   return {method:'conflict',basis:method,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', '),...(manufacturers.size===1?{manufacturer:matches[0].manufacturer}:{}),candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};
+   return {method:'conflict',basis:method,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', '),...(manufacturers.size===1?{manufacturer:matches[0].manufacturer}:{}),candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};
   }
-  return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', ')};
+  return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', ')};
  };
  if(exact.length)return describe(exact,'exact');
  // Try the most specific family first. A mixed broad prefix must not hide
