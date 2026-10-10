@@ -620,7 +620,7 @@ test('local import previews duplicates, preserves originals and safely retries a
  for(const serial of ['LOCALTEAM001','LOCALTEAM002','LOCALTEAM003']){await item(page,serial);if(await page.getByLabel('I checked the suggested model and manufacturer').count())await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();}
  const local=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  await page.evaluate(local=>{window.teamFixture={items:[{...local.items[2],id:'existing-team-serial'}],trolleys:local.trolleys,examples:[],corrections:[]};window.importWrites=[];},local);
- await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
  await scan(page,'PRESERVED-SHARED-DRAFT');
  const open=async()=>{await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Import local equipment (admin)'}).click();};
  await open();await expect(page.locator('#local-import-dialog')).toContainText('2 ready to import');await expect(page.locator('#local-import-dialog')).toContainText('already in the shared register');
@@ -639,7 +639,7 @@ test('a shared save shows pending confirmation and retains the scan until Fireba
  await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
  export async function connectFirebase(){return {profile:{name:'Jawad',code:'JA'},role:'technician',email:'jawad@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,connection){connection('connected');},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async writeTrolley(){},async write(){await new Promise(resolve=>window.confirmTeamSave=resolve);}};}
  `}));
- await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('jawad@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('jawad@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
  await defaults(page);await item(page,'CONFIRMEDTEAM001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('#connection-status')).toContainText('Saving equipment to Firebase');await expect(page.locator('#save')).toBeDisabled();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CONFIRMEDTEAM001');
@@ -652,7 +652,7 @@ test('an administrator can check active memberships and find the personal accoun
  await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
  export async function connectFirebase(){return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async listMembers(){return [{displayName:'Jawad',code:'JA',role:'technician',active:true},{displayName:'Former technician',code:'FT',role:'technician',active:false}];}};}
  `}));
- await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
  await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Team access checklist'}).click();
  await expect(page.locator('#team-access-list')).toContainText('Jawad · JA');await expect(page.locator('#team-access-list')).toContainText('Inactive');await expect(page.locator('#team-access-dialog')).toContainText('teams/college-it/members/UID');
 });
@@ -681,7 +681,7 @@ for(const extra of [false,true])test(`historical collection import retries witho
  await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));Object.assign(state.trolleys[0],{status:'collected',company:'Previous supplier',collectedAt:'2026-09-01T10:00:00.000Z',collectedBy:'JA'});localStorage.setItem('decompro.v1',JSON.stringify(state));});await page.reload();
  const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
  await page.evaluate(()=>{window.historyFixture={items:[],trolleys:[],examples:[],corrections:[]};window.historyWrites=0;window.historyAttempts=0;});
- await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
  await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Import local equipment (admin)'}).click();await page.getByRole('button',{name:'Import ready items'}).click();
  await expect(page.locator('#local-import-result')).toContainText('collection history not restored: History temporarily unavailable');
  if(extra)await page.evaluate(()=>window.historyFixture.items.push({...window.historyFixture.items[0],id:'unrelated-team-item',serial:'UNRELATED-TEAM-SERIAL'}));
