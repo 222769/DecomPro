@@ -37,7 +37,8 @@ test('asset numbers require A and four digits, normalize case, and permit N/A sk
 
 test('built-in Summer reference recognises TG22681204 without import and keeps ambiguous patterns manual',async({page})=>{
  await page.goto('/');
- await expect(page.getByText('Serial recognition ready')).toBeVisible();
+ await expect(page.locator('#station')).not.toContainText('Serial recognition ready');
+ await page.getByRole('button',{name:'Open settings'}).click();await expect(page.locator('#settings-dialog')).toContainText('Serial recognition ready');await expect(page.locator('#settings-dialog')).toContainText('321 built-in spreadsheet references');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await scan(page,'tg22681204');
  await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  await expect(page.getByRole('status')).toContainText('Known serial: 10ET185A · Edgeio');

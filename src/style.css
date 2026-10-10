@@ -126,8 +126,6 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .connection-settings summary { cursor: pointer; font-weight: 600; color: #344867; }
 .connection-settings[open] summary { margin-bottom: 14px; }
 #save-feedback { font-size: 13px; line-height: 1.6; color: #dbe7ff; margin: 12px 0; }
-.recognition-library { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:18px 0 8px; padding:12px; border:1px solid #476479; border-radius:10px; color:#c4d8ef; font-size:11px; line-height:1.7; text-align:left; }
-.recognition-library strong { color:#eef5ff; }
 #trolley-manager { width:min(820px,calc(100vw - 32px));max-width:820px;max-height:85vh;overflow:auto; }
 .trolley-manager-list { display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:20px 0; }
 .trolley-card { padding:18px;border:1px solid #dce3ed;border-radius:14px;background:#f8faff; }
