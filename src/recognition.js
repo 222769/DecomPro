@@ -53,7 +53,7 @@ export function recognizeSerial(value,examples) {
  }
  return null;
 }
-export async function examplesFromWorkbook(buffer) {
+export async function referenceRowsFromWorkbook(buffer) {
  const {default:ExcelJS}=await import('exceljs');
  const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(buffer);
  const rows=[];let usableSheets=0;
@@ -65,9 +65,14 @@ export async function examplesFromWorkbook(buffer) {
   }
   if(!columns)continue;usableSheets++;
   for(let r=start;r<=sheet.rowCount;r++) {
-   const row=sheet.getRow(r);rows.push({serial:row.getCell(columns['serial number']).text,model:row.getCell(columns.model).text,manufacturer:row.getCell(columns.manufacturer).text,source:`Excel · ${sheet.name}`});
+   const row=sheet.getRow(r),serial=row.getCell(columns['serial number']).text.trim(),model=row.getCell(columns.model).text.trim(),manufacturer=row.getCell(columns.manufacturer).text.trim();
+   if(!serial&&!model&&!manufacturer)continue;
+   rows.push({serial,model,manufacturer,source:`Excel · ${sheet.name}`,sheet:sheet.name,row:r});
   }
  }
  if(!usableSheets)throw Error('No sheet has Serial Number, Model and Manufacturer headings.');
- return cleanExamples(rows);
+ return rows;
+}
+export async function examplesFromWorkbook(buffer) {
+ return cleanExamples(await referenceRowsFromWorkbook(buffer));
 }

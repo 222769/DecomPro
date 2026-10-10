@@ -1,6 +1,7 @@
 import { fields, headers, supplierRow, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
 import './style.css';
-import { cleanExamples, examplesFromWorkbook } from './recognition';
+import { cleanExamples, referenceRowsFromWorkbook } from './recognition';
+import {buildImportPreview,importCounts} from './import-preview.js';
 import builtInReferences from './reference-catalogue.json';
 import {lookupReference,libraryRows,validateCorrections} from './reference-library';
 import { availableVoices, utteranceFor } from './speech';
@@ -36,6 +37,7 @@ let sharedLocked = false;
 let saving=false, exporting=false, editingVersion=0;
 const localWorkspaceKey='decompro.localWorkspace';
 let librarySearch='',libraryFilter='all',libraryLimit=40;
+let pendingImport=null,importBusy=false,importLimit=60,importFilter='all';
 let search = '', editingId = null, pendingRestore = null;
 try { sharedLocked=localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved)); } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
 if(!sharedLocked) {
@@ -66,7 +68,7 @@ function render() {
  <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><div id="history-results"></div></section>
- <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog>`;
+ <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog>`;
  bind(); updateRegister(); updateHistory(); updateConnectionStatus(); focus();
 }
 function capture(value) {
@@ -367,13 +369,64 @@ async function importReference(e) {
  const file=e.target.files[0];e.target.value='';if(!file||!writable())return;
  try {
   if(file.size>20*1024*1024)throw Error('Choose an XLSX file smaller than 20 MB.');
-  const examples=await examplesFromWorkbook(await file.arrayBuffer());
-  if(!examples.length)throw Error('No usable serial, model and manufacturer combinations found.');
-  if(!confirm(`Import ${examples.length} reference examples? These teach recognition; no items will be added to the disposal register.`))return;
-  if(sharedClient)await sharedClient.importExamples(examples);
-  state.referenceExamples=cleanExamples([...state.referenceExamples,...examples]);persist();notice=`Imported ${examples.length} reference examples. Scan a serial number first to look up its model and manufacturer.`;render();
- } catch(error){notice=`Reference import failed. ${error.message}`;render();}
+  const rows=await referenceRowsFromWorkbook(await file.arrayBuffer());
+  if(!rows.length)throw Error('No reference rows found under Serial Number, Model and Manufacturer headings.');
+  pendingImport={rows,name:file.name,client:sharedClient,locked:sharedLocked};importFilter='all';importLimit=60;
+  resetImportPreview();document.querySelector('#settings-dialog').close();openImportPreview();
+ } catch(error){notice=`Reference preview failed. ${error.message}`;render();}
 }
+function resetImportPreview(facts=baseReferenceFacts(),corrections=state.referenceCorrections||[]) {
+ pendingImport.preview=buildImportPreview(pendingImport.rows,facts,corrections);
+ pendingImport.selected=new Set(pendingImport.preview.filter(row=>row.status==='new').map(row=>row.id));
+}
+function openImportPreview(message='') {
+ const dialog=document.querySelector('#import-preview-dialog'),counts=importCounts(pendingImport.preview);
+ dialog.innerHTML=`<div class="eyebrow">REVIEW BEFORE IMPORTING</div><h2>Spreadsheet import preview</h2><p>${escape(pendingImport.name)} · ${pendingImport.client?`Shared team ${escape(pendingImport.client.teamId)}`:'Local reference library'}</p><p>Only serial, model and manufacturer references are saved. This does not add equipment to the collection register.</p><div class="import-counts">${Object.entries(counts).map(([status,count])=>`<span><strong>${count}</strong> ${status==='new'?'new':status==='duplicate'?'duplicates':status==='conflict'?'conflicts':'incomplete'}</span>`).join('')}</div><p>New references are selected. Conflicts need a deliberate selection and label check. Duplicates and incomplete rows are skipped.</p><label for="import-filter">Show spreadsheet rows</label><select id="import-filter"><option value="all">All rows</option><option value="new">New references</option><option value="conflict">Conflicts to review</option><option value="duplicate">Duplicates</option><option value="incomplete">Incomplete rows</option></select><div id="import-preview-rows"></div><p id="import-selection-count" aria-live="polite"></p><label class="recognition-review import-review"><input id="confirm-import-conflicts" type="checkbox"> I checked the selected conflicting details against the equipment labels.</label><p id="import-preview-error" role="alert">${escape(message)}</p><div class="dialog-actions"><button id="cancel-reference-import" class="secondary">Cancel import</button><button id="commit-reference-import" class="primary">Import selected references</button></div>`;
+ dialog.showModal();document.querySelector('#import-filter').value=importFilter;
+ document.querySelector('#import-filter').onchange=e=>{importFilter=e.target.value;importLimit=60;updateImportRows();};
+ document.querySelector('#cancel-reference-import').onclick=()=>{if(importBusy)return;pendingImport=null;dialog.close();};
+ dialog.oncancel=e=>{if(importBusy)e.preventDefault();else pendingImport=null;};
+ document.querySelector('#confirm-import-conflicts').onchange=updateImportSelection;
+ document.querySelector('#commit-reference-import').onclick=commitReferenceImport;updateImportRows();
+}
+function updateImportRows() {
+ const rows=pendingImport.preview.filter(row=>importFilter==='all'||row.status===importFilter),container=document.querySelector('#import-preview-rows');
+ container.innerHTML=rows.slice(0,importLimit).map(row=>`<article class="reference-card import-row"><div class="section-top"><strong>${escape(row.fact.serial||'No serial number')}</strong><span class="tag ${row.status==='conflict'?'reference-conflict':''}">${{new:'New reference',duplicate:'Duplicate',conflict:'Conflict',incomplete:'Incomplete'}[row.status]}</span></div><p>${escape(row.fact.model||'No model')} · ${escape(row.fact.manufacturer||'No manufacturer')}<br><small>${escape(row.sheet)} · Row ${row.row}</small></p><p>${escape(row.reason)}</p>${row.status==='conflict'?`<details><summary>Compare known evidence</summary>${row.existingFacts.map(f=>`<p>${escape(f.model)} · ${escape(f.manufacturer)}<br><small>${escape(f.source)}</small></p>`).join('')||'<p>Different details occur elsewhere in this spreadsheet.</p>'}${row.review?`<p>Review note: ${escape(row.review.note)}</p>`:''}</details>`:''}<label class="toggle-label"><input type="checkbox" data-import-row="${row.id}" aria-label="Import ${escape(row.fact.serial||`row ${row.row}`)} · ${escape(row.fact.model)} · ${escape(row.fact.manufacturer)}" ${pendingImport.selected.has(row.id)?'checked':''} ${!importBusy&&['new','conflict'].includes(row.status)?'':'disabled'}> Include this reference</label></article>`).join('')||'<p>No spreadsheet rows in this category.</p>';
+ if(rows.length>importLimit)container.insertAdjacentHTML('beforeend','<button id="more-import-rows" class="secondary wide">Show more rows</button>');
+ document.querySelector('#more-import-rows')?.addEventListener('click',()=>{if(importBusy)return;importLimit+=60;updateImportRows();});
+ container.querySelectorAll('[data-import-row]').forEach(input=>input.onchange=()=>{if(input.checked)pendingImport.selected.add(Number(input.dataset.importRow));else pendingImport.selected.delete(Number(input.dataset.importRow));document.querySelector('#confirm-import-conflicts').checked=false;updateImportSelection();});updateImportSelection();
+}
+function updateImportSelection() {
+ const selected=pendingImport.preview.filter(row=>pendingImport.selected.has(row.id)),conflicts=selected.filter(row=>row.status==='conflict').length;
+ document.querySelector('#import-selection-count').textContent=`${selected.length} references selected · ${conflicts} conflicts selected`;
+ document.querySelector('.import-review').hidden=!conflicts;
+ document.querySelector('#commit-reference-import').disabled=importBusy||!selected.length;
+}
+async function commitReferenceImport() {
+ if(importBusy||!pendingImport)return;
+ const dialog=document.querySelector('#import-preview-dialog'),errorOutput=document.querySelector('#import-preview-error');
+ if(pendingImport.client!==sharedClient||pendingImport.locked!==sharedLocked){errorOutput.textContent='Workspace changed. Cancel and preview this spreadsheet again in the correct workspace.';return;}
+ if(!writable())return;
+ const client=sharedClient,selected=pendingImport.preview.filter(row=>pendingImport.selected.has(row.id));if(!selected.length)return;
+ if(selected.some(row=>row.status==='conflict')&&!document.querySelector('#confirm-import-conflicts').checked){errorOutput.textContent='Check the selected conflicting details and tick the confirmation before importing.';return;}
+ importBusy=true;document.querySelector('#commit-reference-import').disabled=true;document.querySelector('#cancel-reference-import').disabled=true;dialog.querySelectorAll('input,select').forEach(input=>input.disabled=true);errorOutput.textContent='Checking the latest reference library…';
+ try {
+  const records=client?await client.load():null;
+  if(client!==sharedClient||pendingImport.locked!==sharedLocked)throw Error('Connection changed. Reconnect and preview this spreadsheet again.');
+  const facts=records?[...builtInReferences,...records.examples,...records.items.map(row=>({...row,source:'Saved equipment'}))]:baseReferenceFacts();
+  const fresh=buildImportPreview(pendingImport.rows,facts,records?.corrections||state.referenceCorrections||[]);
+  if(selected.some(row=>fresh[row.id].status!=='duplicate'&&(fresh[row.id].status!==row.status||fresh[row.id].evidence!==row.evidence))){resetImportPreview(facts,records?.corrections||state.referenceCorrections||[]);dialog.close();openImportPreview('The library changed since this preview. Review the updated conflicts and selections before importing.');return;}
+  const examples=selected.filter(row=>fresh[row.id].status!=='duplicate').map(row=>row.fact);
+  if(!examples.length){resetImportPreview(facts,records?.corrections||state.referenceCorrections||[]);dialog.close();openImportPreview('The selected references are already known. Nothing was imported.');return;}
+  if(client)await client.importExamples(examples);
+  if(client!==sharedClient||pendingImport.locked!==sharedLocked)throw Error('Connection changed while importing. Reconnect to check the saved references.');
+  const next={...state,referenceExamples:cleanExamples([...state.referenceExamples,...examples])};
+  if(!sharedClient){if(storageError)throw Error('Browser storage is paused. Back up the workspace before importing.');localStorage.setItem(key,JSON.stringify(next));}
+  state=next;if(sharedClient)persist();pendingImport=null;dialog.close();notice=`Imported ${examples.length} reference examples. Scan a serial number first to look up its model and manufacturer.`;render();
+ } catch(error){errorOutput.textContent=`Reference import failed. ${firebaseErrorMessage(error)}${client?' Some batches may already be saved; retry checks the server and skips known references.':' Your reference library has not been changed.'}`;}
+ finally {importBusy=false;if(pendingImport&&document.querySelector('#import-preview-dialog')?.open){document.querySelector('#cancel-reference-import').disabled=false;document.querySelector('#import-filter').disabled=false;document.querySelector('#confirm-import-conflicts').disabled=false;updateImportRows();}}
+}
+
 function updateRegister() {
  const selected=state.trolleys.find(t=>t.id===trolleyViewId);
  const scope=trolleyViewId?(selected?state.items.filter(item=>trolleyForItem(item,selected)):[]):state.items;
