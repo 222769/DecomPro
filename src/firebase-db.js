@@ -45,7 +45,12 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
-  profile:memberProfile,role:member.role,email:auth?.currentUser?.email||'',teamId,
+  profile:memberProfile,role:member.role,projectId:db.app.options.projectId,email:auth?.currentUser?.email||'',teamId,
+  async listMembers() {
+   if(member.role!=='admin')throw Error('Only a team administrator can open the account checklist.');
+   const snapshot=await getDocsFromServer(collection(root,'members'));
+   return snapshot.docs.map(row=>({uid:row.id,...row.data()}));
+  },
   versionFor(id){return versions.get(id)||0;},
   async load(){const [items,examples,cages,edits]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys),getDocsFromServer(corrections)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages),corrections:decodeCorrections(edits)};},
   listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{},onCorrections=()=>{}) {

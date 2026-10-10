@@ -1,3 +1,4 @@
+import {localImportPlan,importSignature,sameRecord} from './local-import.js';
 import {checkReadiness,readinessFields,validateReadinessNotes} from './readiness.js';
 import { fields, headers, supplierRow, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
 import './style.css';
@@ -72,7 +73,7 @@ function render() {
  <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="backup-actions"><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><div id="history-results"></div></section>
- <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog>`;
+ <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog><dialog id="local-import-dialog"></dialog><dialog id="team-access-dialog"></dialog>`;
  bind(); updateRegister(); updateHistory(); updateConnectionStatus(); focus();
 }
 function capture(value) {
@@ -135,7 +136,7 @@ async function saveItem() {
  if(!validAssetNumber(state.draft.asset)){saveFeedback('Asset number must be A followed by four digits, for example A1234, or N/A. Use Previous field to correct it.');return;}
  if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the suggested model and manufacturer against this equipment, then tick the confirmation before saving.');return;}
  if(duplicateSerial(state.items,state.draft.serial)){saveFeedback('This serial number is already in the register. Check the current item before saving.');speak(notice);return;}
- saving=true;
+ saving=true;updateConnectionStatus();
  const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
  document.querySelector('#save-feedback').textContent=sharedClient?'Saving to the shared team database…':'Saving item…';
  try {
@@ -147,12 +148,12 @@ async function saveItem() {
   // A local save must reach storage before clearing the scanned draft.
   if(!sharedClient)localStorage.setItem(key,JSON.stringify(next));
   state=next;if(sharedClient)persist();
-  notice='Item recorded. Place it in the caged trolley.';render();
+  notice=sharedClient?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';render();
   speak(`Item recorded. Place it in the caged trolley. Next, ${fields[state.step][1]}.`);
  }catch(error){
   if(error.name==='QuotaExceededError'||error.name==='SecurityError')saveFeedback('Item not saved: browser storage is unavailable or full. Your scanned item is still here. Download a backup before refreshing.');
   else saveFeedback(`Item not saved. ${firebaseErrorMessage(error)}`);
- }finally {saving=false;document.querySelector('#save')?.removeAttribute('disabled');const remaining=document.querySelector('#save');if(remaining)remaining.innerHTML=`Save item & start next ${icon('arrow')}`;}
+ }finally {saving=false;updateConnectionStatus();document.querySelector('#save')?.removeAttribute('disabled');const remaining=document.querySelector('#save');if(remaining)remaining.innerHTML=`Save item & start next ${icon('arrow')}`;}
 }
 
 function writable() {
@@ -579,6 +580,7 @@ function updateConnectionStatus() {
  if(sharedLocked){
   if(navigator.onLine===false){title='Offline · team changes paused';detail='Your captured item stays here. Reconnect before saving; download a backup before closing.';kind='warning';}
   else if(!sharedClient){title='Shared workspace · reconnect required';detail='Cached records are available to view. Open Database to reconnect; team changes are locked.';kind='warning';}
+  else if(saving){title='Saving equipment to Firebase';detail='Wait for confirmation. Your captured item stays here until Firebase accepts it.';kind='warning';}
   else if(connectionPhase!=='connected'){title='Checking shared connection';detail='Waiting for confirmation from Firebase. Saved items are confirmed before your draft is cleared.';kind='warning';}
   else{title='Shared workspace · confirmed by Firebase';detail=`Team ${sharedClient.teamId}${lastConfirmedAt?' · Last confirmed '+new Date(lastConfirmedAt).toLocaleTimeString('en-GB',{timeZone:'Europe/London'}):''}`;kind='connected';}
  }
@@ -624,17 +626,28 @@ function openDatabase() {
  let saved={};try{saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');}catch{}
  saved.config ||= defaultFirebaseConfig;
  const dialog=document.querySelector('#database-dialog');
- dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary wide" id="check-connection">Check connection</button><p id="connection-check-result" aria-live="polite">Checks equipment, trolley and reference access directly with Firebase.</p><button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Imports your preserved local register as historical records. Existing team items are not overwritten.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
+ dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary wide" id="check-connection">Check connection</button><p id="connection-check-result" aria-live="polite">Checks equipment, trolley and reference access directly with Firebase.</p>${sharedClient.role==='admin'?'<button class="secondary" id="team-access">Team access checklist</button>':''}<button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Preview your preserved local equipment, check duplicates and import historical records without overwriting team items.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
  dialog.showModal();
  document.querySelector('#close-database').onclick=()=>dialog.close();
  document.querySelector('#disconnect-database')?.addEventListener('click',disconnectDatabase);
  document.querySelector('#check-connection')?.addEventListener('click',checkSharedConnection);
  document.querySelector('#upload-local')?.addEventListener('click',uploadLocal);
+ document.querySelector('#team-access')?.addEventListener('click',openTeamAccess);
  document.querySelector('#database-form').onsubmit=async e=>{
   e.preventDefault();const button=e.target.querySelector('.primary');button.disabled=true;
   try {const form=new FormData(e.target);await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'));}
   catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
+}
+async function openTeamAccess() {
+ const client=sharedClient;if(!client||client.role!=='admin')return;
+ const dialog=document.querySelector('#team-access-dialog');
+ dialog.innerHTML=`<div class="eyebrow">PERSONAL TEAM ACCOUNTS</div><h2>Team access checklist</h2><p>Each technician signs in with their own email and password. Their Firebase membership supplies the disposal name and initials on shared records.</p><ol><li>Create the technician in <a href="https://console.firebase.google.com/project/${escape(client.projectId||defaultFirebaseConfig.projectId)}/authentication/users" target="_blank" rel="noopener">Firebase Authentication → Users</a>.</li><li>Copy their UID. In Firestore, add <strong>teams/${escape(client.teamId)}/members/UID</strong> with displayName, code, role (technician) and active (boolean true).</li><li>On the other device, open this same website and sign in through Database. Choose Check connection to retrieve the shared register.</li></ol><p>Use different initials for each technician. Share passwords directly through your college’s approved process.</p><div id="team-access-list" aria-live="polite">Checking current memberships with Firebase…</div><div class="dialog-actions"><button class="secondary" id="close-team-access">Close</button></div>`;
+ dialog.querySelector('#close-team-access').onclick=()=>dialog.close();dialog.showModal();
+ try {
+  const members=await client.listMembers();if(sharedClient!==client)return;
+  dialog.querySelector('#team-access-list').innerHTML=`<h3>Current team memberships</h3>${members.map(member=>`<p><strong>${escape(member.displayName)} · ${escape(member.code)}</strong><br>${escape(member.role)} · ${member.active?'Active':'Inactive'}</p>`).join('')||'<p>No members returned.</p>'}`;
+ }catch(error){dialog.querySelector('#team-access-list').textContent=`Account check failed. ${firebaseErrorMessage(error)}`;}
 }
 async function activateDatabase(config,teamId,email,password) {
  const {connectFirebase}=await import('./firebase-db');
@@ -658,17 +671,70 @@ async function disconnectDatabase() {
  }catch(error){notice=error.message;render();}
 }
 async function uploadLocal() {
- const button=document.querySelector('#upload-local');button.disabled=true;
+ const client=sharedClient,button=document.querySelector('#upload-local');
+ if(!client||client.role!=='admin')return;
+ button.disabled=true;
  try {
   const local=validateWorkspace(JSON.parse(localStorage.getItem(localWorkspaceKey)||'null'));
-  if(!confirm(`Import ${local.items.length} historical local records? Each will be checked for duplicate IDs and serials.`)){button.disabled=false;return;}
-  let added=0,blocked=0;const newlyCreated=new Set(),failedTrolleys=new Set();
-  for(const trolley of local.trolleys){if(sharedClient.trolleyVersionFor(trolley.id))continue;try{await sharedClient.writeTrolley({...trolley,status:'open',readyAt:'',readyBy:'',collectedAt:'',collectedBy:'',company:''},0);newlyCreated.add(trolley.id);}catch{failedTrolleys.add(trolley.id);}}
-  for(const item of local.items){try{if(failedTrolleys.has(item.trolleyId))throw Error('Trolley import failed');await sharedClient.write(item,0,{historicalImport:true});added++;}catch{blocked++;failedTrolleys.add(item.trolleyId);}}
-  for(const trolley of local.trolleys.filter(t=>t.status==='collected'&&newlyCreated.has(t.id)&&!failedTrolleys.has(t.id))){try{await sharedClient.writeTrolley(trolley,sharedClient.trolleyVersionFor(trolley.id),{historicalImport:true});}catch{blocked++;}}
-  for(const correction of local.referenceCorrections){try{await sharedClient.writeCorrection(correction,0);}catch{blocked++;}}
-  notice=`Imported ${added} historical records; ${blocked} not imported (duplicates, conflicts or errors). Your preserved local workspace is unchanged.`;render();
- }catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+  let remote=await client.load(),plan=localImportPlan(local,remote),busy=false;
+  if(sharedClient!==client)return;
+  const dialog=document.querySelector('#local-import-dialog');
+  function completeInventory(trolley) {const source=plan.filter(row=>row.item.trolleyId===trolley.id),actual=remote.items.filter(item=>item.trolleyId===trolley.id);return source.length>0&&actual.length===source.length&&source.every(row=>actual.some(item=>sameRecord(row.item,item)));}
+  function pendingHistory() {return local.trolleys.some(t=>t.status==='collected'&&remote.trolleys.some(r=>r.id===t.id&&r.status==='open')&&completeInventory(t));}
+  function draw(results=null) {
+   const total=status=>plan.filter(row=>row.status===status).length;
+   dialog.innerHTML=`<div class="eyebrow">SAFE TEAM IMPORT</div><h2>Import local equipment</h2><p>Team ${escape(client.teamId)} · ${local.items.length} preserved local items. Historical technician initials stay attached to each item.</p><div class="restore-summary"><strong>${total('new')} ready to import</strong><span>${total('saved')} already saved · ${total('blocked')} need attention</span></div><p>Your local workspace and backup stay preserved. Reference spreadsheets and reviewed corrections can be transferred separately through Settings. Imported ready trolleys start open for a fresh check; completed collections are restored only when their whole inventory matches.</p><div class="table-wrap"><table><thead><tr><th>Serial / model</th><th>Trolley</th><th>Result</th></tr></thead><tbody>${plan.map(row=>`<tr><td>${escape(row.item.serial)}<br>${escape(row.item.model)}</td><td>${escape(row.item.trolley)}</td><td>${escape(row.reason)}</td></tr>`).join('')}</tbody></table></div><p id="local-import-result" role="status">${results?escape(results):'Review these items before confirming. Items that need attention are skipped.'}</p><div class="dialog-actions"><button class="secondary" id="close-local-import">Close</button><button class="primary" id="confirm-local-import" ${!total('new')&&!pendingHistory()?'disabled':''}>${results?'Retry remaining items':total('new')?'Import ready items':'Restore collection history'}</button></div>`;
+   dialog.querySelector('#close-local-import').onclick=()=>dialog.close();
+   dialog.querySelector('#confirm-local-import').onclick=run;
+  }
+  async function run() {
+   if(busy||sharedClient!==client)return;
+   busy=true;dialog.querySelectorAll('button').forEach(node=>node.disabled=true);
+   const output=dialog.querySelector('#local-import-result');output.textContent='Checking the latest Firebase records…';
+   const outcomes=[];
+   try {
+    remote=await client.load();if(sharedClient!==client)return;const fresh=localImportPlan(local,remote);
+    if(importSignature(fresh)!==importSignature(plan)){plan=fresh;draw('The shared register changed. Review the updated results before importing.');return;}
+    let added=0,restoredHistory=0;
+    for(const row of plan.filter(row=>row.status==='new')) {
+     if(sharedClient!==client)throw Error('The database connection changed. Reconnect and review the import again.');
+     output.textContent=`Saving ${row.item.serial} to Firebase… (${added} saved)`;
+     try {
+      if(!remote.trolleys.some(t=>t.id===row.trolley.id)){
+       const trolley={...row.trolley,status:'open',readyAt:'',readyBy:'',collectedAt:'',collectedBy:'',company:''};
+       await client.writeTrolley(trolley,0);remote.trolleys.push(trolley);
+      }
+      await client.write(row.item,0,{historicalImport:true});row.status='saved';row.reason='Saved to Firebase';added++;
+     }catch(error){row.reason=`Not imported: ${firebaseErrorMessage(error)}`;outcomes.push(`${row.item.serial}: ${firebaseErrorMessage(error)}`);}
+    }
+    // Recover partial historical imports on retry, but never collect a trolley
+    // containing unrelated shared equipment or unresolved local records.
+    remote=await client.load();
+    for(const trolley of local.trolleys.filter(t=>t.status==='collected')) {
+     if(sharedClient!==client)return;
+     const shared=remote.trolleys.find(t=>t.id===trolley.id);
+     if(shared?.status!=='open')continue;
+     try {
+      const review=await client.readinessSnapshot(trolley.id);
+      if(sharedClient!==client)return;
+      remote.items=review.items;remote.trolleys=remote.trolleys.map(row=>row.id===trolley.id?review.trolley:row);
+      if(review.trolley.status!=='open'||review.trolley.name!==trolley.name||!completeInventory(trolley)){outcomes.push(`${trolley.name}: collection history not restored because the full inventory does not match`);continue;}
+      await client.writeTrolley(trolley,review.version,{historicalImport:true});restoredHistory++;
+     }catch(error){outcomes.push(`${trolley.name}: collection history not restored: ${firebaseErrorMessage(error)}`);}
+    }
+    remote=await client.load();
+    if(sharedClient!==client)throw Error('The database connection changed. Reconnect to check the saved records.');
+    state.items=remote.items;state.trolleys=remote.trolleys;state.referenceExamples=remote.examples;state.referenceCorrections=remote.corrections||[];connectionPhase='connected';lastConfirmedAt=new Date().toISOString();
+    persist();updateRegister();updateHistory();updateConnectionStatus();
+    document.querySelector('.stats .stat-content strong').innerHTML=`${state.items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=state.items.length;
+    // Keep individual failure explanations visible; a retry rechecks server data.
+    draw(`${added} item${added===1?'':'s'} saved to Firebase. ${restoredHistory?`${restoredHistory} collection histor${restoredHistory===1?'y':'ies'} restored. `:''}${outcomes.length?outcomes.join(' · '):'Your preserved local records are unchanged.'}`);
+   }catch(error){if(sharedClient!==client||!dialog.querySelector('#close-local-import'))return;output.textContent=`Import stopped. ${firebaseErrorMessage(error)} Items already saved remain in Firebase. Your local workspace is unchanged; reopen the preview to check remaining items.`;dialog.querySelector('#close-local-import').disabled=false;}
+   finally{busy=false;}
+  }
+  draw();dialog.oncancel=event=>{if(busy)event.preventDefault();};dialog.showModal();
+ }catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);}
+ finally{button.disabled=false;}
 }
 async function resumeDatabase() {
  if(!sharedLocked)return;

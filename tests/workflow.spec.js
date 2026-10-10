@@ -611,3 +611,83 @@ test('new Posiflex suffixes infer from built-in Excel, retain evidence and requi
  await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD354B');await expect(page.locator('tbody')).toContainText('XTE30722');
  await page.reload();await scan(page,'001917BD354B');await expect(page.getByRole('status')).toContainText('Known serial');await expect(page.locator('.recognition-evidence')).toContainText('Saved equipment');
 });
+
+test('local import previews duplicates, preserves originals and safely retries a partial Firebase failure',async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},async logout(){},listen(){},trolleyVersionFor(){return 1;},async load(){return structuredClone(window.teamFixture);},async write(item){window.importWrites.push(item.id);if(item.serial==='LOCALTEAM002'&&!window.failedOnce){window.failedOnce=true;throw Error('Temporary connection failure');}window.teamFixture.items.push(structuredClone(item));},async writeTrolley(){throw Error('Unexpected trolley replacement');}};}
+ `}));
+ await page.goto('/');await defaults(page);
+ for(const serial of ['LOCALTEAM001','LOCALTEAM002','LOCALTEAM003']){await item(page,serial);if(await page.getByLabel('I checked the suggested model and manufacturer').count())await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();}
+ const local=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+ await page.evaluate(local=>{window.teamFixture={items:[{...local.items[2],id:'existing-team-serial'}],trolleys:local.trolleys,examples:[],corrections:[]};window.importWrites=[];},local);
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await scan(page,'PRESERVED-SHARED-DRAFT');
+ const open=async()=>{await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Import local equipment (admin)'}).click();};
+ await open();await expect(page.locator('#local-import-dialog')).toContainText('2 ready to import');await expect(page.locator('#local-import-dialog')).toContainText('already in the shared register');
+ await page.locator('#close-local-import').click();expect(await page.evaluate(()=>window.importWrites)).toEqual([]);
+ await page.locator('#close-database').click();await open();await page.getByRole('button',{name:'Import ready items',exact:true}).click();
+ await expect(page.locator('#local-import-result')).toContainText('1 item saved to Firebase');await expect(page.locator('#local-import-dialog')).toContainText('Not imported: Temporary connection failure');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.localWorkspace')))).toEqual(local);
+ await page.getByRole('button',{name:'Retry remaining items'}).click();await expect(page.locator('#local-import-result')).toContainText('1 item saved to Firebase');
+ expect(await page.evaluate(()=>window.importWrites)).toEqual([local.items[0].id,local.items[1].id,local.items[1].id]);
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('PRESERVED-SHARED-DRAFT');
+ await page.locator('#close-local-import').click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Sign out & return to local workspace'}).click();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items)).toEqual(local.items);
+});
+
+test('a shared save shows pending confirmation and retains the scan until Firebase accepts it',async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Jawad',code:'JA'},role:'technician',email:'jawad@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,connection){connection('connected');},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async writeTrolley(){},async write(){await new Promise(resolve=>window.confirmTeamSave=resolve);}};}
+ `}));
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('jawad@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await defaults(page);await item(page,'CONFIRMEDTEAM001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await expect(page.locator('#connection-status')).toContainText('Saving equipment to Firebase');await expect(page.locator('#save')).toBeDisabled();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CONFIRMEDTEAM001');
+ await page.evaluate(()=>window.confirmTeamSave());await expect(page.getByRole('status').filter({hasText:'Item saved to Firebase'})).toBeVisible();
+ await expect(page.locator('tbody')).toContainText('CONFIRMEDTEAM001');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[0].technician)).toBe('JA');
+ await page.getByRole('button',{name:'Shared database'}).click();await expect(page.getByRole('button',{name:'Team access checklist'})).toHaveCount(0);
+});
+
+test('an administrator can check active memberships and find the personal account setup steps',async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async listMembers(){return [{displayName:'Jawad',code:'JA',role:'technician',active:true},{displayName:'Former technician',code:'FT',role:'technician',active:false}];}};}
+ `}));
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Team access checklist'}).click();
+ await expect(page.locator('#team-access-list')).toContainText('Jawad · JA');await expect(page.locator('#team-access-list')).toContainText('Inactive');await expect(page.locator('#team-access-dialog')).toContainText('teams/college-it/members/UID');
+});
+
+test('a downloaded backup restores equipment, trolley references, training data and an unfinished scan in another browser',async({page,browser})=>{
+ await page.goto('/');await defaults(page);await item(page,'RECOVERTEAM001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Recovery references');sheet.addRow(['Serial Number','Model','Manufacturer']);sheet.addRow(['RESTOREEXCEL001','Recovery model','Recovery maker']);
+ await previewWorkbook(page,book);await approveImport(page);
+ await scan(page,'UNFINISHED-RECOVERY');
+ const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1'))),download=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const file=await download;
+ const context=await browser.newContext();const other=await context.newPage();
+ try {
+  await other.goto('/');await other.getByRole('button',{name:'Restore backup',exact:true}).click();await other.locator('#backup-file').setInputFiles(await file.path());
+  await other.getByRole('button',{name:'Replace workspace & restore'}).click();await other.reload();
+  const restored=await other.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+  expect(restored.items).toEqual(before.items);expect(restored.trolleys).toEqual(before.trolleys);expect(restored.referenceExamples).toEqual(before.referenceExamples);expect(restored.draft.serial).toBe('UNFINISHED-RECOVERY');
+  await expect(other.locator('tbody')).toContainText('RECOVERTEAM001');
+ }finally{await context.close();}
+});
+
+for(const extra of [false,true])test(`historical collection import retries without reimporting saved items and ${extra?'rejects extra inventory':'restores collection history'}`,async({page})=>{
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},trolleyVersionFor(){return 2;},async readinessSnapshot(){return {items:structuredClone(window.historyFixture.items),trolley:structuredClone(window.historyFixture.trolleys[0]),version:2};},async load(){return structuredClone(window.historyFixture);},async write(item){window.historyWrites++;window.historyFixture.items.push(structuredClone(item));},async writeTrolley(trolley){if(trolley.status==='collected'){window.historyAttempts++;if(window.historyAttempts===1)throw Error('History temporarily unavailable');}window.historyFixture.trolleys=[structuredClone(trolley)];}};}
+ `}));
+ await page.goto('/');await defaults(page);await item(page,'IMPORT-HISTORY-ONE');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));Object.assign(state.trolleys[0],{status:'collected',company:'Previous supplier',collectedAt:'2026-09-01T10:00:00.000Z',collectedBy:'JA'});localStorage.setItem('decompro.v1',JSON.stringify(state));});await page.reload();
+ const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
+ await page.evaluate(()=>{window.historyFixture={items:[],trolleys:[],examples:[],corrections:[]};window.historyWrites=0;window.historyAttempts=0;});
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByRole('button',{name:'Import local equipment (admin)'}).click();await page.getByRole('button',{name:'Import ready items'}).click();
+ await expect(page.locator('#local-import-result')).toContainText('collection history not restored: History temporarily unavailable');
+ if(extra)await page.evaluate(()=>window.historyFixture.items.push({...window.historyFixture.items[0],id:'unrelated-team-item',serial:'UNRELATED-TEAM-SERIAL'}));
+ await page.getByRole('button',{name:'Retry remaining items'}).click();
+ await expect(page.locator('#local-import-result')).toContainText(extra?'full inventory does not match':'0 items saved to Firebase');
+ expect(await page.evaluate(()=>window.historyWrites)).toBe(1);expect(await page.evaluate(()=>window.historyAttempts)).toBe(extra?1:2);
+ expect(await page.evaluate(()=>window.historyFixture.trolleys[0].status)).toBe(extra?'open':'collected');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.localWorkspace')))).toEqual(JSON.parse(original));
+});

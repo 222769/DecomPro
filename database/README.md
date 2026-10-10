@@ -33,7 +33,7 @@ The supplied public Web app configuration for **decompro-236e9** is bundled in `
 {"displayName":"Technician name","code":"Disposal initials","role":"technician","active":true}
 ```
 
-Use `role: "admin"` for your first administrator. Bootstrap membership in the trusted console; the public app cannot grant its first user admin access. `code` is what appears in the supplier's disposal column. Keep codes unique within your team. Set `active: false` to revoke a member's team access. Rules deny non-members, inactive members and unauthenticated visitors. Members can read their team's records; administrators can manage membership. The app currently uses the console for account and membership administration.
+Use `role: "admin"` for your first administrator. Bootstrap membership in the trusted console; the public app cannot grant its first user admin access. `code` is what appears in the supplier's disposal column. Keep codes unique within your team. Set `active: false` to revoke a member's team access. Rules deny non-members, inactive members and unauthenticated visitors. Members can read their team's records; administrators can manage membership. The app uses the Firebase console for account and membership administration. Administrators can open **Database → Team access checklist** for the exact setup steps and a server-confirmed list of active and inactive memberships. The checklist does not create Authentication users or assign access automatically.
 
 For the first account, copy its **User UID** from **Authentication → Users**. In **Firestore Database → Data**, start collection `teams`, give its document the ID `college-it`, and add a string field `name` such as `IT Decommissioning`. Open that document and start subcollection `members`. Use the copied UID as the member document ID (not the email address or an automatically generated ID). Add these four fields:
 
@@ -48,7 +48,7 @@ The first membership path is `teams/college-it/members/YOUR_AUTH_USER_UID`. For 
 
 6. Open **Database** in DecomPro. Paste the public Web app configuration as valid JSON, enter the team ID, then sign in with the technician's email/password. The membership document controls the displayed name/code. The chosen local profile cannot impersonate a shared account.
 7. Import the original XLSX once through **Settings → Import reference spreadsheet** while connected. This uploads only usable serial/model/manufacturer examples, not the entire supplier workbook or its finance/personnel data. The import preview shows new facts, duplicates, conflicting details and incomplete rows before saving. Only selected usable facts are uploaded; conflicting selections require a checked confirmation. Shared imports re-read server evidence before writing and ask for another review if selected evidence changed. Other connected members receive the references automatically.
-8. An administrator can explicitly import their preserved local register through **Import local equipment**. Imported historical disposal initials are retained and marked as historical; the authenticated importing user is recorded as the creator. Duplicates/conflicts are not overwritten. Partial import failures leave the preserved local data available.
+8. An administrator can open **Database → Import local equipment** to preview the preserved local register. The preview identifies ready items, identical items already saved, conflicting IDs/serials, repeated local serials and unavailable trolleys. Confirm **Import ready items** to save eligible historical records; the authenticated importing account is audited and the original disposal initials stay attached. The import rechecks server data before writing, never overwrites existing equipment, explains individual failures and can retry the remaining rows without rewriting successful ones. Cancel makes no changes. Ready trolleys start open for a fresh review. Historical collection details are restored only when the complete shared trolley inventory matches the local records; a failed history write can be retried separately. Your preserved local register stays unchanged. Import spreadsheet references separately through Settings; review local corrections in the shared reference library rather than silently applying them during equipment transfer.
 
 ## Stored data and concurrency
 
@@ -78,7 +78,7 @@ Local equipment imports create trolley records first, import their equipment, an
 
 ## Confirm the live team connection
 
-Publish the tested `database/firestore.rules` in the Firebase project's Firestore Rules editor. The current cloud credentials cannot authenticate to `decompro-236e9`, so emulator success does not establish that the live project is configured.
+Publish the tested `database/firestore.rules` in the Firebase project's Firestore Rules editor. Emulator success verifies the tested rules and client workflow; it does not establish that the live project has the same configuration. Use the server connection check below on your devices.
 
 After the Pages deployment succeeds:
 
@@ -90,3 +90,7 @@ After the Pages deployment succeeds:
 6. Disconnect the network. The banner should show **Offline · team changes paused**. Captured progress remains here; saves require reconnection. Restore the network and use **Check connection** to confirm access again.
 
 The connection banner distinguishes local storage, confirmed shared access, cached/reconnecting data and offline operation. Its confirmation time records the most recent server response in this session; it is not a guarantee of uninterrupted connectivity. Browser backups include only the loaded workspace and remain distinct from a complete database backup including revisions and membership.
+
+## Verified recovery workflow
+
+Browser tests restore an actual downloaded workspace backup into a separate browser context and verify equipment, permanent trolley references, imported recognition facts and an unfinished scan survive reload. Database emulator tests exercise two distinct technician accounts: live retrieval, a fresh client login, cross-account edits, original disposal attribution and revocation. These are local checks, not a live test using college accounts. Shared saves show a pending Firebase confirmation and only clear the captured item after the transaction succeeds. Local saves explicitly say that the item is stored in this browser. A JSON backup is a portable workspace copy, not a complete Firestore disaster-recovery backup.

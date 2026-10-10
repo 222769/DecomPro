@@ -150,3 +150,28 @@ test('equipment writes must advance the trolley version with immutable audit and
  const bypass=writeBatch(db);bypass.set(trolleyRow,changed);bypass.set(doc(trolleyRow,'revisions',touchId),{actor:'tech',before:old,after:changed,action:'update',at:serverTimestamp()});await assertFails(bypass.commit());
  assert.equal((await getDoc(trolleyRow)).data().payload.status,'ready');assert.equal((await getDoc(row)).data().payload.model,'Test model');
 });
+
+test('two personal technician accounts retrieve and update the same register, retain attribution and lose revoked access',async()=>{
+ const jawad={displayName:'Jawad',code:'JA',role:'technician',active:true};
+ await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/members/jawad'),jawad));
+ const first=createTeamStore(context('tech'),'tech','college-it',member),second=createTeamStore(context('jawad'),'jawad','college-it',jawad);
+ const update=new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(Error('Second account did not receive the saved equipment')),10000);
+  second.listen(items=>{if(items.some(item=>item.serial==='TEAM-DEVICE-001')){clearTimeout(timer);resolve(items);}},()=>{},error=>{clearTimeout(timer);reject(error);});
+ });
+ try {
+  await first.write(sample('team-one','TEAM-DEVICE-001'));
+  assert.equal((await update)[0].technician,'TT');
+  const fresh=createTeamStore(context('jawad'),'jawad','college-it',jawad);
+  const saved=(await fresh.load()).items[0];assert.equal(saved.serial,'TEAM-DEVICE-001');
+  await fresh.write({...saved,model:'Checked on second device',technician:'Impersonation'},fresh.versionFor(saved.id));
+  assert.equal((await first.load()).items[0].model,'Checked on second device');assert.equal((await first.load()).items[0].technician,'TT');
+  await fresh.write({...sample('team-two','TEAM-DEVICE-002'),technician:'Impersonation'});
+  assert.equal((await first.load()).items.find(row=>row.id==='team-two').technician,'JA');
+ }finally{second.stop();}
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin);
+ assert.equal((await owner.listMembers()).find(row=>row.uid==='jawad').code,'JA');
+ await assert.rejects(first.listMembers(),/administrator/);
+ await setDoc(doc(context('admin'),'teams/college-it/members/jawad'),{...jawad,active:false});
+ await assert.rejects(createTeamStore(context('jawad'),'jawad','college-it',jawad).load(),/permission/i);
+});
