@@ -84,8 +84,8 @@ function capture(value) {
  if(state.step===0) {
   const match=value.toUpperCase()==='N/A'?null:lookupSerial(value);
   if(match&&match.method!=='conflict') {
-   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method==='pattern',recognitionConfirmed:false};state.step=2;
-   notice=`${match.method==='exact'?'Known serial':`Pattern suggestion (prefix ${match.prefix})`}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. Verify before saving.`;
+   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method!=='exact',recognitionConfirmed:false};state.step=2;
+   notice=`${match.method==='exact'?'Known serial':match.method==='similar'?`Similar serial suggestion (reference ${match.referenceSerials.join(', ')})`:`Pattern suggestion (prefix ${match.prefix})`}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. ${match.method==='similar'?'Check the scanned serial and physical model label before saving.':'Verify before saving.'}`;
    lastEmpty=0;persist();render();speak(`Suggested model, ${match.model}. Manufacturer, ${match.manufacturer}. Next, barcode.`);return;
   }
   if(match?.method==='conflict'||Object.hasOwn(state.draft,'recognitionNeedsReview')||(state.draft.serial&&state.draft.serial!==value)) {
@@ -119,7 +119,7 @@ async function saveItem() {
  const missingScan=fields.find(([key])=>!state.draft[key]);
  if(missingScan){saveFeedback(`Capture ${missingScan[1].toLowerCase()} or skip it as N/A before saving.`);return;}
  if(!validAssetNumber(state.draft.asset)){saveFeedback('Asset number must be A followed by four digits, for example A1234, or N/A. Use Previous field to correct it.');return;}
- if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the pattern-suggested model and manufacturer, then tick the confirmation before saving.');return;}
+ if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the suggested model and manufacturer against this equipment, then tick the confirmation before saving.');return;}
  if(duplicateSerial(state.items,state.draft.serial)){saveFeedback('This serial number is already in the register. Check the current item before saving.');speak(notice);return;}
  saving=true;
  const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}

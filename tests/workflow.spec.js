@@ -69,7 +69,7 @@ test('saving works without crypto.randomUUID and produces distinct persistent ID
  await page.addInitScript(()=>Object.defineProperty(window.crypto,'randomUUID',{value:undefined,configurable:true}));
  await page.goto('/');await defaults(page);
  for(const serial of ['ID-BROWSER-001','ID-BROWSER-002']) {
-  await item(page,serial);await page.getByRole('button',{name:'Save item & start next'}).click();
+  await item(page,serial);if(serial==='ID-BROWSER-002')await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();
   await expect(page.locator('tbody')).toContainText(serial);
  }
  const records=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items);
@@ -432,4 +432,10 @@ test('shared technicians receive reviewed models but cannot change the reference
  await scan(page,'PRIVATE-REF-0001');await expect(page.getByRole('status')).toContainText('Known serial: Checked team model · Team maker');
  await page.getByRole('button',{name:'Open settings'}).click();await page.getByRole('button',{name:'Manage reference library'}).click();await page.getByLabel('Search reference library').fill('PRIVATE-REF-0001');
  await expect(page.locator('#library-results')).toContainText('Reviewed correction');await expect(page.getByRole('button',{name:'Review reference'})).toBeDisabled();await expect(page.getByRole('button',{name:'Add checked reference'})).toBeDisabled();
+});
+
+test('nearby Posiflex serial prefills from the spreadsheet and requires label confirmation before learning',async({page})=>{
+ await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Similar serial suggestion (reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
+ for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(0);
+ await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD324B');await expect(page.locator('tbody')).toContainText('XTE30722');await page.reload();await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial');
 });

@@ -39,6 +39,14 @@ export function recognizeSerial(value,examples) {
   if(new Set(matches.map(f=>f.serial)).size<3)continue;
   return describe(matches,'pattern',prefix);
  }
+ // A single reference can suggest a neighbouring unit only when the serial is
+ // long, has the same format, and differs in one suffix character. Require a
+ // long literal prefix; this is a reviewed suggestion, never an exact match.
+ if(serial.length>=10) {
+  const length=Math.max(8,Math.ceil(serial.length*.75)),prefix=serial.slice(0,length);
+  const neighbours=compatible.filter(f=>f.serial.startsWith(prefix)&&[...serial].filter((char,index)=>char!==f.serial[index]).length===1);
+  if(neighbours.length)return {...describe(neighbours,'similar',prefix),referenceSerials:[...new Set(neighbours.map(f=>f.serial))]};
+ }
  return null;
 }
 export async function examplesFromWorkbook(buffer) {

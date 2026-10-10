@@ -42,3 +42,12 @@ test('specific consistent prefixes can resolve a mixed four-character family',()
  assert.equal(recognizeSerial('ABCDPRO1999',[...family,{serial:'ABCDPRO1666',model:'Different Pro',manufacturer:'Example'}]).method,'conflict');
  assert.equal(recognizeSerial('ABCDPRO1999',[family[0],family[0],family[3]]).method,'conflict');
 });
+
+test('a long near-identical serial suggests a model with explicit single-reference evidence',()=>{
+ const facts=[{serial:'001917BD323B',model:'XTE30722',manufacturer:'posiflex'}];
+ const result=recognizeSerial('001917BD324B',facts);assert.equal(result.method,'similar');assert.equal(result.model,'XTE30722');assert.equal(result.support,1);assert.deepEqual(result.referenceSerials,['001917BD323B']);
+ assert.equal(recognizeSerial('001917BD323B',facts).method,'exact');
+ assert.equal(recognizeSerial('001917BD999B',facts),null);assert.equal(recognizeSerial('991917BD323B',facts),null);assert.equal(recognizeSerial('001917BD32AB',facts),null);
+ assert.equal(recognizeSerial('ABC12345',[{serial:'ABC12344',model:'Short',manufacturer:'Maker'}]),null);
+ const conflict=recognizeSerial('001917BD324B',[...facts,{serial:'001917BD325B',model:'Different',manufacturer:'posiflex'}]);assert.equal(conflict.method,'conflict');
+});
