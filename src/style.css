@@ -151,13 +151,13 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .readiness-summary strong {font-size:16px;color:#243851;}
 .readiness-summary p {margin:8px 0 0;font-size:13px;}
 .readiness-list {display:grid;gap:14px;}
-.readiness-card {border:1px solid #e0e6ef;border-radius:16px;padding:18px;background:#fff;}
-.readiness-card h3 {font-size:14px;overflow-wrap:anywhere;margin:0 0 8px;}
-.readiness-card p,.readiness-card li {font-size:13px;overflow-wrap:anywhere;}
-.readiness-card ul {padding-left:20px;line-height:1.7;}
-.readiness-card li span {display:block;color:#69788b;font-size:12px;}
-.readiness-card textarea {width:100%;min-height:88px;resize:vertical;margin:8px 0 14px;padding:12px;border:1px solid #d8e2f0;border-radius:12px;background:#f7f9fc;color:#243851;font:inherit;font-size:13px;line-height:1.6;}
-.readiness-card textarea:focus {outline:2px solid #7590f5;outline-offset:2px;}
+:is(.readiness-card,.collection-review-item) {border:1px solid #e0e6ef;border-radius:16px;padding:18px;background:#fff;}
+:is(.readiness-card,.collection-review-item) h3 {font-size:14px;overflow-wrap:anywhere;margin:0 0 8px;}
+:is(.readiness-card,.collection-review-item) p,:is(.readiness-card,.collection-review-item) li {font-size:13px;overflow-wrap:anywhere;}
+:is(.readiness-card,.collection-review-item) ul {padding-left:20px;line-height:1.7;}
+:is(.readiness-card,.collection-review-item) li span {display:block;color:#69788b;font-size:12px;}
+:is(.readiness-card,.collection-review-item) textarea {width:100%;min-height:88px;resize:vertical;margin:8px 0 14px;padding:12px;border:1px solid #d8e2f0;border-radius:12px;background:#f7f9fc;color:#243851;font:inherit;font-size:13px;line-height:1.6;}
+:is(.readiness-card,.collection-review-item) textarea:focus {outline:2px solid #7590f5;outline-offset:2px;}
 .readiness-footer p {font-size:13px;color:#69788b;}
 .review-check {display:flex;align-items:flex-start;gap:10px;line-height:1.6;font-size:13px;margin:16px 0;}
 .review-check input {width:18px;height:18px;flex-shrink:0;margin:3px 0;}
@@ -190,3 +190,16 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 @media(max-width:700px){.bulk-move-bar{align-items:flex-start;flex-direction:column}.bulk-move-bar>div:last-child{width:100%}}
 
 #handover-dialog{width:min(680px,calc(100vw - 32px));max-width:680px;max-height:85vh;overflow:auto}.handover-selection{border:1px solid #dce5f3;border-radius:14px;padding:16px;margin:22px 0}.handover-selection legend{font-size:13px;font-weight:600;color:#344867}.handover-selection label{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e7edf5}.handover-selection label:last-child{border:0}.handover-selection input{width:18px;height:18px;flex-shrink:0;margin:2px 0;accent-color:var(--blue)}.handover-selection strong{font-size:13px}.handover-selection small{display:block;font-size:10px;color:#65768e;margin-top:6px;overflow-wrap:anywhere}#handover-prepared{font-size:12px;color:#24724a;line-height:1.8;overflow-wrap:anywhere}#handover-error,.handover-download-error{color:#a74444;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.handover-history-card{padding:20px;border:1px solid #cad9f2;border-radius:14px;background:linear-gradient(135deg,#f2f7ff,#fff);margin:20px 0}.handover-history-card h3{font-size:15px;overflow-wrap:anywhere}.handover-history-card p{font-size:12px;line-height:1.8;color:#65768e}#prepare-handover{margin:4px 0 18px}#prepare-history-handover{margin-bottom:4px}
+
+.collection-review{margin-top:28px;scroll-margin-top:24px}
+.collection-review h2{font-size:26px;letter-spacing:-.7px}
+.collection-review-trolleys{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}
+.review-trolley-card{background:linear-gradient(145deg,#f3f7ff,#fff);border:1px solid #dae4f2;border-radius:18px;padding:20px;min-width:0}
+.review-trolley-card h3{margin:0;font-size:17px;overflow-wrap:anywhere}
+.review-trolley-card p{font-size:13px;line-height:1.7;color:#61718a}
+.review-trolley-card progress{width:100%;height:10px;accent-color:#3659e3;margin:0 0 16px}
+.collection-review-filters{display:grid;grid-template-columns:1fr 1fr;gap:16px;border-top:1px solid #e1e8f2;padding-top:24px}
+.collection-review-filters label{display:block;margin-bottom:8px;font-size:13px;font-weight:600}
+.collection-review-filters select{width:100%;min-width:0}
+.collection-review :is(.readiness-card,.collection-review-item) .secondary{margin-right:12px;margin-bottom:8px}
+@media(max-width:700px){.collection-review-trolleys,.collection-review-filters{grid-template-columns:1fr}.collection-review .section-top{align-items:flex-start;flex-direction:column;gap:12px}.collection-review h2{font-size:22px}.review-trolley-card{padding:16px}}
