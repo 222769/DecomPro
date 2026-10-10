@@ -36,22 +36,26 @@ export function recognizeSerial(value,examples) {
   if(result.method!=='conflict')return result;
   conflict ||= result;
  }
+ // Conflicting established families take priority over a sparse suffix match.
+ // One similar unit must not hide the models already known in that family.
  if(conflict)return conflict;
+ const compatible=facts.filter(f=>shape(f.serial)===shape(serial));
  // Conservative evidence: same complete shape, literal prefix, at least three
  // distinct examples and unanimous model/manufacturer. Never guess from brand alone.
- const compatible=facts.filter(f=>shape(f.serial)===shape(serial));
  for(let length=Math.min(8,serial.length-3);length>=3;length--) {
   const prefix=serial.slice(0,length),matches=compatible.filter(f=>f.serial.startsWith(prefix));
   if(new Set(matches.map(f=>f.serial)).size<3)continue;
   return describe(matches,'pattern',prefix);
  }
- // A single reference can suggest a neighbouring unit only when the serial is
- // long, has the same format, and differs in one suffix character. Require a
- // long literal prefix; this is a reviewed suggestion, never an exact match.
+ // Serial families can have several changing production-counter characters.
+ // A long shared literal prefix plus the same complete format is evidence for
+ // a tentative family suggestion, even when only one reference is available.
+ // Consider every reference in that family, not just the closest unit: mixed
+ // models keep the model uncertain and mixed brands prevent brand prefilling.
  if(serial.length>=10) {
   const length=Math.max(8,Math.ceil(serial.length*.75)),prefix=serial.slice(0,length);
-  const neighbours=compatible.filter(f=>f.serial.startsWith(prefix)&&[...serial].filter((char,index)=>char!==f.serial[index]).length===1);
-  if(neighbours.length)return {...describe(neighbours,'similar',prefix),referenceSerials:[...new Set(neighbours.map(f=>f.serial))]};
+  const family=compatible.filter(f=>f.serial.startsWith(prefix));
+  if(family.length)return {...describe(family,'similar',prefix),referenceSerials:[...new Set(family.map(f=>f.serial))]};
  }
  return null;
 }

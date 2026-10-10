@@ -61,3 +61,23 @@ test('mixed-model serial families suggest only a unanimous manufacturer with dis
  assert.equal(recognizeSerial('BRND1001',[...examples,{...examples[0],manufacturer:'Other maker'}]).manufacturer,undefined);
  assert.equal(recognizeSerial('UNRELATED1999',examples),null);
 });
+
+test('long serial families support changing suffix counters across manufacturers without hardcoded serials',()=>{
+ const posiflex=[{serial:'001917BD323B',model:'XTE30722',manufacturer:'posiflex'}];
+ for(const serial of ['001917BD354B','001917BD365B','001917BD399B']) {
+  const match=recognizeSerial(serial,posiflex);assert.equal(match.method,'similar');assert.equal(match.prefix,'001917BD3');assert.equal(match.model,'XTE30722');assert.equal(match.manufacturer,'posiflex');assert.equal(match.support,1);assert.deepEqual(match.referenceSerials,['001917BD323B']);
+ }
+ const other=[{serial:'ABCD12345001',model:'Dock X',manufacturer:'Other maker'}];
+ const match=recognizeSerial('ABCD12345987',other);assert.equal(match.method,'similar');assert.equal(match.model,'Dock X');assert.equal(match.manufacturer,'Other maker');assert.equal(match.prefix,'ABCD12345');
+ assert.equal(recognizeSerial('ABCD99945987',other),null);assert.equal(recognizeSerial('ABCD12345ABC',other),null);assert.equal(recognizeSerial('OTHER12345987',other),null);
+ assert.equal(recognizeSerial('001917BD999B',posiflex),null);
+});
+
+test('sparse suffix matches never override an established conflicting model or manufacturer family',()=>{
+ const sameBrand=[{serial:'ABCD12345001',model:'Dock X',manufacturer:'Other maker'},{serial:'ABCD99999001',model:'Dock Y',manufacturer:'Other maker'}];
+ const match=recognizeSerial('ABCD12345987',sameBrand);assert.equal(match.method,'conflict');assert.equal(match.model,undefined);assert.equal(match.manufacturer,'Other maker');assert.equal(match.candidates.length,2);
+ const mixed=recognizeSerial('ABCD12345987',[sameBrand[0],{...sameBrand[1],manufacturer:'Different maker'}]);assert.equal(mixed.model,undefined);assert.equal(mixed.manufacturer,undefined);
+ const shortPrefix=[['ABC012345678','Dock X'],['ABC912345678','Dock Y'],['ABC812345678','Dock Z']].map(([serial,model])=>({serial,model,manufacturer:'Maker'}));
+ assert.equal(recognizeSerial('ABC012345999',shortPrefix).method,'conflict');
+ const contradictory=recognizeSerial('001917BD354B',[{serial:'001917BD323B',model:'XTE30722',manufacturer:'posiflex'},{serial:'001917BD323B',model:'Other model',manufacturer:'posiflex'}]);assert.equal(contradictory.method,'conflict');assert.equal(contradictory.model,undefined);assert.equal(contradictory.manufacturer,'posiflex');
+});

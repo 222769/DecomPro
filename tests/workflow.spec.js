@@ -455,7 +455,7 @@ test('shared technicians receive reviewed models but cannot change the reference
 });
 
 test('nearby Posiflex serial prefills from the spreadsheet and requires label confirmation before learning',async({page})=>{
- await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Similar serial suggestion (reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
+ await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Serial family suggestion (prefix 001917BD3; reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
  for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(0);
  await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD324B');await expect(page.locator('tbody')).toContainText('XTE30722');await page.reload();await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial');
 });
@@ -595,4 +595,19 @@ test('shared readiness preserves failed review notes, rejects stale approval and
  await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.review-error')).toContainText('Review save denied');await expect(page.getByLabel('Why is model unavailable?')).toHaveValue('Checked; model label missing');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);
  await page.evaluate(()=>window.failNotes=false);await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.readiness-summary')).toContainText('0 unresolved issues');await page.getByLabel('I checked these items and any recorded exceptions').check();await page.getByRole('button',{name:'Mark ready for collection'}).click();await expect(page.locator('#readiness-error')).toContainText('inventory changed');expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')))).trolleys[0].status).toBe('open');
  await page.getByRole('button',{name:'Back to trolleys'}).click();await readyTrolley(page);await expect(page.locator('.trolley-card')).toContainText('Ready for collection');const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.trolleys[0].readyBy).toBe('TT');expect(state.draft.serial).toBe('KEEP-SHARED-READINESS');expect(await page.evaluate(()=>window.readyAttempts)).toEqual([2,3]);
+});
+
+test('new Posiflex suffixes infer from built-in Excel, retain evidence and require checking before becoming learned exact matches',async({page})=>{
+ await page.goto('/');
+ for(const serial of ['001917BD365B','001917BD354B']) {
+  await scan(page,serial);await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
+  await expect(page.getByRole('status')).toContainText('Serial family suggestion (prefix 001917BD3; reference 001917BD323B): XTE30722 · posiflex');
+  await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('1 distinct serial');await expect(page.locator('.recognition-evidence')).toContainText('Built-in Excel');await expect(page.locator('.recognition-evidence')).toContainText('label check required');
+  if(serial==='001917BD365B'){page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Clear current item'}).click();await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();}
+ }
+ await page.reload();await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');
+ const draft=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft);expect(draft.serial).toBe('001917BD354B');expect(draft.model).toBe('XTE30722');expect(draft.recognitionNeedsReview).toBe(true);expect(draft.recognitionConfirmed).toBe(false);
+ for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');
+ await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD354B');await expect(page.locator('tbody')).toContainText('XTE30722');
+ await page.reload();await scan(page,'001917BD354B');await expect(page.getByRole('status')).toContainText('Known serial');await expect(page.locator('.recognition-evidence')).toContainText('Saved equipment');
 });
