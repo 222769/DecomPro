@@ -1,3 +1,4 @@
+import {checkReadiness} from './readiness.js';
 import {jsPDF} from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
@@ -8,7 +9,7 @@ const dateTime=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Europe/L
 
 // This is a snapshot of the supplied register, not a write or a collection action.
 export async function trolleyManifest(trolley,register,url,{cached=false,printedAt=new Date().toISOString()}={}) {
- const items=register.filter(item=>trolleyForItem(item,trolley));
+ const items=register.filter(item=>trolleyForItem(item,trolley)),review=checkReadiness(trolley,register);
  const pdf=new jsPDF({unit:'mm',format:'a4'}),left=16,right=194,bottom=273;
  const columns=[['#',8],['Serial number',42],['Asset',20],['Manufacturer',31],['Model',51],['Disposed by',26]];
  const barcode=document.createElement('canvas');
@@ -25,7 +26,7 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
   pdf.setTextColor(20,38,62);y=23;
   line('Property of TSU - '+trolley.department,11,true,138);
   line(trolley.reference,9,true,138);
-  line(`${items.length} item${items.length===1?'':'s'} | ${trolley.status==='collected'?'COLLECTED':'AWAITING COLLECTION'}`,9,false,138);
+  line(`${items.length} item${items.length===1?'':'s'} | ${trolley.status==='collected'?'COLLECTED':trolley.status==='ready'?'READY FOR COLLECTION':'AWAITING COLLECTION'}`,9,false,138);
   pdf.addImage(qr,'PNG',159,16,35,35);pdf.link(159,16,35,35,{url});
   pdf.setFontSize(7);pdf.text('QR: live team inventory',176.5,54,{align:'center'});
   pdf.addImage(barcodeImage,'PNG',left,52,138,17);
@@ -35,6 +36,8 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
    line('Collection company: '+(trolley.status==='collected'?trolley.company:'________________________________________'));
    line('Collection date: '+(trolley.status==='collected'?dateTime(trolley.collectedAt)+' (UK time)':'________________________________________'));
    if(trolley.status==='collected')line('Collection recorded by: '+trolley.collectedBy);
+   if(trolley.readyAt)line('Readiness checked: '+dateTime(trolley.readyAt)+' (UK time) by '+trolley.readyBy);
+   if(trolley.status!=='collected'&&review.unresolved.length)line(`READINESS ISSUES: ${review.unresolved.length} unresolved - review before handover.`,9,true);
    if(cached)line('CACHED WORKSPACE SNAPSHOT - reconnect to confirm the latest team inventory.',9,true);
   } else line(heading,10,true);
  }
@@ -42,7 +45,7 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
   pdf.setFillColor(232,238,245);pdf.rect(left,y,right-left,9,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(8);
   let x=left;for(const [label,width] of columns){pdf.text(label,x+2,y+6);x+=width;}y+=9;
  }
- function nextPage(table=false) {pdf.addPage();header(false,table?'Inventory continued':'Collection handover');if(table)tableHeader();}
+ function nextPage(table=false,heading='Collection handover') {pdf.addPage();header(false,table?'Inventory continued':heading);if(table)tableHeader();}
  header(true);tableHeader();
  if(!items.length){y+=9;line('No equipment recorded in this trolley.',10);}
  items.forEach((item,index)=>{
@@ -60,6 +63,18 @@ export async function trolleyManifest(trolley,register,url,{cached=false,printed
    pdf.setDrawColor(218,225,234);pdf.line(left,y+rowHeight,right,y+rowHeight);y+=rowHeight;offset+=take;
   }
  });
+ const exceptions=review.issues.filter(issue=>issue.kind==='missing'&&issue.resolved);
+ if(exceptions.length) {
+  if(bottom-y<20)nextPage(false,'Recorded exceptions');else y+=10;
+  line('Recorded exceptions',11,true);
+  for(const issue of exceptions) {
+   const index=items.findIndex(item=>item.id===issue.itemId);
+   pdf.setFont('helvetica','normal');pdf.setFontSize(9);
+   const lines=pdf.splitTextToSize(text(`Item ${index+1} - ${issue.field}: ${issue.note}`),right-left);
+   for(const value of lines){if(bottom-y<7)nextPage(false,'Recorded exceptions');pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.text(value,left,y);y+=4;}
+   y+=3;
+  }
+ }
  // Keep signatures together and leave enough room for handwriting.
  if(bottom-y<66)nextPage();else y+=10;
  line('Handover confirmation',11,true);

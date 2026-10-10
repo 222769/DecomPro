@@ -1,3 +1,4 @@
+import {validateReadinessNotes} from './readiness.js';
 import {validateEvidence} from './recognition-evidence.js';
 import { fields } from './data';
 import { cleanExamples } from './recognition';
@@ -47,6 +48,8 @@ export function validateWorkspace(value) {
       if (!text(item[key])) throw Error('The backup has an incomplete equipment record.');
       clean[key] = item[key];
     }
+    if(item.readinessNotes!==undefined)clean.readinessNotes=validateReadinessNotes(item.readinessNotes);
+    for(const flag of ['recognitionNeedsReview','recognitionConfirmed'])if(item[flag]!==undefined){if(typeof item[flag]!=='boolean')throw Error('Invalid saved recognition review state.');clean[flag]=item[flag];}
     return clean;
   });
   const draft = {};

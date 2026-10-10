@@ -9,7 +9,7 @@ export async function trolleyLabel(trolley,count,url) {
  pdf.setFontSize(13);pdf.text(pdf.splitTextToSize(trolley.department,174),18,34);
  pdf.setFontSize(12);pdf.text('IT EQUIPMENT DECOMMISSIONING',18,56);
  pdf.setTextColor(20,38,62);pdf.setFontSize(22);const nameLines=pdf.splitTextToSize(trolley.name,174);if(nameLines.length>3){nameLines.length=3;nameLines[2]=nameLines[2].slice(0,-3)+'...';}pdf.text(nameLines,18,83);
- pdf.setFontSize(13);pdf.text(`${count} item${count===1?'':'s'}  |  ${trolley.status==='collected'?'COLLECTED':'AWAITING COLLECTION'}`,18,115);
+ pdf.setFontSize(13);pdf.text(`${count} item${count===1?'':'s'}  |  ${trolley.status==='collected'?'COLLECTED':trolley.status==='ready'?'READY FOR COLLECTION':'AWAITING COLLECTION'}`,18,115);
  const canvas=document.createElement('canvas');
  JsBarcode(canvas,trolley.reference,{format:'CODE128',width:3,height:135,displayValue:false,margin:16});
  pdf.addImage(canvas.toDataURL('image/png'),'PNG',16,126,178,42);

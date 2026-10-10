@@ -1,3 +1,4 @@
+import {checkReadiness,readinessFields,validateReadinessNotes} from './readiness.js';
 import { fields, headers, supplierRow, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
 import './style.css';
 import { cleanExamples, referenceRowsFromWorkbook } from './recognition';
@@ -33,6 +34,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 let state = { captureOrder:'serial-first', activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[], referenceCorrections:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
 let sharedClient = null;
+let readinessSession=0;
 let connectionPhase='syncing',lastConfirmedAt='',historySearch='';
 let sharedLocked = false;
 let saving=false, exporting=false, editingVersion=0;
@@ -138,8 +140,8 @@ async function saveItem() {
  document.querySelector('#save-feedback').textContent=sharedClient?'Saving to the shared team database…':'Saving item…';
  try {
   const trolley=await resolveTrolley(batch.trolley);
-  if(trolley.status==='collected')throw Error('This trolley has been collected. Select or create an open trolley before saving.');
-  const item={...batch,trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
+  if(trolley.status!=='open')throw Error('This trolley is ready or collected. Reopen a ready trolley or select an open trolley before saving.');
+  const item={...batch,...(state.draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:state.draft.recognitionNeedsReview,recognitionConfirmed:state.draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
   if(sharedClient)await sharedClient.write(item);
   const next={...state,defaults:batch,items:[...state.items.filter(i=>i.id!==item.id),item],draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:0};
   // A local save must reach storage before clearing the scanned draft.
@@ -194,7 +196,7 @@ function bind() {
   const button=e.target.closest('button');if(!button)return;
   if(button.dataset.edit) openEditor(button.dataset.edit);
   if(button.dataset.delete && writable() && confirm('Remove this item from the collection register?')) {
-   try {const item=state.items.find(i=>i.id===button.dataset.delete);if(state.trolleys.some(t=>t.status==='collected'&&trolleyForItem(item,t)))throw Error('Collected trolley contents are locked and retained for history.');if(sharedClient)await sharedClient.write(item,sharedClient.versionFor(item.id),{deleted:true});state.items=state.items.filter(i=>i.id!==button.dataset.delete);persist();render();}
+   try {const item=state.items.find(i=>i.id===button.dataset.delete);if(state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before changing equipment.');if(sharedClient)await sharedClient.write(item,sharedClient.versionFor(item.id),{deleted:true});state.items=state.items.filter(i=>i.id!==button.dataset.delete);persist();render();}
    catch(error){notice=`Removal failed. ${error.message}`;render();}
   }
  };
@@ -221,7 +223,7 @@ function openTrolley() {
  document.querySelector('#trolley-form').onsubmit=async e=>{
   e.preventDefault();const trolley=document.querySelector('#trolley-name').value.trim();
   if(!trolley){document.querySelector('#trolley-error').textContent='Enter a trolley name.';return;}
-  try{const record=await resolveTrolley(trolley);if(record.status==='collected')throw Error('This trolley has been collected. Select or create an open trolley.');commitTrolleyWorkspace({...state,activeTrolleyId:record.id,defaults:{...state.defaults,trolley}});notice=`New items will be recorded in ${trolley}.`;render();}
+  try{const record=await resolveTrolley(trolley);if(record.status!=='open')throw Error('This trolley is ready or collected. Select or create an open trolley.');commitTrolleyWorkspace({...state,activeTrolleyId:record.id,defaults:{...state.defaults,trolley}});notice=`New items will be recorded in ${trolley}.`;render();}
   catch(error){document.querySelector('#trolley-error').textContent=error.message;}
  };
 }
@@ -249,8 +251,9 @@ function viewTrolley(id) {
  document.querySelector('#inventory').scrollIntoView({behavior:'smooth'});
 }
 function openTrolleyManager() {
+ readinessSession++;
  const dialog=document.querySelector('#trolley-manager');
- dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Edit department</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
+ dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':t.status==='ready'?'Ready for collection':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Edit department</button><button class="primary" data-readiness="${escape(t.id)}">Readiness checks</button>`:t.status==='ready'?`<button class="secondary" data-readiness="${escape(t.id)}">Review checks</button><button class="text-button" data-reopen="${escape(t.id)}">Reopen trolley</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
  dialog.showModal();
  document.querySelector('#close-trolley-manager').onclick=()=>dialog.close();
  document.querySelector('#trolley-lookup-form').onsubmit=e=>{e.preventDefault();const record=findTrolley(document.querySelector('#trolley-lookup').value,state.trolleys);if(record)viewTrolley(record.id);else document.querySelector('#trolley-manager-error').textContent='Trolley not found in this workspace. Check the barcode or connect to the correct team.';};
@@ -264,7 +267,7 @@ function openTrolleyManager() {
   catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
  dialog.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>viewTrolley(button.dataset.view));
- dialog.querySelectorAll('[data-use]').forEach(button=>button.onclick=()=>{const trolley=state.trolleys.find(t=>t.id===button.dataset.use);try{if(!writable())return;if(trolley.status==='collected')throw Error('This trolley has been collected.');commitTrolleyWorkspace({...state,activeTrolleyId:trolley.id,defaults:{...state.defaults,trolley:trolley.name}});notice=`New items will be recorded in ${trolley.name}.`;render();}catch(error){document.querySelector('#trolley-manager-error').textContent=error.message;}});
+ dialog.querySelectorAll('[data-use]').forEach(button=>button.onclick=()=>{const trolley=state.trolleys.find(t=>t.id===button.dataset.use);try{if(!writable())return;if(trolley.status!=='open')throw Error('This trolley is ready or collected. Reopen it before adding equipment.');commitTrolleyWorkspace({...state,activeTrolleyId:trolley.id,defaults:{...state.defaults,trolley:trolley.name}});notice=`New items will be recorded in ${trolley.name}.`;render();}catch(error){document.querySelector('#trolley-manager-error').textContent=error.message;}});
  dialog.querySelectorAll('[data-label]').forEach(button=>button.onclick=async()=>{
   button.disabled=true;
   try{if(!sharedClient)commitTrolleyWorkspace({...state});const trolley=state.trolleys.find(t=>t.id===button.dataset.label);const {trolleyLabel}=await import('./trolley-label');const url=new URL(location.href);url.hash=`trolley/${trolley.id}`;const data=await trolleyLabel(trolley,state.items.filter(item=>trolleyForItem(item,trolley)).length,url.href);downloadFile(data,`${trolley.reference}.pdf`,'application/pdf');}
@@ -282,9 +285,81 @@ function openTrolleyManager() {
   }catch(error){document.querySelector('#trolley-manager-error').textContent=`Manifest failed: ${error.message}`;}
   finally{button.disabled=false;}
  });
+ dialog.querySelectorAll('[data-readiness]').forEach(button=>button.onclick=()=>openReadiness(button.dataset.readiness));
+ dialog.querySelectorAll('[data-reopen]').forEach(button=>button.onclick=async()=>{
+  if(!writable())return;button.disabled=true;
+  const client=sharedClient,trolley=state.trolleys.find(t=>t.id===button.dataset.reopen),version=client?.trolleyVersionFor(trolley.id)||0;
+  try{
+   if(trolley.status!=='ready')throw Error('Only ready trolleys can be reopened.');
+   const updated={...trolley,status:'open',readyAt:'',readyBy:''};
+   if(client)await client.writeTrolley(updated,version);
+   if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the trolley status.');
+   commitTrolleyWorkspace({...state,trolleys:state.trolleys.map(t=>t.id===updated.id?updated:t)});dialog.close();openTrolleyManager();
+   document.querySelector('#trolley-manager-error').textContent='Trolley reopened. Run readiness checks again after making changes.';
+  }catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+ });
  dialog.querySelectorAll('[data-collect],[data-details]').forEach(button=>button.onclick=()=>openTrolleyDetails(button.dataset.collect||button.dataset.details,Boolean(button.dataset.collect)));
 }
+async function openReadiness(id) {
+ const session=++readinessSession,client=sharedClient,dialog=document.querySelector('#trolley-manager');
+ let trolley=state.trolleys.find(t=>t.id===id),register=state.items,version=client?.trolleyVersionFor(id)||0;
+ dialog.innerHTML='<h2>Collection readiness</h2><p>Checking the equipment register…</p><p id="readiness-error" role="alert"></p><button class="secondary" id="close-readiness">Back to trolleys</button>';
+ dialog.showModal();dialog.querySelector('#close-readiness').onclick=()=>{dialog.close();openTrolleyManager();};
+ try {
+  if(sharedLocked&&!client)throw Error('Reconnect to Firebase before reviewing shared readiness.');
+  if(client){const snapshot=await client.readinessSnapshot(id);trolley=snapshot.trolley;register=snapshot.items;version=snapshot.version;}
+  if(session!==readinessSession||client!==sharedClient||!dialog.open)return;
+  if(!trolley||trolley.status==='collected')throw Error('This trolley has already been collected or is unavailable.');
+  if(client){state.items=register;state.trolleys=state.trolleys.map(t=>t.id===id?trolley:t);persist();updateRegister();updateHistory();}
+  const review=checkReadiness(trolley,register,{shared:Boolean(client)}),fingerprint=JSON.stringify(register);
+  const itemVersions=new Map(review.items.map(item=>[item.id,client?.versionFor(item.id)||0]));
+  const affected=review.items.filter(item=>review.issues.some(issue=>issue.itemId===item.id));
+  dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Collection readiness</h2><p>${escape(trolley.name)} · ${escape(trolley.reference)}</p><div class="readiness-summary ${review.canReady?'clear':'attention'}"><strong>${review.items.length} item${review.items.length===1?'':'s'} · ${review.unresolved.length} unresolved issue${review.unresolved.length===1?'':'s'}</strong><p>${!review.items.length?'Add equipment before marking this trolley ready.':review.canReady?'The records are ready for a final physical check.':'Correct duplicates and unchecked suggestions. Explain unavailable details below.'}</p></div>${trolley.status==='ready'?`<p>Ready since ${escape(new Date(trolley.readyAt).toLocaleString('en-GB',{timeZone:'Europe/London'}))} · ${escape(trolley.readyBy)}. Reopen the trolley to change its records.</p>`:''}<div class="readiness-list">${affected.map(item=>{
+   const issues=review.issues.filter(issue=>issue.itemId===item.id);
+   return `<article class="readiness-card" data-readiness-item="${escape(item.id)}"><h3>Item ${review.items.indexOf(item)+1} · ${escape(item.serial)} · ${escape(item.model)}</h3><p>${escape(item.manufacturer)} · Asset ${escape(item.asset)}</p><ul>${issues.map(issue=>`<li>${escape(issue.message)}${issue.kind==='duplicate'?`<span>Also recorded in ${escape([...new Set(register.filter(row=>issue.otherIds.includes(row.id)).map(row=>row.trolley))].join(', '))}</span>`:''}${issue.resolved?'<span>Reason recorded</span>':''}</li>`).join('')}</ul>${trolley.status==='open'?`<form data-review-notes="${escape(item.id)}">${issues.filter(issue=>issue.kind==='missing').map(issue=>`<label for="note-${escape(item.id)}-${issue.field}">Why is ${issue.field==='serial'?'the serial number':issue.field} unavailable?</label><textarea id="note-${escape(item.id)}-${issue.field}" name="${issue.field}" maxlength="500" rows="2" placeholder="e.g. Label missing; checked casing and base">${escape(issue.note)}</textarea>`).join('')}${issues.some(issue=>issue.kind==='recognition')?`<label class="review-check"><input type="checkbox" name="confirmed"> I checked the model and manufacturer against this equipment.</label>`:''}${issues.some(issue=>['missing','recognition'].includes(issue.kind))?'<button class="secondary">Save review notes</button>':''}<p class="review-error" role="alert"></p></form><button class="text-button" data-fix-item="${escape(item.id)}">Edit equipment record</button>`:''}</article>`;
+  }).join('')}</div>${!affected.length&&review.items.length?'<p class="readiness-clear">No missing details, duplicates or unchecked suggestions found.</p>':''}<form id="mark-ready-form" class="readiness-footer">${trolley.status==='open'?`${review.canReady?'<label class="review-check"><input type="checkbox" id="ready-confirm" required> I checked these items and any recorded exceptions before collection.</label>':'<p>Resolve the issues above before confirming the trolley.</p>'}<button class="primary wide" ${!review.canReady?'disabled':''}>Mark ready for collection</button>`:''}<p id="readiness-error" role="alert"></p><button class="secondary wide" type="button" id="close-readiness">Back to trolleys</button></form>`;
+  dialog.querySelector('#close-readiness').onclick=()=>{dialog.close();openTrolleyManager();};
+  const reviewWritable=output=>{
+   if(client!==sharedClient||(sharedLocked&&(!client||navigator.onLine===false))){output.textContent='Reconnect to Firebase before saving this review. Your entered notes stay here.';return false;}
+   return true;
+  };
+  dialog.querySelectorAll('[data-fix-item]').forEach(button=>button.onclick=()=>{readinessSession++;dialog.close();openEditor(button.dataset.fixItem);});
+  dialog.querySelectorAll('[data-review-notes]').forEach(form=>form.onsubmit=async e=>{
+   e.preventDefault();
+   const original=review.items.find(item=>item.id===form.dataset.reviewNotes),error=form.querySelector('.review-error'),button=form.querySelector('button');
+   if(!reviewWritable(error))return;
+   button.disabled=true;
+   try {
+    const data=new FormData(form),notes={...original.readinessNotes};
+    for(const field of readinessFields)if(data.has(field))notes[field]=data.get(field);
+    const updated={...original,readinessNotes:validateReadinessNotes(notes),...(form.querySelector('[name=confirmed]')?{recognitionConfirmed:data.get('confirmed')==='on'}:{})};
+    if(client)await client.write(updated,itemVersions.get(original.id));
+    else if(JSON.stringify(state.items.find(item=>item.id===original.id))!==JSON.stringify(original))throw Error('This record changed. Reopen the review.');
+    if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the saved review.');
+    commitTrolleyWorkspace({...state,items:state.items.map(item=>item.id===updated.id?updated:item)});
+    if(session===readinessSession&&dialog.open)await openReadiness(id);
+   }catch(failure){error.textContent=firebaseErrorMessage(failure);button.disabled=false;}
+  });
+  dialog.querySelector('#mark-ready-form').onsubmit=async e=>{
+   e.preventDefault();
+   const output=dialog.querySelector('#readiness-error'),button=e.target.querySelector('.primary');
+   if(!reviewWritable(output))return;
+   if(!review.canReady||!button||!dialog.querySelector('#ready-confirm')?.checked)return;
+   button.disabled=true;
+   try {
+    if(session!==readinessSession||client!==sharedClient)throw Error('Workspace changed. Reopen readiness checks.');
+    if(!client&&(JSON.stringify(state.items)!==fingerprint||state.trolleys.find(t=>t.id===id)?.status!=='open'))throw Error('The register changed. Reopen readiness checks.');
+    const updated={...trolley,status:'ready',readyAt:new Date().toISOString(),readyBy:client?.profile.code||state.active};
+    if(client)await client.writeTrolley(updated,version);
+    if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the readiness status.');
+    commitTrolleyWorkspace({...state,trolleys:state.trolleys.map(t=>t.id===id?updated:t)});
+    dialog.close();openTrolleyManager();document.querySelector('#trolley-manager-error').textContent='Trolley ready for collection. Print its PDF manifest for handover. Reopen it to change equipment.';
+   }catch(failure){output.textContent=firebaseErrorMessage(failure);button.disabled=false;}
+  };
+ }catch(error){if(session===readinessSession&&dialog.open)dialog.querySelector('#readiness-error').textContent=firebaseErrorMessage(error);}
+}
 function openTrolleyDetails(id,collecting) {
+ readinessSession++;
  const trolley=state.trolleys.find(t=>t.id===id),expectedVersion=sharedClient?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');
  dialog.innerHTML=`<form id="trolley-details-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>${collecting?'Mark trolley collected':'Edit trolley department'}</h2><p>${escape(trolley.name)} · ${state.items.filter(item=>trolleyForItem(item,trolley)).length} items</p>${collecting?'<p>Collection locks this trolley against new equipment and retains its inventory.</p><label for="collection-company">Decommission company</label><input id="collection-company" name="company" required maxlength="100" placeholder="Company collecting this trolley">':`<label for="edit-trolley-department">Owning department</label><input id="edit-trolley-department" name="department" required maxlength="100" value="${escape(trolley.department)}">`}<p id="trolley-manager-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley-details">Cancel</button><button class="primary">${collecting?'Confirm collection':'Save department'}</button></div></form>`;
  document.querySelector('#cancel-trolley-details').onclick=()=>{dialog.close();openTrolleyManager();};
@@ -292,6 +367,7 @@ function openTrolleyDetails(id,collecting) {
   e.preventDefault();if(!writable())return;const button=e.target.querySelector('.primary');button.disabled=true;
   try{
    const data=new FormData(e.target);
+   if(collecting&&(trolley.status!=='ready'||!checkReadiness(trolley,state.items,{shared:Boolean(sharedClient)}).canReady))throw Error('Run readiness checks and resolve all issues before collection.');
    const updated=collecting?{...trolley,status:'collected',company:data.get('company').trim(),collectedAt:new Date().toISOString(),collectedBy:sharedClient?.profile.code||state.active}:{...trolley,department:data.get('department').trim()};
    if(sharedClient)await sharedClient.writeTrolley(updated,expectedVersion);
    const trolleys=state.trolleys.map(row=>row.id===id?updated:row),defaults={...state.defaults};
@@ -481,7 +557,7 @@ function updateRegister() {
  const items=filteredItems(scope,search);
  document.querySelector('#inventory-title').textContent=selected?`${selected.name} inventory`:'Ready for the next collection';
  const banner=document.querySelector('#trolley-inventory-banner');
- banner.innerHTML=trolleyViewId?`<div class="trolley-inventory-banner"><div><strong>${selected?escape(selected.reference):'Trolley not found in this workspace'}</strong><p>${selected?`Property of TSU - ${escape(selected.department)} · ${selected.status==='collected'?`Collected by ${escape(selected.company)}`:'Open for equipment'}`:'Connect to the team database that owns this trolley.'}</p></div><button class="secondary" id="show-all-trolleys">Show all inventory</button></div>`:'';
+ banner.innerHTML=trolleyViewId?`<div class="trolley-inventory-banner"><div><strong>${selected?escape(selected.reference):'Trolley not found in this workspace'}</strong><p>${selected?`Property of TSU - ${escape(selected.department)} · ${selected.status==='collected'?`Collected by ${escape(selected.company)}`:selected.status==='ready'?'Ready for collection - reopen before changing equipment':'Open for equipment'}`:'Connect to the team database that owns this trolley.'}</p></div><button class="secondary" id="show-all-trolleys">Show all inventory</button></div>`:'';
  document.querySelector('#show-all-trolleys')?.addEventListener('click',()=>{location.hash='inventory';});
  document.querySelector('#search-count').textContent=`Showing ${items.length} of ${scope.length} items`;
  document.querySelector('.register .count').textContent=scope.length;
@@ -521,9 +597,10 @@ function openEditor(id) {
  editingVersion=sharedClient?.versionFor(id)||0;
  editingId=id;
  const dialog=document.querySelector('#edit-dialog');
- dialog.innerHTML=`<form id="edit-form"><div class="eyebrow">COLLECTION REGISTER</div><h2>Edit equipment</h2><p>Correct the saved record without rescanning it.</p><div class="edit-grid">${[...defaultFields,...fields.map(([key,label])=>[key,label,'text'])].map(([key,label,type])=>`<div><label for="edit-${key}">${escape(label)}</label><input id="edit-${key}" name="${key}" type="${type}" value="${escape(item[key])}" maxlength="1000" required></div>`).join('')}<div><label for="edit-technician">Recorded technician</label><select id="edit-technician" name="technician" ${sharedClient?'disabled':''}>${[...new Set([item.technician,...state.profiles.map(p=>p.code)])].map(code=>`<option value="${escape(code)}" ${code===item.technician?'selected':''}>${escape(state.profiles.find(p=>p.code===code)?.name||code)} · ${escape(code)}</option>`).join('')}</select></div></div><p id="edit-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-edit">Cancel</button><button class="primary">Save changes</button></div></form>`;
+ dialog.innerHTML=`<form id="edit-form"><div class="eyebrow">COLLECTION REGISTER</div><h2>Edit equipment</h2><p>Correct the saved record without rescanning it.</p><div class="edit-grid">${[...defaultFields,...fields.map(([key,label])=>[key,label,'text'])].map(([key,label,type])=>`<div><label for="edit-${key}">${escape(label)}</label><input id="edit-${key}" name="${key}" type="${type}" value="${escape(item[key])}" maxlength="1000" required></div>`).join('')}<div><label for="edit-technician">Recorded technician</label><select id="edit-technician" name="technician" ${sharedClient?'disabled':''}>${[...new Set([item.technician,...state.profiles.map(p=>p.code)])].map(code=>`<option value="${escape(code)}" ${code===item.technician?'selected':''}>${escape(state.profiles.find(p=>p.code===code)?.name||code)} · ${escape(code)}</option>`).join('')}</select></div></div>${item.recognitionNeedsReview?`<label class="review-check"><input type="checkbox" id="edit-recognition-confirmed" ${item.recognitionConfirmed?'checked':''}> I checked the model and manufacturer against this equipment.</label>`:''}<p id="edit-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-edit">Cancel</button><button class="primary">Save changes</button></div></form>`;
  dialog.showModal();
  document.querySelector('#cancel-edit').onclick=()=>dialog.close();
+ if(item.recognitionNeedsReview)for(const id of ['edit-model','edit-manufacturer','edit-serial'])document.querySelector('#'+id).oninput=()=>{document.querySelector('#edit-recognition-confirmed').checked=false;};
  document.querySelector('#edit-form').onsubmit=async e=>{
   e.preventDefault();
   const values=Object.fromEntries([...new FormData(e.target)].map(([key,value])=>[key,value.trim()]));
@@ -534,9 +611,10 @@ function openEditor(id) {
   values.asset=normalizeAssetNumber(values.asset);
   if(duplicateSerial(state.items.filter(item=>item.id!==editingId),values.serial)){error.textContent='This serial number belongs to another item. Check it before saving.';return;}
   let destination;
-  try{destination=values.trolley===item.trolley?state.trolleys.find(t=>t.id===item.trolleyId)||await resolveTrolley(values.trolley):await resolveTrolley(values.trolley);if(destination.status==='collected'||state.trolleys.some(t=>t.status==='collected'&&trolleyForItem(item,t)))throw Error('Collected trolley contents are locked. Choose an open trolley for new equipment.');}
+  try{destination=values.trolley===item.trolley?state.trolleys.find(t=>t.id===item.trolleyId)||await resolveTrolley(values.trolley):await resolveTrolley(values.trolley);if(destination.status!=='open'||state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before editing.');}
   catch(failure){error.textContent=failure.message;return;}
-  const updated={...item,...values,trolleyId:destination.id};
+  const updated={...item,...values,trolleyId:destination.id,...(item.recognitionNeedsReview?{recognitionConfirmed:document.querySelector('#edit-recognition-confirmed').checked}:{})};
+  if(updated.readinessNotes){updated.readinessNotes={...updated.readinessNotes};for(const field of readinessFields)if(values[field]!==item[field])delete updated.readinessNotes[field];}
   const button=e.target.querySelector('button[type=submit]')||e.target.querySelector('.primary');button.disabled=true;
   try {if(sharedClient)await sharedClient.write(updated,editingVersion);state.items=state.items.map(row=>row.id===editingId?updated:row);notice='Equipment changes saved.';persist();render();}
   catch(failure){error.textContent=failure.message;button.disabled=false;}
@@ -585,9 +663,9 @@ async function uploadLocal() {
   const local=validateWorkspace(JSON.parse(localStorage.getItem(localWorkspaceKey)||'null'));
   if(!confirm(`Import ${local.items.length} historical local records? Each will be checked for duplicate IDs and serials.`)){button.disabled=false;return;}
   let added=0,blocked=0;const newlyCreated=new Set(),failedTrolleys=new Set();
-  for(const trolley of local.trolleys){if(sharedClient.trolleyVersionFor(trolley.id))continue;try{await sharedClient.writeTrolley({...trolley,status:'open',collectedAt:'',collectedBy:'',company:''},0);newlyCreated.add(trolley.id);}catch{failedTrolleys.add(trolley.id);}}
+  for(const trolley of local.trolleys){if(sharedClient.trolleyVersionFor(trolley.id))continue;try{await sharedClient.writeTrolley({...trolley,status:'open',readyAt:'',readyBy:'',collectedAt:'',collectedBy:'',company:''},0);newlyCreated.add(trolley.id);}catch{failedTrolleys.add(trolley.id);}}
   for(const item of local.items){try{if(failedTrolleys.has(item.trolleyId))throw Error('Trolley import failed');await sharedClient.write(item,0,{historicalImport:true});added++;}catch{blocked++;failedTrolleys.add(item.trolleyId);}}
-  for(const trolley of local.trolleys.filter(t=>t.status==='collected'&&newlyCreated.has(t.id)&&!failedTrolleys.has(t.id))){try{await sharedClient.writeTrolley(trolley,1,{historicalImport:true});}catch{blocked++;}}
+  for(const trolley of local.trolleys.filter(t=>t.status==='collected'&&newlyCreated.has(t.id)&&!failedTrolleys.has(t.id))){try{await sharedClient.writeTrolley(trolley,sharedClient.trolleyVersionFor(trolley.id),{historicalImport:true});}catch{blocked++;}}
   for(const correction of local.referenceCorrections){try{await sharedClient.writeCorrection(correction,0);}catch{blocked++;}}
   notice=`Imported ${added} historical records; ${blocked} not imported (duplicates, conflicts or errors). Your preserved local workspace is unchanged.`;render();
  }catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}

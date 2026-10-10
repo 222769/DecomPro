@@ -3,6 +3,12 @@ import ExcelJS from 'exceljs';
 import { headers } from '../src/data.js';
 import {readFile} from 'node:fs/promises';
 async function approveImport(page) {await expect(page.getByRole('heading',{name:'Spreadsheet import preview'})).toBeVisible();await page.getByRole('button',{name:'Import selected references'}).click();}
+async function readyTrolley(page,card=page) {
+ await card.getByRole('button',{name:'Readiness checks',exact:true}).click();
+ await expect(page.locator('.readiness-summary')).toContainText('0 unresolved issues');
+ await page.getByLabel('I checked these items and any recorded exceptions').check();
+ await page.getByRole('button',{name:'Mark ready for collection',exact:true}).click();
+}
 async function defaults(page) {
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
  await page.getByRole('button',{name:'Apply batch defaults'}).click();
@@ -120,7 +126,7 @@ test('trolley management creates labels, barcode inventory views and retained co
  const emptyPdf=(await readFile(await empty.path())).toString('latin1');expect(emptyPdf).toContain('No equipment recorded');expect(emptyPdf).not.toContain('TROLLEY-OLD-001');
  expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(beforeEmptyManifest);
  await card.getByRole('button',{name:'Use trolley',exact:true}).click();
- await item(page,'TROLLEY-NEW-001');await page.getByRole('button',{name:'Save item & start next'}).click();
+ await item(page,'TROLLEY-NEW-001');await page.getByRole('button',{name:'Previous field'}).click();await scan(page,'A0905');await page.getByRole('button',{name:'Save item & start next'}).click();
  await scan(page,'DRAFT-TO-KEEP');
  await scan(page,trolley.reference);
  await expect(page.locator('#inventory-title')).toHaveText('Helpdesk collection 02 inventory');
@@ -129,7 +135,7 @@ test('trolley management creates labels, barcode inventory views and retained co
  const inventoryDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();
  const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(await (await inventoryDownload).path());expect(workbook.getWorksheet('Sheet1').rowCount).toBe(2);
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();
- await card.getByRole('button',{name:'Mark collected',exact:true}).click();
+ await readyTrolley(page,card);await card.getByRole('button',{name:'Mark collected',exact:true}).click();
  await page.getByLabel('Decommission company').fill('Collection test company');await page.getByRole('button',{name:'Confirm collection',exact:true}).click();
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();
  const beforeManifest=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
@@ -386,7 +392,7 @@ test('database setup keeps local records intact before connection',async({page})
 test('collection history retains supplier, technician and inventory without changing the scan draft',async({page})=>{
  await page.goto('/');await defaults(page);await item(page,'HISTORY-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await scan(page,'UNSAVED-HISTORY-DRAFT');
- await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Mark collected',exact:true}).click();await page.getByLabel('Decommission company').fill('History supplier');await page.getByRole('button',{name:'Confirm collection'}).click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await readyTrolley(page);await page.getByRole('button',{name:'Mark collected',exact:true}).click();await page.getByLabel('Decommission company').fill('History supplier');await page.getByRole('button',{name:'Confirm collection'}).click();
  await page.getByRole('link',{name:'Collection history',exact:true}).click();
  await expect(page.locator('#collection-history')).toBeVisible();await expect(page.locator('#history-results')).toContainText('History supplier');await expect(page.locator('#history-results')).toContainText('JA');await expect(page.locator('#history-results')).toContainText('1 items');
  await page.getByLabel('Search collected trolleys').fill('unmatched supplier');await expect(page.locator('#history-results')).toContainText('No collected trolleys match');await page.getByLabel('Search collected trolleys').fill('History supplier');
@@ -532,4 +538,61 @@ test('manifest paginates long fields with repeated headings, QR link and complet
  for(let index=0;index<32;index++){expect(pdf).toContain(`MANIFEST-SERIAL-${index}`);expect(pdf).toContain(`ENDMODEL-${index}`);}
  for(const value of ['33 items','LEGACY-TROLLEY-ITEM','CACHED WORKSPACE SNAPSHOT','Handover confirmation','Received by',encoded.reference,'https://decompro.hxali.com/#trolley/'+encoded.id])expect(pdf).toContain(value);
  expect(pdf).not.toContain('WRONG-TROLLEY-ITEM');expect(pdf.match(/\/Subtype \/Image/g).length).toBeGreaterThanOrEqual(2);
+});
+
+
+test('readiness reviews missing details and guesses, requires duplicate fixes, preserves the draft and prints exceptions',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/');await defaults(page);await item(page,'READINESS-ONE');await page.getByRole('button',{name:'Save item & start next'}).click();await scan(page,'KEEP-READINESS-DRAFT');
+ await page.evaluate(async()=>{
+  const {createTrolley}=await import('/src/trolleys.js'),state=JSON.parse(localStorage.getItem('decompro.v1'));
+  const original=state.items[0],other=createTrolley('Other cage');state.trolleys.push(other);
+  state.items.push({...original,id:crypto.randomUUID(),trolleyId:other.id,trolley:other.name,serial:'OTHER-READINESS',model:'Other model',manufacturer:'Dell'});
+  Object.assign(original,{serial:'N/A',model:'N/A',manufacturer:'N/A',recognitionNeedsReview:true,recognitionConfirmed:false});
+  localStorage.setItem('decompro.v1',JSON.stringify(state));
+ });await page.reload();await page.getByRole('button',{name:'Trolleys',exact:true}).click();
+ const card=page.locator('.trolley-card').filter({hasText:'Trolley 01'});await card.getByRole('button',{name:'Readiness checks',exact:true}).click();
+ await expect(page.locator('.readiness-summary')).toContainText('5 unresolved issues');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await expect(page.locator('.readiness-card')).toContainText('Other cage');
+ await page.getByLabel('Why is the serial number unavailable?').fill('Serial label worn off; checked the base');await page.getByLabel('Why is model unavailable?').fill('Model label missing');await page.getByLabel('Why is manufacturer unavailable?').fill('Unbranded housing');
+ await page.getByLabel('I checked the model and manufacturer against this equipment.').check();await page.getByRole('button',{name:'Save review notes'}).click();
+ await expect(page.locator('.readiness-summary')).toContainText('1 unresolved issue');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();
+ await page.getByRole('button',{name:'Edit equipment record'}).click();await page.getByLabel('Asset number',{exact:true}).fill('A0007');await page.getByRole('button',{name:'Save changes'}).click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await readyTrolley(page,card);
+ await expect(card).toContainText('Ready for collection');
+ let state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.draft.serial).toBe('KEEP-READINESS-DRAFT');expect(state.items[0].readinessNotes.model).toBe('Model label missing');expect(state.trolleys[0].readyBy).toBe('JA');
+ const download=page.waitForEvent('download');await card.getByRole('button',{name:'PDF manifest'}).click();const pdf=(await readFile(await (await download).path())).toString('latin1');for(const value of ['READY FOR COLLECTION','Recorded exceptions','Model label missing','Unbranded housing','Readiness checked:'])expect(pdf).toContain(value);
+ await page.getByRole('button',{name:'Close',exact:true}).click();
+ const backupDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backupPath=await (await backupDownload).path();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await card.getByRole('button',{name:'Reopen trolley'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();
+ const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(restored.trolleys[0].status).toBe('ready');expect(restored.items[0].recognitionConfirmed).toBe(true);expect(restored.items[0].readinessNotes.serial).toContain('Serial label worn off');
+ await scan(page,'Draft model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('ready or collected');
+ await page.reload();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await expect(card).toContainText('Ready for collection');await card.getByRole('button',{name:'Reopen trolley'}).click();await expect(card).toContainText('Open');
+ state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.trolleys[0].readyAt).toBe('');expect(state.draft.serial).toBe('KEEP-READINESS-DRAFT');
+});
+
+test('empty trolley cannot be ready and failed local review writes leave the inventory unchanged',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();await expect(page.locator('.readiness-summary')).toContainText('Add equipment');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await page.getByRole('button',{name:'Back to trolleys'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
+ await defaults(page);await item(page,'REVIEW-FAIL');await page.getByRole('button',{name:'Save item & start next'}).click();await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.items[0].model='N/A';localStorage.setItem('decompro.v1',JSON.stringify(state));});await page.reload();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByLabel('Why is model unavailable?').fill('Checked; label missing');
+ await page.evaluate(()=>{const original=Storage.prototype.setItem;window.restoreReviewStorage=()=>Storage.prototype.setItem=original;Storage.prototype.setItem=function(key,value){if(key==='decompro.v1')throw new DOMException('Storage full','QuotaExceededError');return original.call(this,key,value);};});
+ await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.review-error')).toContainText('Storage full');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await page.evaluate(()=>window.restoreReviewStorage());
+});
+
+test('shared readiness preserves failed review notes, rejects stale approval and succeeds after a fresh server review',async({page})=>{
+ const trolley={id:'12345678-1234-4234-8234-123456789abc',reference:'TSU-12345678123442348234123456789ABC',name:'Shared readiness cage',department:'Helpdesk (Calderdale College)',status:'open',createdAt:'2026-10-10T10:00:00Z',collectedAt:'',collectedBy:'',company:''};
+ const record={id:'shared-readiness-item',trolleyId:trolley.id,trolley:trolley.name,serial:'SHARED-READINESS',model:'N/A',manufacturer:'Dell',date:'2026-10-10',description:'Monitor',source:'Storage',reason:'EOL',barcode:'N/A',etch:'N/A',asset:'A0003',technician:'TT'};
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
+ export async function connectFirebase(){window.readinessTrolley=${JSON.stringify(trolley)};window.readinessRecord=${JSON.stringify(record)};window.trolleyVersion=1;window.itemVersion=1;window.failNotes=true;window.failReady=true;window.readyAttempts=[];
+ return {profile:{name:'Team technician',code:'TT'},role:'technician',email:'team@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,onConnection){onConnection('connected');},versionFor(){return window.itemVersion;},trolleyVersionFor(){return window.trolleyVersion;},
+ async load(){return {items:[window.readinessRecord],trolleys:[window.readinessTrolley],examples:[],corrections:[]};},
+ async readinessSnapshot(){return {trolley:window.readinessTrolley,items:[window.readinessRecord],version:window.trolleyVersion};},
+ async write(item,version){if(window.failNotes)throw Error('Review save denied by server');if(version!==window.itemVersion)throw Error('Record changed');window.readinessRecord=item;window.itemVersion++;window.trolleyVersion++;},
+ async writeTrolley(trolley,version){window.readyAttempts.push(version);if(window.failReady){window.failReady=false;window.trolleyVersion++;throw Error('The trolley inventory changed. Reopen the readiness checks.');}if(version!==window.trolleyVersion)throw Error('Stale version');window.readinessTrolley=trolley;window.trolleyVersion++;}};
+ }`}));
+ await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('team@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#connection-status')).toContainText('confirmed by Firebase');await scan(page,'KEEP-SHARED-READINESS');
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();await page.getByLabel('Why is model unavailable?').fill('Checked; model label missing');const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
+ await page.context().setOffline(true);await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.review-error')).toContainText('Reconnect to Firebase');await expect(page.getByLabel('Why is model unavailable?')).toHaveValue('Checked; model label missing');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);await page.context().setOffline(false);
+ await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.review-error')).toContainText('Review save denied');await expect(page.getByLabel('Why is model unavailable?')).toHaveValue('Checked; model label missing');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);
+ await page.evaluate(()=>window.failNotes=false);await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.readiness-summary')).toContainText('0 unresolved issues');await page.getByLabel('I checked these items and any recorded exceptions').check();await page.getByRole('button',{name:'Mark ready for collection'}).click();await expect(page.locator('#readiness-error')).toContainText('inventory changed');expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')))).trolleys[0].status).toBe('open');
+ await page.getByRole('button',{name:'Back to trolleys'}).click();await readyTrolley(page);await expect(page.locator('.trolley-card')).toContainText('Ready for collection');const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.trolleys[0].readyBy).toBe('TT');expect(state.draft.serial).toBe('KEEP-SHARED-READINESS');expect(await page.evaluate(()=>window.readyAttempts)).toEqual([2,3]);
 });
