@@ -48,7 +48,7 @@ test('built-in Summer reference recognises TG22681204 without import and keeps a
  await page.getByRole('button',{name:'Previous field'}).click();await page.getByRole('button',{name:'Previous field'}).click();
  await scan(page,'TG22681024');
  await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
- await expect(page.getByRole('status')).toContainText('Several reference models match');
+ await expect(page.getByRole('status')).toContainText('Manufacturer suggestion: Edgeio');await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Edgeio');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
 });
 
@@ -438,4 +438,22 @@ test('nearby Posiflex serial prefills from the spreadsheet and requires label co
  await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Similar serial suggestion (reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
  for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(0);
  await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD324B');await expect(page.locator('tbody')).toContainText('XTE30722');await page.reload();await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial');
+});
+
+test('manufacturer-only recognition keeps model entry open, survives refresh and learns checked details',async({page})=>{
+ page.on('dialog',dialog=>dialog.accept());
+ await page.addInitScript(()=>{window.prompts=[];Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(u){window.prompts.push(u.text)}}});});
+ const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Previous decom');sheet.addRow(['Serial Number','Model','Manufacturer']);sheet.addRow(['BRND1001','Display 24','Example maker']);sheet.addRow(['BRND1002','Display 27','Example maker']);
+ await page.goto('/');await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'brands.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await expect(page.locator('.alert[role="status"]')).toContainText('Imported 2 reference examples');
+ await scan(page,'BRND1999');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');await expect(page.locator('#scan')).toHaveValue('');await expect(page.getByRole('status')).toContainText('Manufacturer suggestion: Example maker');await expect(page.getByRole('status')).toContainText('2 distinct supporting examples');await expect(page.locator('.model-candidates')).toContainText('Prefix BRND');expect(await page.evaluate(()=>window.prompts.at(-1))).toBe('Suggested manufacturer, Example maker. Model is uncertain. Next, model number.');
+ await page.reload();await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');
+ await scan(page,'Label-verified display');await page.getByLabel('Manufacturer for this item').fill('Verified maker');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');
+ await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('Verified maker · Label-verified display');await scan(page,'BRND1999');await expect(page.getByRole('status')).toContainText('Known serial: Label-verified display · Verified maker');
+});
+
+test('conflicting manufacturers do not override the item brand or reuse the batch model',async({page})=>{
+ page.on('dialog',dialog=>dialog.accept());
+ const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Mixed manufacturers');sheet.addRow(['Serial Number','Model','Manufacturer']);sheet.addRow(['MIXD1001','Model A','Maker A']);sheet.addRow(['MIXD1002','Model B','Maker B']);
+ await page.goto('/');await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'mixed-brands.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await expect(page.locator('.alert[role="status"]')).toContainText('Imported 2 reference examples');await page.getByRole('button',{name:'Open settings'}).click();await page.getByLabel('Use one model for this batch').check();await page.getByLabel('Batch model number').fill('Batch model');await page.getByRole('button',{name:'Save settings'}).click();
+ await scan(page,'TG22681204');await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Edgeio');await page.getByRole('button',{name:'Previous field'}).click();await page.getByRole('button',{name:'Previous field'}).click();await scan(page,'MIXD1999');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveCount(0);await expect(page.locator('#scan')).toHaveValue('');await expect(page.locator('.model-candidates')).toContainText('conflicting reference models');
 });

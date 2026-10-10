@@ -51,3 +51,13 @@ test('a long near-identical serial suggests a model with explicit single-referen
  assert.equal(recognizeSerial('ABC12345',[{serial:'ABC12344',model:'Short',manufacturer:'Maker'}]),null);
  const conflict=recognizeSerial('001917BD324B',[...facts,{serial:'001917BD325B',model:'Different',manufacturer:'posiflex'}]);assert.equal(conflict.method,'conflict');
 });
+
+test('mixed-model serial families suggest only a unanimous manufacturer with distinct evidence',()=>{
+ const examples=[{serial:'BRND1001',model:'Display 24',manufacturer:'Example maker',source:'Workbook A'},{serial:'BRND1002',model:'Display 27',manufacturer:'EXAMPLE MAKER',source:'Workbook B'}];
+ const result=recognizeSerial('BRND1999',examples);assert.equal(result.method,'conflict');assert.equal(result.manufacturer,'Example maker');assert.equal(result.model,undefined);assert.equal(result.support,2);assert.equal(result.prefix,'BRND');assert.equal(result.candidates.length,2);assert.equal(result.source,'Workbook A, Workbook B');
+ assert.equal(recognizeSerial('BRND1999',[examples[0],examples[0]]),null);
+ const mixed=recognizeSerial('BRND1999',[...examples,{serial:'BRND1003',model:'Display 32',manufacturer:'Other maker'}]);assert.equal(mixed.method,'conflict');assert.equal(mixed.manufacturer,undefined);
+ assert.equal(recognizeSerial('BRND1001',[...examples,{...examples[0],model:'Different model'}]).manufacturer,'Example maker');
+ assert.equal(recognizeSerial('BRND1001',[...examples,{...examples[0],manufacturer:'Other maker'}]).manufacturer,undefined);
+ assert.equal(recognizeSerial('UNRELATED1999',examples),null);
+});

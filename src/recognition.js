@@ -16,7 +16,11 @@ export function recognizeSerial(value,examples) {
  const facts=cleanExamples(examples),exact=facts.filter(f=>f.serial===serial);
  const describe=(matches,method,prefix='')=>{
   const labels=new Set(matches.map(labelKey));
-  if(labels.size!==1){const grouped=new Map();for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set()};candidate.serials.add(fact.serial);grouped.set(key,candidate);}return {method:'conflict',support:new Set(matches.map(f=>f.serial)).size,prefix,candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};}
+  if(labels.size!==1){
+   const grouped=new Map(),manufacturers=new Set(matches.map(f=>f.manufacturer.toLowerCase()));
+   for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set()};candidate.serials.add(fact.serial);grouped.set(key,candidate);}
+   return {method:'conflict',basis:method,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', '),...(manufacturers.size===1?{manufacturer:matches[0].manufacturer}:{}),candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};
+  }
   return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,source:[...new Set(matches.map(f=>f.source))].join(', ')};
  };
  if(exact.length)return describe(exact,'exact');
