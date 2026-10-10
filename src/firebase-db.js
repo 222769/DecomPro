@@ -4,6 +4,7 @@ import { getFirestore, collection, doc, getDoc, getDocs, getDocsFromServer, quer
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
 import {validateTrolleys} from './trolleys.js';
+import {validateCorrections,correctionKey} from './reference-library.js';
 
 export function validateFirebaseConfig(value) {
  if(!value||typeof value!=='object'||'private_key' in value||'client_email' in value)throw Error('Use the public Firebase web app configuration, never a service-account key.');
@@ -35,25 +36,39 @@ export async function connectFirebase(config,teamId,email,password) {
  return createTeamStore(db,uid,teamId,membership.data(),auth);
 }
 export function createTeamStore(db,uid,teamId,member,auth=null) {
- const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys');
+ const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),corrections=collection(root,'referenceCorrections');
  const versions=new Map(),stops=[];
- const trolleyVersions=new Map();
+ const trolleyVersions=new Map(),correctionVersions=new Map();
+ const decodeCorrections=snapshot=>validateCorrections(snapshot.docs.map(row=>{correctionVersions.set(row.data().payload.serial,row.data().version);return row.data().payload;}));
  const decodeTrolleys=snapshot=>validateTrolleys(snapshot.docs.map(row=>{trolleyVersions.set(row.id,row.data().version);return row.data().payload;}));
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
   profile:memberProfile,role:member.role,email:auth?.currentUser?.email||'',teamId,
   versionFor(id){return versions.get(id)||0;},
-  async load(){const [items,examples,cages]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages)};},
-  listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{}) {
+  async load(){const [items,examples,cages,edits]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys),getDocsFromServer(corrections)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages),corrections:decodeCorrections(edits)};},
+  listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{},onCorrections=()=>{}) {
    const confirmed=new Set();
    const receive=(key,callback)=>snapshot=>{
-    try{callback(snapshot);if(!snapshot.metadata.fromCache&&!snapshot.metadata.hasPendingWrites)confirmed.add(key);else confirmed.delete(key);onConnection(confirmed.size===3?'connected':'syncing');}
+    try{callback(snapshot);if(!snapshot.metadata.fromCache&&!snapshot.metadata.hasPendingWrites)confirmed.add(key);else confirmed.delete(key);onConnection(confirmed.size===4?'connected':'syncing');}
     catch(error){onError(error);}
    };
    stops.push(onSnapshot(query(equipment,where('deleted','==',false)),{includeMetadataChanges:true},receive('items',s=>onItems(decode(s))),onError),
     onSnapshot(references,{includeMetadataChanges:true},receive('references',s=>onExamples(cleanExamples(s.docs.map(d=>d.data())))),onError),
-    onSnapshot(trolleys,{includeMetadataChanges:true},receive('trolleys',s=>onTrolleys(decodeTrolleys(s))),onError));
+    onSnapshot(trolleys,{includeMetadataChanges:true},receive('trolleys',s=>onTrolleys(decodeTrolleys(s))),onError),
+    onSnapshot(corrections,{includeMetadataChanges:true},receive('corrections',s=>onCorrections(decodeCorrections(s))),onError));
+  },
+  correctionVersionFor(serial){return correctionVersions.get(normalizeSerial(serial))||0;},
+  async writeCorrection(correction,expectedVersion=0) {
+   if(member.role!=='admin')throw Error('Only a team administrator can change shared recognition references.');
+   const payload=validateCorrections([correction])[0],row=doc(corrections,correctionKey(payload.serial)),revisionId=createId();
+   await runTransaction(db,async tx=>{
+    const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    if((before?.version||0)!==expectedVersion)throw Error('Another administrator changed this reference. Reopen it and review the latest correction.');
+    const after={payload,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
+    tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,at:serverTimestamp()});
+   });
+   correctionVersions.set(payload.serial,expectedVersion+1);
   },
   trolleyVersionFor(id){return trolleyVersions.get(id)||0;},
   async writeTrolley(trolley,expectedVersion=0,{historicalImport=false}={}) {

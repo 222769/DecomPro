@@ -4,7 +4,7 @@ Firestore is the shared database; Firebase Authentication supplies account ident
 
 ## Validation status
 
-The seven database/rules tests pass against the local Firestore emulator, including trolley creation, department changes, conflict handling, collection locks, immutable history, realtime updates between two independent team clients, and offline loading/reconnection. A live Firebase connection and deployment of these updated rules have not been verified. Run the tests before deploying future rule changes:
+The eight database/rules tests pass against the local Firestore emulator, including trolley creation, department changes, conflict handling, collection locks, immutable history, realtime updates between two independent team clients, and offline loading/reconnection. Live Firebase authentication and member reads have been verified for project `decompro-236e9`. The reference-review rules were published on 10 October 2026 and verified against the tested source; signed-in member reads of equipment, references, trolleys and reference corrections returned HTTP 200. Future rule changes must also be deployed to that project; emulator checks alone do not publish them. Run the tests before deploying future rule changes:
 
 ```sh
 npm ci
@@ -56,6 +56,7 @@ The first membership path is `teams/college-it/members/YOUR_AUTH_USER_UID`. For 
 - `equipment/{id}/revisions/{revision}`: immutable before/after snapshots, actor, action and server time. Removal is a soft deletion and retains history.
 - `teams/{team}/serials/{key}`: canonical uppercase serial claim. Equipment and serial claim updates commit in the same Firestore transaction; rules bind the key to the actual serial, preventing another member from choosing a different key to bypass uniqueness. `N/A` has no unique claim. Slash/tilde characters are escaped rather than restricting manufacturers' serial formats.
 - `teams/{team}/references/{id}`: deduplicated spreadsheet facts and importing user/time. Conflicting labels can coexist and stop automatic recognition.
+- `teams/{team}/referenceCorrections/{id}`: canonical serial, reviewed correction/exclusion/restoration, reason, optimistic version and authenticated write metadata. Administrators write; active members read. Its `revisions` subcollection retains immutable before/after history. Original reference facts and equipment records remain intact.
 - `teams/{team}/trolleys/{id}`: permanent reference, name, owning department, open/collected status, collection company/time/initials, optimistic version and authenticated write metadata. Its `revisions` subcollection retains immutable before/after history.
 - `teams/{team}/members/{uid}`: trusted name, initials, active state and role.
 

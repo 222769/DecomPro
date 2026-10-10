@@ -1,6 +1,7 @@
 import { fields } from './data';
 import { cleanExamples } from './recognition';
 import {validateTrolleys,createTrolley} from './trolleys.js';
+import {validateCorrections} from './reference-library.js';
 
 export const defaultFields = [
   ['date', 'Disposal date', 'date'],
@@ -83,6 +84,7 @@ export function validateWorkspace(value) {
   }
   if (value.referenceExamples !== undefined && !Array.isArray(value.referenceExamples)) throw Error('Invalid recognition catalogue.');
   const referenceExamples = cleanExamples(value.referenceExamples || []);
+  const referenceCorrections=validateCorrections(value.referenceCorrections===undefined?[]:value.referenceCorrections);
   settings.serialFirst = true;
   const trolleys=validateTrolleys(value.trolleys||[]);
   if(value.trolleys===undefined) {
@@ -91,7 +93,7 @@ export function validateWorkspace(value) {
   }
   const activeTrolleyId=value.activeTrolleyId||'';
   if(typeof activeTrolleyId!=='string'||(activeTrolleyId&&!trolleys.some(t=>t.id===activeTrolleyId)))throw Error('The selected trolley is not in this workspace.');
-  return { captureOrder:'serial-first', activeTrolleyId, trolleys, referenceExamples, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  return { captureOrder:'serial-first', activeTrolleyId, trolleys, referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

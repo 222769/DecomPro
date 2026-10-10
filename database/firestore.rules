@@ -97,6 +97,32 @@ service cloud.firestore {
      && (!exists(/databases/$(database)/documents/teams/$(team)/serials/$(key)) || resource.data.itemId==request.resource.data.itemId);
     allow delete: if member(team) && (getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(resource.data.itemId)).data.deleted || getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(resource.data.itemId)).data.serialKey!=key);
    }
+   match /referenceCorrections/{id} {
+    function valid(d) {
+     let p=d.payload;
+     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
+      && p.keys().hasOnly(['serial','mode','model','manufacturer','note']) && p.serial is string && p.serial.size()>0 && p.serial.size()<=200 && p.serial==p.serial.upper() && !(p.serial in ['N/A','NA','UNKNOWN','NONE','-','NOT KNOWN'])
+      && id=='s-'+p.serial.replace('~','~~').replace('/','~s')
+      && p.mode in ['corrected','excluded','original'] && p.model is string && p.model.size()<=1000 && p.manufacturer is string && p.manufacturer.size()<=1000
+      && (p.mode=='corrected' ? p.model.size()>0 && p.manufacturer.size()>0 && !(p.model.upper() in ['N/A','NA','UNKNOWN','NONE','-','NOT KNOWN']) && !(p.manufacturer.upper() in ['N/A','NA','UNKNOWN','NONE','-','NOT KNOWN']) : p.model=='' && p.manufacturer=='')
+      && p.note is string && p.note.size()>0 && p.note.size()<=500 && d.version is int && d.createdBy is string && d.updatedBy==request.auth.uid && d.updatedAt==request.time && d.revisionId is string;
+    }
+    function audit(d) {
+     let r=getAfter(/databases/$(database)/documents/teams/$(team)/referenceCorrections/$(id)/revisions/$(d.revisionId)).data;
+     return r.actor==request.auth.uid && r.after==d && r.at==request.time;
+    }
+    allow read: if member(team);
+    allow create: if admin(team) && valid(request.resource.data) && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/referenceCorrections/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
+    allow update: if admin(team) && valid(request.resource.data) && request.resource.data.version==resource.data.version+1 && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt && request.resource.data.payload.serial==resource.data.payload.serial && audit(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/referenceCorrections/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
+    allow delete: if false;
+    match /revisions/{revision} {
+     allow read: if member(team);
+     allow create: if admin(team) && request.resource.data.keys().hasOnly(['actor','before','after','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/referenceCorrections/$(id)).data && request.resource.data.after.revisionId==revision;
+     allow update, delete: if false;
+    }
+   }
    match /references/{reference} {
     allow read: if member(team);
     allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','source','importedBy','importedAt'])

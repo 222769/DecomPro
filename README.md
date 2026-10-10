@@ -99,7 +99,7 @@ This uses browser speech, not Google Cloud Text-to-Speech. No Cloud API key or b
 
 The site now includes 321 usable serial/model/manufacturer facts from the supplied Summer 2026 spreadsheet, with the owner's authorization to publish those facts. They are available in every browser, including shared Firebase mode, without an import step. The reference catalogue is public; it contains no disposal names, dates, finance columns, or other workbook fields. The original workbook itself is not published or committed.
 
-Add further supplier spreadsheets using **Add another spreadsheet** at the scan station or **Settings → Import reference spreadsheet**. The importer finds Serial Number, Model and Manufacturer headings across worksheets, preserves text serials, and ignores incomplete/N/A examples. Importing teaches the catalogue; it does not add disposed equipment to the active register. Additional imports stay in this browser, or are uploaded to the authenticated team when connected to Firebase.
+Add further supplier spreadsheets using **Settings → Import reference spreadsheet**. The importer finds Serial Number, Model and Manufacturer headings across worksheets, preserves text serials, and ignores incomplete/N/A examples. Importing teaches the catalogue; it does not add disposed equipment to the active register. Additional imports stay in this browser, or are uploaded to the authenticated team when connected to Firebase.
 
 Serial number is always the first field. When a known serial is scanned, its model and manufacturer are prefilled; the next prompt is Barcode. Confirmed saved records also teach recognition, and editing their model/manufacturer immediately changes the evidence used by future lookups. Manufacturer is an item-level override, so recognising one item does not change the batch defaults. You can edit the suggested manufacturer directly and return to Model to correct it.
 
@@ -108,6 +108,14 @@ For previously unseen serials, recognition checks the most specific literal pref
 Serial-first scanning is now the default for every item, including existing browsers; no setting needs enabling. Unknown serials are retained while you supply Model manually. Identical-model batches also start at Serial: recognition can supply a known match, and the chosen batch model is the fallback when no match exists. Conflicting examples require manual model entry. Existing model-first drafts and version-1 backups migrate to the new field order while preserving equipment and captured values.
 
 The supplied workbook produced 321 distinct usable examples. Leave-one-serial-out evaluation of the current adaptive-prefix recognition yielded 88 correct pattern suggestions, 5 incorrect suggestions, 126 conflicting cases and 102 no-match cases. These are observations on this workbook, not a promised accuracy rate for future equipment. This is why pattern suggestions need physical verification.
+
+## Review the reference library
+
+Open **Settings → Model recognition → Manage reference library**. Search by serial, prefix, model, manufacturer or source, and filter conflicting serials, reviewed corrections or exclusions. Original spreadsheet and saved-equipment facts remain visible as evidence.
+
+Use **Review reference** to supply a checked model/manufacturer with a reason, exclude unreliable serials, or restore original evidence. **Add checked reference** records a verified label for a serial absent from the catalogue. A correction overrides that serial's original facts in future exact lookup and pattern training; an exclusion prevents recognition for that serial and removes its evidence from pattern training. Other serials still need enough distinct agreeing examples. Reviews never rewrite saved equipment or collection history. Rescan a captured serial to apply a new review to the current item.
+
+Local reviews persist in browser storage and workspace JSON backups. In shared mode, only administrators can change references; technicians can search them. Firebase distributes reviews to connected team members and retains immutable before/after audit revisions. Concurrent administrator edits are rejected. Deploy the updated Firestore rules before publishing an app build that reads `referenceCorrections`.
 
 ## Shared team database
 

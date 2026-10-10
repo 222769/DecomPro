@@ -69,11 +69,12 @@ test('trolley references, inventory and collection history commit together and r
  await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'teams/college-it/trolleys')));
 });
 
-test('two independent team clients receive live equipment, references and collection changes',async()=>{
+test('two independent team clients receive live equipment, reference reviews and collection changes',async()=>{
  const first=createTeamStore(context('tech'),'tech','college-it',member),second=createTeamStore(context('admin'),'admin','college-it',admin);
- const events={items:[],trolleys:[],examples:[],phase:''},failures=[];
+ const events={items:[],trolleys:[],examples:[],corrections:[],phase:''},failures=[];
  const waitFor=async predicate=>{const start=Date.now();while(!predicate()){if(failures.length)throw failures[0];if(Date.now()-start>10000)throw Error('Realtime team update was not received');await new Promise(resolve=>setTimeout(resolve,25));}};
  second.listen(rows=>events.items=rows,rows=>events.examples=rows,error=>failures.push(error),rows=>events.trolleys=rows,phase=>events.phase=phase);
+ first.listen(()=>{},()=>{},error=>failures.push(error),()=>{},()=>{},rows=>events.corrections=rows);
  try {
   await waitFor(()=>events.phase==='connected');
   await first.write(sample('shared-live-item','LIVE0001'));await waitFor(()=>events.items.some(row=>row.id==='shared-live-item'));
@@ -82,6 +83,8 @@ test('two independent team clients receive live equipment, references and collec
   await second.write({...events.items[0],model:'Correction from second device'},second.versionFor('shared-live-item'));
   assert.equal((await first.load()).items[0].model,'Correction from second device');
   await first.importExamples([{serial:'TEAMREF1',model:'Shared model',manufacturer:'Shared maker',source:'Excel'}]);await waitFor(()=>events.examples.some(row=>row.serial==='TEAMREF1'));
+  await second.writeCorrection({serial:'TEAMREF1',mode:'corrected',model:'Verified shared model',manufacturer:'Shared maker',note:'Checked label on second device'});await waitFor(()=>events.corrections.some(row=>row.model==='Verified shared model'));
+  assert.equal((await first.load()).corrections[0].model,'Verified shared model');
   await first.writeTrolley({...initialTrolley,status:'collected',company:'Shared supplier',collectedAt:new Date().toISOString(),collectedBy:'TT'},1);
   await waitFor(()=>events.trolleys.some(row=>row.id===initialTrolley.id&&row.status==='collected'));
   await assert.rejects(second.write({...sample('late-second-device','LATE0002')}),/collected/);
@@ -95,4 +98,16 @@ test('server-confirmed loading rejects offline cached data and recovers after re
  await disableNetwork(db);
  try{await assert.rejects(client.load(),/offline|server|unavailable/i);}finally{await enableNetwork(db);}
  assert.equal((await client.load()).items.length,1);
+});
+
+test('administrators curate shared references with immutable history and conflict checks; technicians only read',async()=>{
+ const {correctionKey,effectiveReferences}=await import('../../src/reference-library.js');const {recognizeSerial}=await import('../../src/recognition.js');
+ const db=context('admin'),first=createTeamStore(db,'admin','college-it',admin),second=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ const correction={serial:'ABCD1001',mode:'corrected',model:'Reviewed model',manufacturer:'Maker',note:'Checked equipment label'};
+ await assert.rejects(tech.writeCorrection(correction),/administrator/);await first.writeCorrection(correction);
+ const records=await tech.load();assert.equal(records.corrections[0].model,'Reviewed model');assert.equal(recognizeSerial('ABCD1001',effectiveReferences([{serial:'ABCD1001',model:'Wrong',manufacturer:'Maker'}],records.corrections)).model,'Reviewed model');
+ const row=doc(db,`teams/college-it/referenceCorrections/${correctionKey(correction.serial)}`),stored=(await getDoc(row)).data();await assertFails(setDoc(doc(context('tech'),row.path),stored));await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),row.path)));
+ const excluded={...correction,mode:'excluded',model:'',manufacturer:''};await first.writeCorrection(excluded,1);await assert.rejects(second.writeCorrection(correction,1),/Another administrator/);await first.writeCorrection({...excluded,mode:'original'},2);
+ const revisions=await getDocs(collection(row,'revisions'));assert.equal(revisions.size,3);await assertFails(deleteDoc(revisions.docs[0].ref));await assertFails(deleteDoc(row));
+ const forged={...stored,version:4,payload:{...correction,model:'Forged'},updatedAt:serverTimestamp()};await assertFails(setDoc(row,forged));
 });
