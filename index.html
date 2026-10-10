@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102720"><title>DecomPro · Equipment decommissioning</title>
+<script>
+// Apply the device preference before the first paint, including loading recovery.
+(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]').content=dark?'#0b1220':'#f4f6fa';}catch{}})();
+</script>
 <style id="startup-style">
 #startup {position:fixed;inset:0;z-index:9999;background:#f4f6fb;color:#18243b;display:grid;place-items:center;padding:24px;font:16px/1.6 system-ui,sans-serif}
 #startup[hidden] {display:none}
@@ -10,6 +14,10 @@
 #startup p {color:#526079}
 #startup button {background:#365de8;color:white;border:0;border-radius:12px;padding:14px 20px;font:600 16px system-ui;cursor:pointer}
 #startup details {margin-top:20px;overflow-wrap:anywhere}
+html[data-theme="dark"] #startup{background:#0b1220;color:#edf3ff}
+html[data-theme="dark"] #startup section{background:#141f32;border-color:#2c3c55;box-shadow:0 16px 60px #0005}
+html[data-theme="dark"] #startup p{color:#a7b8d0}
+html[data-theme="dark"] #startup .startup-brand{color:#9cb5ff}
 </style></head><body>
 <div id="startup" role="status" aria-live="polite"><section>
 <div class="startup-brand">DecomPro</div><h1 id="startup-title">Opening your workspace…</h1>

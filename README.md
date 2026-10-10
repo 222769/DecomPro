@@ -169,3 +169,7 @@ Signed-in administrators see **Admin** in the navigation. They can create a tech
 ### Collection review
 
 Open **Collection review** in the navigation (or the session summary) to prepare uncollected trolleys. Each trolley shows how many records have no unresolved readiness checks. Filter flagged equipment by trolley or check type: unavailable serial/model/manufacturer, duplicate serial/asset across the full register, unchecked recognition suggestions, or unavailable asset number. Edit open-trolley equipment directly; review notes and physical confirmations use the existing readiness workflow. Ready trolley contents remain locked until reopened. Missing asset N/A is permitted and shown for review, while missing core details require recorded exceptions. Collected trolleys are excluded from the preparation list, but their records still participate in duplicate checks. Shared cached views are labelled; final shared readiness checks fetch Firebase before approval. Review filters do not alter supplier exports or clear the current scan.
+
+### Appearance
+
+In **Settings → Appearance**, choose Light, Dark (midnight blue), or Follow device. The selector previews the theme; **Save settings** remembers it across reloads. Cancel or Escape restores the saved theme. Appearance is a browser preference, separate from equipment backups and team records. Follow device responds when the operating system theme changes. The loading and recovery screen also respects the saved preference.

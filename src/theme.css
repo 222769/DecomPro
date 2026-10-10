@@ -1,0 +1,59 @@
+:root{color-scheme:light}
+.theme-palette{display:flex;gap:8px;margin-top:16px}
+.theme-palette span{height:24px;flex:1;border-radius:7px;border:1px solid #8aa0bf40;background:#f4f6fa}
+.theme-palette span:nth-child(2){background:#fff}.theme-palette span:nth-child(3){background:#365fed}.theme-palette span:nth-child(4){background:#65d6b5}
+html[data-theme=dark]{
+ color-scheme:dark;--blue:#8eaaff;--muted:#a7b8d0;--border:#2c3c55;
+ --surface:#141f32;--raised:#1b2940;--ink:#edf3ff;--soft:#b7c8df;
+ color:var(--ink);background:#0b1220;
+}
+html[data-theme=dark] body{background:radial-gradient(ellipse at 85% 0%,#21335665,transparent 45%),#0b1220}
+html[data-theme=dark] aside{background:#0d1728;border-right:1px solid #25334b}
+html[data-theme=dark] .brand-mark{background:linear-gradient(135deg,#537cfa,#765ee9);box-shadow:0 4px 22px #537cfa35}
+html[data-theme=dark] :is(.card,.profile,.stats>div,dialog){background:var(--surface);border-color:var(--border);color:var(--ink);box-shadow:0 8px 30px #0002}
+html[data-theme=dark] .session-summary{background:linear-gradient(135deg,#182741,#141f32);border-color:#344971}
+html[data-theme=dark] .station{background:radial-gradient(ellipse at 50% 20%,#263c63,#121e33 65%);border-color:#3a5075;box-shadow:0 12px 40px #0003}
+html[data-theme=dark] :is(input,select,textarea,#database-dialog textarea,#admin-link textarea,.readiness-card textarea){background:#0f1a2d;color:var(--ink);border-color:#3b4c68}
+html[data-theme=dark] input::placeholder,html[data-theme=dark] textarea::placeholder{color:#8da3bf}
+html[data-theme=dark] :is(input,select,textarea):focus{outline-color:#9cb5ff}
+html[data-theme=dark] input[type=checkbox],html[data-theme=dark] input[type=range]{accent-color:#8eaaff}
+html[data-theme=dark] #scan{background:#0c172a;border-color:#6d8ac1;color:#f0f5ff;box-shadow:inset 0 0 0 1px #365fed15,0 4px 20px #0002}
+html[data-theme=dark] #scan:focus{box-shadow:0 0 0 5px #7a9eff18}
+html[data-theme=dark] .primary{background:linear-gradient(135deg,#87a6ff,#a2afff);border-color:#9eb7ff;color:#101d38;box-shadow:0 4px 16px #537cfa22}
+html[data-theme=dark] .primary:hover{background:#b8caff}
+html[data-theme=dark] :is(.secondary,.defaults .wide,.model-candidates .secondary){background:#233452;border-color:#425c83;color:#d7e5ff}
+html[data-theme=dark] .secondary:hover{background:#2e4468}
+html[data-theme=dark] :is(.text-button,.row-actions .text-button,.trolley-switch,#settings-dialog output){color:#a5bcff}
+html[data-theme=dark] :is(.breadcrumb,.eyebrow,.stats .stat-content>span,.stats small,.register-footer,footer,.search-count,td>span:not(.tag),.history-card dt,.history-card p,.history-empty,.session-note,.session-metrics span,.session-trolleys p,.technician-progress small,.review-trolley-card p,.bulk-move-bar span,.move-preview-list span,.move-history-entry p,.handover-history-card p,.handover-selection small,#library-count,.reference-note,.trolley-list span){color:var(--muted)}
+html[data-theme=dark] :is(.session-summary summary,.settings-section h3,.history-card dd,.connection-status strong,.readiness-summary strong,.empty strong,.handover-selection legend){color:var(--ink)}
+html[data-theme=dark] :is(.session-metrics>div,.session-trolleys article,.readiness-card,.collection-review-item,.move-history-entry,.import-counts span,#admin-link,.empty-icon){background:var(--raised);border-color:var(--border)}
+html[data-theme=dark] :is(.review-trolley-card,.handover-history-card){background:linear-gradient(135deg,#1c2e4c,#141f32);border-color:#3a5075}
+html[data-theme=dark] .session-metrics strong{color:#a5bcff}
+html[data-theme=dark] .search-field{background:#0f1a2d;border-color:#3b4c68}
+html[data-theme=dark] .search-field input{background:transparent}
+html[data-theme=dark] th{background:#1d2c44;color:#b3c6e0}
+html[data-theme=dark] td{border-color:#283951}
+html[data-theme=dark] tbody tr:hover{background:#1c2c46}
+html[data-theme=dark] :is(.note,.trolley-lookup,.trolley-inventory-banner,.bulk-move-bar,.restore-summary,.connection-status){background:#1b2b45;border-color:#354d73;color:var(--soft)}
+html[data-theme=dark] :is(.restore-summary strong,.restore-summary span,.connection-status span){color:var(--soft)}
+html[data-theme=dark] :is(.alert,.connection-status.connected,.readiness-summary.clear,#import-preview-dialog .import-review){background:#15382f;border-color:#326753;color:#a5e8cd}
+html[data-theme=dark] :is(.error,.connection-status.warning,.readiness-summary,.restore-warning,.reference-conflict){background:#392f20;border-color:#79623b;color:#f2ce91}
+html[data-theme=dark] .tag{background:#204a40;color:#a1e6ce}
+html[data-theme=dark] .collected-tag{background:#283950;color:#b9cde9}
+html[data-theme=dark] .count{background:#293d66;color:#c5d5ff}
+html[data-theme=dark] .mint{background:#1a4138;color:#7de1bc}
+html[data-theme=dark] .blue,html[data-theme=dark] .defaults-icon{background:#273861;color:#a9bcff}
+html[data-theme=dark] .peach{background:#493326;color:#efbd8b}
+html[data-theme=dark] :is(.readiness-clear,#handover-prepared){color:#8ee2bd}
+html[data-theme=dark] :is([role=alert],.review-error,#readiness-error,#settings-error,#trolley-error,#database-error,#edit-error,#restore-error,#scan-correction-error,#summary-error,#bulk-move-error,#handover-error,.handover-download-error,#import-preview-error){color:#ffafa9}
+html[data-theme=dark] :is(.settings-section,.collection-review-filters,.session-summary details,.technician-progress li,.admin-user,#admin-editor form,.handover-selection,.handover-selection label,.move-preview-list,.move-preview-list li){border-color:var(--border)}
+html[data-theme=dark] :is(.readiness-footer,#import-preview-dialog .dialog-actions){background:var(--surface);border-color:var(--border)}
+html[data-theme=dark] :is(.readiness-card,.collection-review-item) li span{color:var(--muted)}
+html[data-theme=dark] dialog::backdrop{background:#030914ba;backdrop-filter:blur(6px)}
+html[data-theme=dark] .theme-palette span:first-child{background:#0b1220}
+html[data-theme=dark] .theme-palette span:nth-child(2){background:#1b2940}
+html[data-theme=dark] .theme-palette span:nth-child(3){background:#8eaaff}
+html[data-theme=dark] .theme-palette span:nth-child(4){background:#65d6b5}
+html[data-theme=dark] progress{accent-color:#8eaaff}
+html[data-theme=dark] :is(.defaults label,dialog label,.trolley-reference,.connection-settings summary){color:#b7c8df}
+html[data-theme=dark] .trolley-card{background:var(--raised);border-color:var(--border)}
