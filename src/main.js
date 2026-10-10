@@ -3,7 +3,7 @@ import {movePlan,localMoveEvent} from './trolley-moves.js';
 import {sessionSummary,missingEquipmentDetails} from './session-summary.js';
 import {localImportPlan,importSignature,sameRecord} from './local-import.js';
 import {checkReadiness,readinessFields,validateReadinessNotes} from './readiness.js';
-import { fields, headers, supplierRow, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
+import { fields, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
 import './style.css';
 import { cleanExamples, referenceRowsFromWorkbook } from './recognition';
 import {buildImportPreview,importCounts} from './import-preview.js';
@@ -680,14 +680,20 @@ async function openHandoverPack() {
 }
 function updateHandoverHistory(terms) {
  const node=document.querySelector('#handover-history'),groups=handoverGroups(state.trolleys).filter(group=>terms.every(term=>[group.reference,group.company,group.collectedBy,...group.trolleys.flatMap(t=>[t.name,t.reference,t.department])].join(' ').toLowerCase().includes(term)));
- node.innerHTML=groups.map(group=>`<article class="handover-history-card"><div class="eyebrow">COLLECTION HANDOVER</div><h3>${escape(group.reference)}</h3><p>${escape(group.company)} · ${escape(new Date(group.collectedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}))} · Recorded by ${escape(group.collectedBy)}</p><p>${group.trolleys.length} trolleys · ${state.items.filter(item=>group.trolleys.some(t=>trolleyForItem(item,t))).length} items</p><p>${group.trolleys.map(t=>escape(t.name)).join(' · ')}</p>${group.complete?`<button class="secondary" data-handover-pdf="${escape(group.id)}">Download retained handover PDF</button>`:'<p>Some handover details are missing. Reconnect to retrieve the complete register.</p>'}<p class="handover-download-error" aria-live="polite"></p></article>`).join('');
- node.querySelectorAll('[data-handover-pdf]').forEach(button=>button.onclick=async()=>{
-  const client=sharedClient;button.disabled=true;
+ node.innerHTML=groups.map(group=>`<article class="handover-history-card"><div class="eyebrow">COLLECTION HANDOVER</div><h3>${escape(group.reference)}</h3><p>${escape(group.company)} · ${escape(new Date(group.collectedAt).toLocaleString('en-GB',{timeZone:'Europe/London'}))} · Recorded by ${escape(group.collectedBy)}</p><p>${group.trolleys.length} trolleys · ${state.items.filter(item=>group.trolleys.some(t=>trolleyForItem(item,t))).length} items</p><p>${group.trolleys.map(t=>escape(t.name)).join(' · ')}</p>${group.complete?`<div class="trolley-actions"><button class="secondary" data-handover-pdf="${escape(group.id)}">Download retained handover PDF</button><button class="primary" data-handover-excel="${escape(group.id)}">Download supplier Excel</button></div><p class="handover-export-status" aria-live="polite"></p>`:'<p>Some handover details are missing. Reconnect to retrieve the complete register.</p>'}<p class="handover-download-error" aria-live="polite"></p></article>`).join('');
+ node.querySelectorAll('[data-handover-pdf],[data-handover-excel]').forEach(button=>button.onclick=async()=>{
+  const client=sharedClient,excel=Boolean(button.dataset.handoverExcel),id=button.dataset.handoverExcel||button.dataset.handoverPdf,card=button.closest('article');button.disabled=true;card.querySelector('.handover-download-error').textContent='';card.querySelector('.handover-export-status')?.replaceChildren();
   try{
-   const cached=sharedLocked&&(!client||connectionPhase!=='connected'||navigator.onLine===false),records=client&&!cached?await client.load():{trolleys:state.trolleys,items:state.items};
+   if(excel&&sharedLocked&&(!client||navigator.onLine===false))throw Error('Reconnect to Firebase before exporting the supplier list so all handover records can be confirmed.');
+   const cached=sharedLocked&&(!client||connectionPhase!=='connected'||navigator.onLine===false),records=client&&(excel||!cached)?await client.load():{trolleys:state.trolleys,items:state.items};
    if(client!==sharedClient)return;
-   const group=handoverGroups(records.trolleys).find(row=>row.id===button.dataset.handoverPdf);if(!group?.complete)throw Error('The full handover is unavailable. Reconnect and check the register.');
-   const {handoverPdf}=await import('./handover-pdf.js');const bytes=await handoverPdf(group,records.trolleys,records.items,location.href,{cached});if(client!==sharedClient)return;downloadFile(bytes,`${group.reference}.pdf`,'application/pdf');
+   const group=handoverGroups(records.trolleys).find(row=>row.id===id);if(!group?.complete)throw Error('The full handover is unavailable. Reconnect and check the register.');
+   if(excel){
+    const items=records.items.filter(item=>group.trolleys.some(t=>trolleyForItem(item,t))).map(item=>({...item}));
+    const {supplierExcel,supplierExcelType}=await import('./supplier-excel.js');const bytes=await supplierExcel(items);if(client!==sharedClient)return;
+    downloadFile(bytes,`${group.reference}-supplier.xlsx`,supplierExcelType);
+    const status=card.querySelector('.handover-export-status');if(status?.isConnected)status.textContent=`Supplier Excel download started with ${items.length} item${items.length===1?'':'s'} from this handover. Ready to attach to your email.`;
+   }else{const {handoverPdf}=await import('./handover-pdf.js');const bytes=await handoverPdf(group,records.trolleys,records.items,location.href,{cached});if(client!==sharedClient)return;downloadFile(bytes,`${group.reference}.pdf`,'application/pdf');}
   }catch(error){const output=button.closest('article')?.querySelector('.handover-download-error');if(output)output.textContent=`Download failed: ${firebaseErrorMessage(error)}`;}
   finally{button.disabled=false;}
  });
@@ -916,15 +922,8 @@ async function exportExcel() {
  exporting=true;
  const button=document.querySelector('#export');button.disabled=true;button.textContent='Preparing Excel…';
  try {
-  const {default:ExcelJS}=await import('exceljs');
-  const workbook=new ExcelJS.Workbook(),sheet=workbook.addWorksheet('Sheet1');
-  sheet.addRow(headers);for(const item of items)sheet.addRow(supplierRow(item));
-  sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};
-  sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF164E3D'}};
-  sheet.getRow(1).height=30;sheet.columns.forEach((column,index)=>column.width=index===1?28:22);
-  sheet.getColumn(1).numFmt='dd/mm/yyyy';sheet.views=[{state:'frozen',ySplit:1}];sheet.autoFilter='A1:K1';
-  const data=await workbook.xlsx.writeBuffer();
-  downloadFile(data,`Decom-${today()}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const {supplierExcel,supplierExcelType}=await import('./supplier-excel.js');const data=await supplierExcel(items);
+  downloadFile(data,`Decom-${today()}.xlsx`,supplierExcelType);
   notice=`Excel download started with ${items.length} saved item${items.length===1?'':'s'}.`;render();
  }catch(error){
   const detail=error?.message||'The browser could not create the Excel download.';

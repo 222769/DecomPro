@@ -83,6 +83,8 @@ After checking the pack and the equipment leaving the college, tick the confirma
 
 Collection history retains the linked trolley group, company, collection time, initials and inventories. Search by `COL-` reference or company and download the retained PDF again. Handwritten signatures remain on the printed copy; the app regenerates PDFs from retained records. Cached shared reprints are marked as snapshots. JSON backups preserve handover links. Collected equipment stays locked, and the current scan is preserved.
 
+Choose **Download supplier Excel** on a saved handover to export every item from its collected trolleys into one workbook, ready to attach to your email. The filename includes the `COL-` reference. It uses the same 11 supplier columns as the register export, preserves disposal initials and text identifiers, and omits the unused finance columns. Search filters and the selected register trolley do not restrict this export. Shared handover exports require a fresh Firebase read; failures leave the records and current scan intact.
+
 ### Trolley setup and labels
 
 Open **Trolleys** in the navigation. Create a trolley with a descriptive name and owning department. Each trolley receives a permanent `TSU-` reference generated from a UUID; reused names do not reuse references. Existing local trolley names migrate into this register automatically. The default ownership is **Property of TSU - Helpdesk (Calderdale College)**.
