@@ -169,3 +169,17 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .admin-dialog{width:min(720px,calc(100vw - 32px));max-width:720px}.admin-user{padding:18px 0;border-bottom:1px solid #e1e6ef}.admin-user p{margin:8px 0;overflow-wrap:anywhere}.admin-user .dialog-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:12px}#admin-editor form{padding-top:24px;border-top:1px solid #e1e6ef}#admin-link{margin-top:24px;padding:20px;border-radius:16px;background:#f4f6fb}#admin-status{overflow-wrap:anywhere}
 
 #admin-link textarea{display:block;width:100%;min-height:110px;padding:12px;border:1px solid #d9e0ec;border-radius:12px;background:#fff;color:#18243b;font:13px/1.5 ui-monospace,monospace;resize:vertical;overflow-wrap:anywhere}#admin-copy-link{margin-top:10px}
+
+.session-summary{margin-bottom:28px;background:linear-gradient(135deg,#fff,#f4f8ff);border-color:#dce5f6}
+.session-summary h2{font-size:23px;margin:10px 0}.session-summary .section-top p{font-size:12px;color:var(--muted);margin:0}
+.session-summary a.secondary{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px}
+.session-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:24px 0 16px}
+.session-metrics>div{border:1px solid #e2e8f4;border-radius:14px;padding:18px;background:#ffffffb8}
+.session-metrics strong{display:block;font-size:30px;letter-spacing:-1px;color:#284eaf}.session-metrics span{display:block;font-size:11px;line-height:1.6;color:#61718a;margin-top:6px}
+.session-metrics .text-button{font-size:11px;text-align:left;line-height:1.6;margin-top:10px;padding:0}.session-metrics svg{width:14px;height:14px}
+.session-note{font-size:11px;line-height:1.7;color:#65768e}.session-summary details{border-top:1px solid #dfe7f3;margin-top:18px;padding-top:18px}
+.session-summary summary{font-size:13px;font-weight:600;color:#334969;cursor:pointer}.session-breakdown{display:grid;grid-template-columns:1fr 1.6fr;gap:28px;margin-top:20px;min-width:0}.session-breakdown h3{font-size:14px;margin:0 0 12px}
+.technician-progress{list-style:none;padding:0;margin:0}.technician-progress li{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid #e1e8f3;font-size:12px}.technician-progress li>span:last-child{text-align:right;flex-shrink:0}.technician-progress small{display:block;color:#6a7b92;margin-top:5px}
+.session-trolleys{display:grid;gap:12px}.session-trolleys article{border:1px solid #dfe7f3;background:#fff;border-radius:12px;padding:16px;min-width:0}.session-trolleys strong{font-size:13px;overflow-wrap:anywhere}.session-trolleys .tag{margin-left:8px}.session-trolleys p{font-size:11px;line-height:1.7;color:#65768e;margin:8px 0}.session-trolleys small{display:block}.session-trolleys .trolley-actions{margin-top:12px}#summary-error{font-size:12px;color:#a74444}
+@media(max-width:1100px){.session-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.session-summary .section-top{align-items:flex-start;flex-direction:column;gap:14px}.session-summary h2{font-size:21px}.session-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.session-metrics>div{padding:14px}.session-breakdown{grid-template-columns:1fr;gap:24px}}
