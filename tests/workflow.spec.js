@@ -114,6 +114,11 @@ test('trolley management creates labels, barcode inventory views and retained co
  const label=await labelDownload;expect(label.suggestedFilename()).toBe(`${trolley.reference}.pdf`);
  const bytes=await readFile(await label.path());expect(bytes.subarray(0,5).toString()).toBe('%PDF-');
  expect(bytes.toString('latin1')).toContain('PROPERTY OF TSU');expect(bytes.toString('latin1')).toContain(trolley.reference);
+ const beforeEmptyManifest=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
+ const emptyDownload=page.waitForEvent('download');await card.getByRole('button',{name:'PDF manifest',exact:true}).click();
+ const empty=await emptyDownload;expect(empty.suggestedFilename()).toBe(`${trolley.reference}-manifest.pdf`);
+ const emptyPdf=(await readFile(await empty.path())).toString('latin1');expect(emptyPdf).toContain('No equipment recorded');expect(emptyPdf).not.toContain('TROLLEY-OLD-001');
+ expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(beforeEmptyManifest);
  await card.getByRole('button',{name:'Use trolley',exact:true}).click();
  await item(page,'TROLLEY-NEW-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  await scan(page,'DRAFT-TO-KEEP');
@@ -126,6 +131,14 @@ test('trolley management creates labels, barcode inventory views and retained co
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();
  await card.getByRole('button',{name:'Mark collected',exact:true}).click();
  await page.getByLabel('Decommission company').fill('Collection test company');await page.getByRole('button',{name:'Confirm collection',exact:true}).click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();
+ const beforeManifest=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
+ const manifestDownload=page.waitForEvent('download');await card.getByRole('button',{name:'PDF manifest',exact:true}).click();
+ const manifest=await manifestDownload;expect(manifest.suggestedFilename()).toBe(`${trolley.reference}-manifest.pdf`);
+ const manifestPdf=(await readFile(await manifest.path())).toString('latin1');
+ for(const value of ['TROLLEY-NEW-001','Collection test company','COLLECTED','Collection recorded by: JA','Released by','Received by','Helpdesk','Calderdale College',trolley.reference])expect(manifestPdf).toContain(value);
+ expect(manifestPdf).not.toContain('TROLLEY-OLD-001');expect(manifestPdf).not.toContain('DRAFT-TO-KEEP');
+ expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(beforeManifest);
  await page.reload();await expect(page.locator('#trolley-inventory-banner')).toContainText('Collected by Collection test company');
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(restored.trolleys.find(t=>t.id===trolley.id).status).toBe('collected');expect(restored.items).toHaveLength(2);
@@ -498,4 +511,25 @@ test('evidence distinguishes manufacturer-only uncertainty and manual edits requ
 
 test('shared administrator correction failures preserve the scan and retry with the reviewed version',async({page})=>{
  await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`export async function connectFirebase(){window.failReview=true;window.reviewWrites=[];return {profile:{name:'Administrator',code:'MA'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,onConnection){onConnection('connected');},correctionVersionFor(){return 2;},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async writeCorrection(payload,version){if(window.failReview)throw Error('Another administrator changed this reference. Reopen it and review the latest correction.');window.reviewWrites.push({payload,version});}};}`}));await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#connection-status')).toContainText('confirmed by Firebase');await scan(page,'001917BD324B');await scan(page,'KEEP-BARCODE');const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByLabel('Checked model',{exact:true}).fill('Admin checked model');await page.getByLabel('Checked manufacturer',{exact:true}).fill('posiflex');await page.getByLabel('Reason for correction').fill('Checked terminal label');await page.getByLabel('I checked these corrected details').check();await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.locator('#scan-correction-error')).toContainText('Another administrator');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);await page.evaluate(()=>window.failReview=false);await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.getByRole('status')).toContainText('saved to the reference library');const write=await page.evaluate(()=>window.reviewWrites[0]);expect(write.version).toBe(2);expect(write.payload.model).toBe('Admin checked model');const draft=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft);expect(draft.barcode).toBe('KEEP-BARCODE');expect(draft.model).toBe('Admin checked model');
+});
+
+
+test('manifest paginates long fields with repeated headings, QR link and complete trolley scope',async({page})=>{
+ await page.goto('/');
+ const encoded=await page.evaluate(async()=>{
+  const {trolleyManifest}=await import('/src/trolley-manifest.js');
+  const {createTrolley}=await import('/src/trolleys.js');
+  const trolley=createTrolley('Manifest stress trolley');
+  const items=Array.from({length:32},(_,index)=>({trolleyId:trolley.id,serial:`MANIFEST-SERIAL-${index}`,asset:'A0042',model:`Model-${index} `+'long equipment model '.repeat(70)+`ENDMODEL-${index}`,manufacturer:'Maker '+index,technician:'MA'}));
+  items.push({trolley:'Manifest stress trolley',serial:'LEGACY-TROLLEY-ITEM',model:'Legacy model'});
+  items.push({trolleyId:'other-trolley',trolley:trolley.name,serial:'WRONG-TROLLEY-ITEM'});
+  const data=await trolleyManifest(trolley,items,'https://decompro.hxali.com/#trolley/'+trolley.id,{cached:true,printedAt:'2026-10-10T10:00:00Z'});
+  return {pdf:btoa(Array.from(new Uint8Array(data),byte=>String.fromCharCode(byte)).join('')),reference:trolley.reference,id:trolley.id};
+ });
+ const pdf=Buffer.from(encoded.pdf,'base64').toString('latin1');expect(pdf.startsWith('%PDF-')).toBe(true);
+ const pages=pdf.match(/\/Type \/Page\b/g).length;expect(pages).toBeGreaterThan(3);
+ expect(pdf.match(/\(Serial number\)/g)).toHaveLength(pages-1);expect(pdf.match(/Page \d+ of/g)).toHaveLength(pages);
+ for(let index=0;index<32;index++){expect(pdf).toContain(`MANIFEST-SERIAL-${index}`);expect(pdf).toContain(`ENDMODEL-${index}`);}
+ for(const value of ['33 items','LEGACY-TROLLEY-ITEM','CACHED WORKSPACE SNAPSHOT','Handover confirmation','Received by',encoded.reference,'https://decompro.hxali.com/#trolley/'+encoded.id])expect(pdf).toContain(value);
+ expect(pdf).not.toContain('WRONG-TROLLEY-ITEM');expect(pdf.match(/\/Subtype \/Image/g).length).toBeGreaterThanOrEqual(2);
 });
