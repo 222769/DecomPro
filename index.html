@@ -1,1 +1,56 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102720"><title>DecomPro · Equipment decommissioning</title></head><body><div id="app"></div><script type="module" src="/src/main.js"></script></body></html>
+<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102720"><title>DecomPro · Equipment decommissioning</title>
+<style id="startup-style">
+#startup {position:fixed;inset:0;z-index:9999;background:#f4f6fb;color:#18243b;display:grid;place-items:center;padding:24px;font:16px/1.6 system-ui,sans-serif}
+#startup[hidden] {display:none}
+#startup section {max-width:480px;padding:32px;background:white;border:1px solid #dce2ee;border-radius:24px;box-shadow:0 16px 60px #18243b12}
+#startup .startup-brand {color:#365de8;font-weight:700;letter-spacing:.08em}
+#startup h1 {font-size:28px;line-height:1.2;margin:16px 0}
+#startup p {color:#526079}
+#startup button {background:#365de8;color:white;border:0;border-radius:12px;padding:14px 20px;font:600 16px system-ui;cursor:pointer}
+#startup details {margin-top:20px;overflow-wrap:anywhere}
+</style></head><body>
+<div id="startup" role="status" aria-live="polite"><section>
+<div class="startup-brand">DecomPro</div><h1 id="startup-title">Opening your workspace…</h1>
+<p id="startup-message">Loading the scan station and your saved equipment.</p>
+<button id="startup-retry" type="button" hidden>Refresh app</button>
+<details id="startup-details" hidden><summary>Error details</summary><p id="startup-error"></p></details>
+<noscript><p>Enable JavaScript in your browser to open DecomPro.</p></noscript>
+</section></div><div id="app"></div><script>
+(function () {
+  var screen = document.getElementById('startup');
+  var message = document.getElementById('startup-message');
+  var retry = document.getElementById('startup-retry');
+  retry.onclick = function () {
+    var url = new URL(location.href);
+    url.searchParams.set('app-refresh', Date.now().toString());
+    location.replace(url.href);
+  };
+  var timer = setTimeout(function () {
+    message.textContent = 'Loading is taking longer than expected. Check your connection or refresh the app. Your saved records will be kept.';
+    retry.hidden = false;
+  }, 15000);
+  window.decomproStartup = {
+    complete: function () {
+      clearTimeout(timer);
+      screen.hidden = true;
+      document.getElementById('startup-style').remove();
+    },
+    fail: function (error) {
+      clearTimeout(timer);
+      document.getElementById('startup-title').textContent = 'Your workspace could not open';
+      message.textContent = 'The app could not finish loading. Refresh to request the latest version. Your saved records have not been cleared.';
+      retry.hidden = false;
+      document.getElementById('startup-details').hidden = false;
+      document.getElementById('startup-error').textContent = error.message || String(error);
+    }
+  };
+  window.addEventListener('error', function (event) {
+    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') {
+      window.decomproStartup.fail(new Error('The app component could not download. Check your connection and refresh.'));
+    }
+  }, true);
+})();
+</script><script type="module" src="/src/bootstrap.js"></script>
+</body></html>
