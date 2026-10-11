@@ -5,6 +5,7 @@ const shape = serial => serial.replace(/[A-Z]/g,'A').replace(/[0-9]/g,'9');
 export function cleanExamples(examples) {
  const unique=new Map();
  for(const row of examples) {
+  if(row.recognitionNeedsReview===true&&row.recognitionConfirmed!==true)continue;
   if(!meaningful(row.serial)||!meaningful(row.model)||!meaningful(row.manufacturer))continue;
   const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:typeof row.source==='string'?row.source:'Confirmed record'};
   const key=`${fact.serial}\u0000${labelKey(fact)}`,previous=unique.get(key);

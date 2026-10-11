@@ -6,6 +6,7 @@ import {doc,setDoc,getDoc,getDocs,collection,deleteDoc,writeBatch,serverTimestam
 import {createTeamStore} from '../../src/firebase-db.js';
 import {createTrolley} from '../../src/trolleys.js';
 import {createHandover,handoverGroups} from '../../src/handover-data.js';
+import {equipmentImportPlan} from '../../src/equipment-import.js';
 const initialTrolley=createTrolley('Trolley 01');
 let env;
 const member={displayName:'Test Technician',code:'TT',role:'technician',active:true};
@@ -15,6 +16,17 @@ const context=uid=>env.authenticatedContext(uid).firestore();
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-decompro',firestore:{host:'127.0.0.1',port:8085,rules:await readFile('database/firestore.rules','utf8')}});});
 after(async()=>{await env?.cleanup();});
 beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'teams/college-it/members/tech'),member);await setDoc(doc(c.firestore(),'teams/college-it/members/admin'),admin);});await createTeamStore(context('tech'),'tech','college-it',member).writeTrolley(initialTrolley);});
+test('historical Excel equipment imports preserve dates and attribution with admin permissions and serial protection',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ const [entry]=equipmentImportPlan([{id:'excel-item',values:{serial:'00001234',model:'Original model',manufacturer:'Original maker',date:'2026-02-16',technician:'OLD',asset:'Legacy-12'}}],[],initialTrolley);
+ assert.equal(entry.status,'new');await assert.rejects(tech.write(entry.item,0,{historicalImport:true}),/administrator/);
+ await owner.write(entry.item,0,{historicalImport:true});
+ const record=await getDoc(doc(context('admin'),'teams/college-it/equipment/excel-item'));
+ assert.equal(record.data().historicalImport,true);assert.equal(record.data().payload.technician,'OLD');assert.equal(record.data().payload.date,'2026-02-16');assert.equal(record.data().payload.recognitionConfirmed,false);
+ assert.equal((await owner.load()).items[0].serial,'00001234');
+ await assert.rejects(owner.write({...entry.item,id:'duplicate-excel'},0,{historicalImport:true}),/already recorded/);
+ assert.equal((await getDocs(collection(context('admin'),'teams/college-it/equipment/excel-item/revisions'))).size,1);
+});
 test('unauthenticated and non-member access is denied; a member cannot promote themselves',async()=>{
  await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'teams/college-it/equipment')));
  await assertFails(getDocs(collection(context('outsider'),'teams/college-it/references')));
