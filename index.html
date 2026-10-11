@@ -8,7 +8,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./decompro-icon-180.png">
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="DecomPro">
-<script src="./startup-preference.js"></script>
+<script>
+// Apply the device preference before the first paint, including loading recovery.
+(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]').content=dark?'#0b1220':'#f4f6fa';}catch{}})();
+</script>
 <style id="startup-style">
 #startup {position:fixed;inset:0;z-index:9999;background:#f4f6fb;color:#18243b;display:grid;place-items:center;padding:24px;font:16px/1.6 system-ui,sans-serif}
 #startup[hidden] {display:none}
@@ -17,6 +20,7 @@
 #startup h1 {font-size:28px;line-height:1.2;margin:16px 0}
 #startup p {color:#526079}
 #startup button {background:#365de8;color:white;border:0;border-radius:12px;padding:14px 20px;font:600 16px system-ui;cursor:pointer}
+#startup-refresh-link {display:inline-block;color:#365de8;margin:12px 16px 12px 0;font-weight:600;text-decoration:underline}
 #startup details {margin-top:20px;overflow-wrap:anywhere}
 html[data-theme="dark"] #startup{background:#0b1220;color:#edf3ff}
 html[data-theme="dark"] #startup section{background:#141f32;border-color:#2c3c55;box-shadow:0 16px 60px #0005}
@@ -26,8 +30,43 @@ html[data-theme="dark"] #startup .startup-brand{color:#9cb5ff}
 <div id="startup" role="status" aria-live="polite"><section>
 <div class="startup-brand">DecomPro</div><h1 id="startup-title">Opening your workspace…</h1>
 <p id="startup-message">Loading the scan station and your saved equipment.</p>
-<button id="startup-retry" type="button" hidden>Refresh app</button>
+<a id="startup-refresh-link" href="?app-refresh=startup">Reload the latest app</a><button id="startup-retry" type="button" hidden>Refresh app</button>
 <details id="startup-details" hidden><summary>Error details</summary><p id="startup-error"></p></details>
 <noscript><p>Enable JavaScript in your browser to open DecomPro.</p></noscript>
-</section></div><div id="app"></div><script src="./startup-recovery.js"></script><script type="module" src="/src/bootstrap.js"></script>
+</section></div><div id="app"></div><script>
+(function () {
+  var screen = document.getElementById('startup');
+  var message = document.getElementById('startup-message');
+  var retry = document.getElementById('startup-retry');
+  retry.onclick = function () {
+    var url = new URL(location.href);
+    url.searchParams.set('app-refresh', Date.now().toString());
+    location.replace(url.href);
+  };
+  var timer = setTimeout(function () {
+    message.textContent = 'Loading is taking longer than expected. Check your connection or refresh the app. Your saved records will be kept.';
+    retry.hidden = false;
+  }, 15000);
+  window.decomproStartup = {
+    complete: function () {
+      clearTimeout(timer);
+      screen.hidden = true;
+      document.getElementById('startup-style').remove();
+    },
+    fail: function (error) {
+      clearTimeout(timer);
+      document.getElementById('startup-title').textContent = 'Your workspace could not open';
+      message.textContent = 'The app could not finish loading. Refresh to request the latest version. Your saved records have not been cleared.';
+      retry.hidden = false;
+      document.getElementById('startup-details').hidden = false;
+      document.getElementById('startup-error').textContent = error.message || String(error);
+    }
+  };
+  window.addEventListener('error', function (event) {
+    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') {
+      window.decomproStartup.fail(new Error('The app component could not download. Check your connection and refresh.'));
+    }
+  }, true);
+})();
+</script><script type="module" src="/src/bootstrap.js"></script>
 </body></html>

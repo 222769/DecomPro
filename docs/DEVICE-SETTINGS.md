@@ -22,3 +22,9 @@ Validation: 97 browser cases verified (96 in the final full run plus the correct
 The first locking release could store an empty current scan field, causing “The backup has invalid captured values” on reconnect and “Saved data could not be loaded” after a refresh. Locking now leaves an empty field uncaptured. Workspace loading normalizes blank draft fields, including saved collection checkpoints, while still rejecting invalid types and inconsistent accepted progress. Equipment records and other captured values remain intact. Failed connection validation also keeps the persistent lock marker in place.
 
 Recovery is applied when the updated app loads; do not clear browser data. Validation: 16 targeted browser tests and the production build passed, including empty serial/model lock cycles and recovery of an affected saved draft alongside an existing equipment record.
+
+## Startup loading recovery
+
+Startup recovery and initial theme selection now run directly from the HTML, with exact script hashes generated in the Content Security Policy. A missing separate recovery-script download can no longer leave the app behind the opening screen. A plain **Reload the latest app** link works without JavaScript, and stalled component downloads expose the timed Refresh app control. The legacy public startup files remain available for older cached pages.
+
+Validation: 12 targeted browser tests passed, including missing and stalled component downloads, initializer failures, script injection protection and lock/draft recovery. Production desktop/phone checks loaded with no runtime or CSP errors, and a deliberately failed production module download exposed recovery controls. Live-site requests are blocked by the execution network proxy, so deployment status must be checked separately in GitHub Actions.

@@ -2,7 +2,7 @@
 
 ## Security update — 11 October 2026
 
-The website has a Content Security Policy that only runs JavaScript served by the app. Inline event handlers and external scripts are blocked. Connections are limited to the same origin and Firebase/Google API hosts used by the app. Object embeds, altered base URLs and external form submission are blocked. The referrer policy suppresses page URLs on outgoing requests. Startup scripts are separate local files so recovery and theme selection work without allowing inline JavaScript.
+The website has a Content Security Policy that only runs JavaScript served by the app. Inline event handlers and external scripts are blocked. Connections are limited to the same origin and Firebase/Google API hosts used by the app. Object embeds, altered base URLs and external form submission are blocked. The referrer policy suppresses page URLs on outgoing requests. Startup recovery and theme selection are embedded in the page with exact SHA-256 hashes in the script policy. Arbitrary inline scripts and event handlers remain blocked; recovery does not depend on another script downloading.
 
 Shared equipment is not rendered or available for export until Firebase sign-in and a server membership check succeed. Reopening a shared workspace checks membership again. Existing cached records and unfinished scans remain stored. Network loss during an already verified session retains the working view; reconnect before saving. Public local-only workspaces keep their existing behavior.
 
