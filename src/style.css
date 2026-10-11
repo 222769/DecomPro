@@ -234,3 +234,14 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .collection-trolley-option input { width:18px;height:18px;flex:none;margin:2px 0;accent-color:#365fed; }
 .collection-trolley-option small { display:block;margin-top:6px;overflow-wrap:anywhere; }
 #collection-register-filter { max-width:400px;margin-bottom:10px; }
+
+/* Register filters share a clear rhythm, with actions on their own side. */
+.register-tools { align-items:flex-start; gap:24px; flex-wrap:wrap; }
+.register-filters { flex:1 1 420px; min-width:0; display:grid; gap:16px; max-width:620px; }
+.register-filters .search-field { max-width:none; width:100%; }
+.collection-filter-field { display:grid; gap:8px; }
+.collection-filter-field label { font-size:11px; font-weight:600; color:var(--muted); }
+.collection-filter-field select { width:100%; min-height:44px; font-size:13px; }
+.register-tools .backup-actions { flex-wrap:wrap; gap:10px; margin-left:auto; }
+.register .search-count { margin-top:20px; }
+@media(max-width:700px) { .register-filters { flex:auto; max-width:none; width:100%; } .register-tools .backup-actions { margin-left:0; width:100%; } .backup-actions .secondary { min-height:42px; } }
