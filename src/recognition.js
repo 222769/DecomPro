@@ -57,6 +57,18 @@ export function recognizeSerial(value,examples) {
   const family=compatible.filter(f=>f.serial.startsWith(prefix));
   if(family.length)return {...describe(family,'similar',prefix),referenceSerials:[...new Set(family.map(f=>f.serial))]};
  }
+ // Literal suffix families mirror prefix families: longer endings first,
+ // leaving a variable production prefix. Use independent serials and include
+ // every matching fact so contradictory labels cannot be hidden by proximity.
+ let suffixConflict=null;
+ for(let length=Math.min(12,serial.length-3);length>=4;length--) {
+  const suffix=serial.slice(-length),family=facts.filter(f=>f.serial.length>=length+3&&f.serial.endsWith(suffix));
+  if(new Set(family.map(f=>f.serial)).size<3||new Set(family.map(f=>f.serial.slice(0,-length))).size<2)continue;
+  const result={...describe(family,'pattern'),suffix,format:''};
+  if(result.method!=='conflict')return result;
+  suffixConflict ||= result;
+ }
+ if(suffixConflict)return suffixConflict;
  // A terminal maker code can survive changing production prefixes. Require
  // the entire serial format, independent examples and varied leading families.
  // This evidence suggests only the maker; a suffix does not prove the model.

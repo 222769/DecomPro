@@ -2,7 +2,7 @@ const methods=['exact','pattern','similar','conflict'];
 const text=(value,max=1000)=>typeof value==='string'&&value.length<=max;
 export function validateEvidence(value) {
  if(!value||!methods.includes(value.method)||!['exact','pattern','similar'].includes(value.basis)||!text(value.prefix,200)||!Number.isInteger(value.support)||value.support<1||!text(value.model)||!text(value.manufacturer)||!Array.isArray(value.sources)||value.sources.length>12||value.sources.some(s=>!text(s)||!s.trim())||!Number.isInteger(value.sourceCount)||value.sourceCount<value.sources.length||!Array.isArray(value.referenceSerials)||value.referenceSerials.length>8||value.referenceSerials.some(s=>!text(s,200)))throw Error('Invalid recognition evidence in captured progress.');
- if(value.suffix!==undefined&&(!text(value.suffix,3)||!/^([A-Z]{1,3})$/.test(value.suffix)||!text(value.format,200)))throw Error('Invalid suffix recognition evidence.');
+ if(value.suffix!==undefined&&(!text(value.suffix,200)||!value.suffix.trim()||!text(value.format,200)))throw Error('Invalid suffix recognition evidence.');
  return {...(value.suffix?{suffix:value.suffix,format:value.format}:{}),method:value.method,basis:value.basis,prefix:value.prefix,support:value.support,model:value.model,manufacturer:value.manufacturer,sources:[...value.sources],sourceCount:value.sourceCount,referenceSerials:[...value.referenceSerials]};
 }
 export function snapshotEvidence(match) {

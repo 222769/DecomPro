@@ -729,3 +729,10 @@ test('Toshiba terminal-code family suggests manufacturer for a new production pr
  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(state.draft.serial).toBe('8F020669H');expect(state.draft.model).toBeUndefined();expect(state.draft.recognitionEvidence.suffix).toBe('H');expect(state.draft.recognitionConfirmed).toBe(false);
 });
+
+test('imported suffix families fill model and manufacturer for changing starts and retain suffix evidence',async({page})=>{
+ await page.addInitScript(()=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify({captureOrder:'serial-first',profiles:[{name:'Ali',code:'MA'}],active:'MA',defaults:{date:'2026-10-11',description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'},items:[],draft:{},step:0,voice:false,referenceExamples:['ABX987654','CDY987654','EFZ987654'].map(serial=>({serial,manufacturer:'Example maker',model:'Panel 24',source:'Excel · Previous collection'}))}));});
+ await page.goto('/');await scan(page,'NEW987654');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Ends 987654');
+ await page.reload();const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.draft.model).toBe('Panel 24');expect(state.draft.recognitionEvidence.suffix).toBe('987654');expect(state.draft.recognitionConfirmed).toBe(false);
+});

@@ -1,3 +1,4 @@
+import {snapshotEvidence} from '../../src/recognition-evidence.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recognizeSerial,cleanExamples,examplesFromWorkbook} from '../../src/recognition.js';
@@ -91,4 +92,14 @@ test('suffix families suggest only a unanimous manufacturer across varied produc
  assert.equal(recognizeSerial('8F020669H',[facts[0],facts[0],facts[0]]),null);
  assert.equal(recognizeSerial('8F020669H',facts.map(f=>({...f,serial:f.serial.replace(/^.../,'7F0')}))),null);
  assert.equal(recognizeSerial('7F020669H',facts).method,'exact');
+});
+
+test('shared numeric or alphanumeric endings recognize models across changing production prefixes',()=>{
+ const facts=['ABX987654','CDY987654','EFZ987654'].map(serial=>({serial,model:'Panel 24',manufacturer:'Example maker'}));
+ const result=recognizeSerial('NEW987654',facts);assert.equal(result.model,'Panel 24');assert.equal(result.manufacturer,'Example maker');assert.equal(result.suffix,'987654');assert.equal(result.method,'pattern');
+ const letters=facts.map(f=>({...f,serial:f.serial.replace('987654','TYPE24')}));assert.equal(recognizeSerial('NEWTYPE24',letters).suffix,'TYPE24');
+ const separated=facts.map(f=>({...f,serial:f.serial.replace('987654','TYPE-24')}));assert.equal(snapshotEvidence(recognizeSerial('NEWTYPE-24',separated)).suffix,'TYPE-24');
+ const mixed=facts.map((f,i)=>({...f,model:i?'Panel 27':'Panel 24'}));const uncertain=recognizeSerial('NEW987654',mixed);assert.equal(uncertain.method,'conflict');assert.equal(uncertain.manufacturer,'Example maker');assert.equal(uncertain.model,undefined);
+ assert.equal(recognizeSerial('NEW987654',facts.slice(0,2)),null);
+ const conflicting=recognizeSerial('NEW987654',[...facts,{serial:'GHW987654',manufacturer:'Other maker',model:'Other panel'}]);assert.equal(conflicting.method,'conflict');assert.equal(conflicting.manufacturer,undefined);
 });
