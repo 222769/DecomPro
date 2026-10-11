@@ -271,3 +271,22 @@ test('a twelve-trolley collection commits within Firestore access limits and pre
  await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/trolleys',initialTrolley.id),{payload:{...initialTrolley,status:'collected',company:'Supplier',collectedAt:new Date().toISOString(),collectedBy:'OLD'},version:1,createdBy:'admin',updatedBy:'admin',createdAt:new Date(),updatedAt:new Date(),revisionId:'seed'}));
  await owner.writeSession(createCollection('Twelve trolleys'),cages.map(t=>t.id));assert.equal((await owner.loadCollections()).collectionTrolleys.length,12);assert.equal((await owner.load()).trolleys.find(t=>t.id===initialTrolley.id).status,'collected');
 });
+
+test('security: direct malicious writes cannot store unexpected payload fields or oversized equipment and references',async()=>{
+ const db=context('tech'),client=createTeamStore(db,'tech','college-it',member);
+ for(const changes of [{admin:true},{manufacturer:'x'.repeat(1001)},{model:'x'.repeat(1001)},{serial:'x'.repeat(1001)},{recognitionConfirmed:'true'}]) {
+  await assert.rejects(client.write({...sample(),...changes}),error=>error.code==='permission-denied');
+  assert.equal((await getDoc(doc(db,'teams/college-it/equipment/equipment-1'))).exists(),false);
+ }
+ await assertFails(setDoc(doc(db,'teams/college-it/references/malicious'),{serial:'S',model:'x'.repeat(1001),manufacturer:'M',source:'Excel',importedBy:'tech',importedAt:serverTimestamp()}));
+ await client.write(sample());assert.equal((await client.load()).items.length,1);
+});
+test('security: technicians can resolve audit names but cannot enumerate membership documents or read another team',async()=>{
+ const db=context('tech');await getDoc(doc(db,'teams/college-it/members/admin'));
+ await assertFails(getDocs(collection(db,'teams/college-it/members')));
+ assert.equal((await getDocs(collection(context('admin'),'teams/college-it/members'))).size,2);
+ for(const path of ['equipment','trolleys','references','collectionSessions','members','memberAudit'])await assertFails(getDocs(collection(db,`teams/other-team/${path}`)));
+ await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/members/tech'),{...member,active:false}));
+ await assertFails(getDoc(doc(db,'teams/college-it/members/admin')));
+ await assert.rejects(createTeamStore(db,'tech','college-it',member).write(sample()),error=>error.code==='permission-denied');
+});

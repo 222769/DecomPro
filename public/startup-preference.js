@@ -1,0 +1,2 @@
+// Apply the device preference before the first paint, including loading recovery.
+(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]').content=dark?'#0b1220':'#f4f6fa';}catch{}})();

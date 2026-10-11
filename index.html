@@ -1,15 +1,14 @@
 <!doctype html>
 <html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102720"><title>DecomPro · Equipment decommissioning</title>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.run.app https://*.firebaseapp.com; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'none'; form-action 'self';">
+<meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102720"><title>DecomPro · Equipment decommissioning</title>
 <link rel="icon" type="image/svg+xml" href="./decompro-icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="./decompro-icon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="./decompro-icon-180.png">
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="DecomPro">
-<script>
-// Apply the device preference before the first paint, including loading recovery.
-(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';document.querySelector('meta[name="theme-color"]').content=dark?'#0b1220':'#f4f6fa';}catch{}})();
-</script>
+<script src="./startup-preference.js"></script>
 <style id="startup-style">
 #startup {position:fixed;inset:0;z-index:9999;background:#f4f6fb;color:#18243b;display:grid;place-items:center;padding:24px;font:16px/1.6 system-ui,sans-serif}
 #startup[hidden] {display:none}
@@ -30,40 +29,5 @@ html[data-theme="dark"] #startup .startup-brand{color:#9cb5ff}
 <button id="startup-retry" type="button" hidden>Refresh app</button>
 <details id="startup-details" hidden><summary>Error details</summary><p id="startup-error"></p></details>
 <noscript><p>Enable JavaScript in your browser to open DecomPro.</p></noscript>
-</section></div><div id="app"></div><script>
-(function () {
-  var screen = document.getElementById('startup');
-  var message = document.getElementById('startup-message');
-  var retry = document.getElementById('startup-retry');
-  retry.onclick = function () {
-    var url = new URL(location.href);
-    url.searchParams.set('app-refresh', Date.now().toString());
-    location.replace(url.href);
-  };
-  var timer = setTimeout(function () {
-    message.textContent = 'Loading is taking longer than expected. Check your connection or refresh the app. Your saved records will be kept.';
-    retry.hidden = false;
-  }, 15000);
-  window.decomproStartup = {
-    complete: function () {
-      clearTimeout(timer);
-      screen.hidden = true;
-      document.getElementById('startup-style').remove();
-    },
-    fail: function (error) {
-      clearTimeout(timer);
-      document.getElementById('startup-title').textContent = 'Your workspace could not open';
-      message.textContent = 'The app could not finish loading. Refresh to request the latest version. Your saved records have not been cleared.';
-      retry.hidden = false;
-      document.getElementById('startup-details').hidden = false;
-      document.getElementById('startup-error').textContent = error.message || String(error);
-    }
-  };
-  window.addEventListener('error', function (event) {
-    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') {
-      window.decomproStartup.fail(new Error('The app component could not download. Check your connection and refresh.'));
-    }
-  }, true);
-})();
-</script><script type="module" src="/src/bootstrap.js"></script>
+</section></div><div id="app"></div><script src="./startup-recovery.js"></script><script type="module" src="/src/bootstrap.js"></script>
 </body></html>

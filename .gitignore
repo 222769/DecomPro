@@ -9,3 +9,13 @@ ui-debug.log
 
 auth-debug.log
 functions-debug.log
+
+# Local credentials must never be committed or included in the website.
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+*service_account*.json
+*.pem
+*.key

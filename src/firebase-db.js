@@ -35,9 +35,11 @@ export async function connectFirebase(config,teamId,email,password) {
  else await new Promise(resolve=>{const unsubscribe=onAuthStateChanged(auth,()=>{unsubscribe();resolve();});});
  if(!auth.currentUser)throw Error('Sign in with your Firebase team account.');
  const uid=auth.currentUser.uid;
- const membership=await getDoc(doc(db,'teams',teamId,'members',uid));
- if(!membership.exists()||!['admin','technician'].includes(membership.data().role)||membership.data().active!==true)throw Error('This account is not an active member of the configured team.');
- return createTeamStore(db,uid,teamId,membership.data(),auth);
+ try {
+  const membership=await getDocFromServer(doc(db,'teams',teamId,'members',uid));
+  if(!membership.exists()||!['admin','technician'].includes(membership.data().role)||membership.data().active!==true)throw Error('This account is not an active member of the configured team.');
+  return createTeamStore(db,uid,teamId,membership.data(),auth);
+ }catch(error){await signOut(auth).catch(()=>{});throw error;}
 }
 export function createTeamStore(db,uid,teamId,member,auth=null) {
  const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),corrections=collection(root,'referenceCorrections');
@@ -94,6 +96,11 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   },
   async load(){const [items,examples,cages,edits]=await Promise.all([getDocsFromServer(query(equipment,where('deleted','==',false))),getDocsFromServer(references),getDocsFromServer(trolleys),getDocsFromServer(corrections)]);return {items:decode(items),examples:cleanExamples(examples.docs.map(d=>d.data())),trolleys:decodeTrolleys(cages),corrections:decodeCorrections(edits)};},
   listen(onItems,onExamples,onError,onTrolleys=()=>{},onConnection=()=>{},onCorrections=()=>{}) {
+   stops.push(onSnapshot(doc(root,'members',uid),snapshot=>{
+    const current=snapshot.exists()?snapshot.data():null;
+    if(!current||current.active!==true||current.role!==member.role||current.code!==member.code)onError(Error('Your team access changed. Sign in again to confirm your current permissions.'));
+   },onError));
+   if(auth)stops.push(onAuthStateChanged(auth,user=>{if(user?.uid!==uid)onError(Error('Your sign-in changed. Reconnect to the team workspace.'));}));
    const confirmed=new Set();
    const receive=(key,callback)=>snapshot=>{
     try{callback(snapshot);if(!snapshot.metadata.fromCache&&!snapshot.metadata.hasPendingWrites)confirmed.add(key);else confirmed.delete(key);onConnection(confirmed.size===4?'connected':'syncing');}

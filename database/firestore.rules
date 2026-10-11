@@ -33,20 +33,23 @@ service cloud.firestore {
     && notes.get('manufacturer','') is string && notes.get('manufacturer','').size()<=500
     && p.get('recognitionNeedsReview',false) is bool && p.get('recognitionConfirmed',false) is bool;
   }
+  function boundedText(value) { return value is string && value.size()>0 && value.size()<=1000; }
   function itemShape(p) {
-   return p.keys().hasAll(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley'])
-    && p.id is string && p.date is string && p.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-    && p.description is string && p.description.size()>0 && p.model is string && p.model.size()>0
-    && p.manufacturer is string && p.manufacturer.size()>0 && p.source is string && p.source.size()>0
-    && p.serial is string && p.serial.size()>0 && p.barcode is string && p.barcode.size()>0
-    && p.etch is string && p.etch.size()>0 && p.asset is string && p.asset.size()>0
-    && reviewNotes(p) && p.reason is string && p.reason.size()>0 && p.technician is string && p.trolley is string && p.trolley.size()>0;
+   return p.keys().hasOnly(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley','trolleyId','readinessNotes','recognitionNeedsReview','recognitionConfirmed'])
+    && p.keys().hasAll(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley'])
+    && boundedText(p.id) && p.date is string && p.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+    && boundedText(p.description) && boundedText(p.model)
+    && boundedText(p.manufacturer) && boundedText(p.source)
+    && boundedText(p.serial) && boundedText(p.barcode)
+    && boundedText(p.etch) && boundedText(p.asset)
+    && reviewNotes(p) && boundedText(p.reason) && boundedText(p.technician) && boundedText(p.trolley);
   }
   match /teams/{team} {
    allow read: if member(team);
    allow write: if false;
    match /members/{uid} {
-    allow read: if member(team);
+    allow get: if member(team);
+    allow list: if admin(team);
     // Account changes pass through the authenticated administration service.
     // Console/Admin SDK access remains available for trusted bootstrapping.
     allow write: if false;
@@ -213,8 +216,8 @@ service cloud.firestore {
    match /references/{reference} {
     allow read: if member(team);
     allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','source','importedBy','importedAt'])
-     && request.resource.data.serial is string && request.resource.data.serial.size()>0 && request.resource.data.model is string && request.resource.data.model.size()>0
-     && request.resource.data.manufacturer is string && request.resource.data.manufacturer.size()>0 && request.resource.data.source is string
+     && boundedText(request.resource.data.serial) && boundedText(request.resource.data.model)
+     && boundedText(request.resource.data.manufacturer) && request.resource.data.source is string && request.resource.data.source.size()<=1000
      && request.resource.data.importedBy==request.auth.uid && request.resource.data.importedAt==request.time;
     allow delete: if admin(team);
    }

@@ -271,3 +271,6 @@ html[data-theme="dark"] .status-physical { background:#253c67; color:#b4c9ff; }
 html[data-theme="dark"] .status-ready { background:#183f34; color:#8fe2bf; }
 @media(max-width:1000px) { .dashboard-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:700px) { .collection-dashboard .section-top { flex-wrap:wrap; }.dashboard-filters,.dashboard-trolleys { grid-template-columns:1fr; }.dashboard-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }.dashboard-metrics>div { padding:14px; }.dashboard-metrics strong { font-size:24px; }.dashboard-trolley { padding:16px; } }
+
+main.workspace-lock { margin:0 auto; max-width:640px; min-height:100vh; display:grid; align-content:center; padding:32px 20px; }
+.workspace-lock .card { padding:32px; }.workspace-lock .eyebrow { margin-top:24px; }.workspace-lock h1 { font-size:32px; max-width:none; margin:16px 0; }.workspace-lock p { line-height:1.8; color:var(--muted); }.workspace-lock .primary { margin-top:12px; }

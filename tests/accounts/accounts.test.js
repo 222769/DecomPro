@@ -103,3 +103,25 @@ test('an ambiguous transaction response never deletes an Authentication identity
  const user=await auth.getUserByEmail('uncertain@example.invalid');assert.equal((await db.doc(`teams/college-it/members/${user.uid}`).get()).data().code,'UC');
  assert.equal((await run('owner',request('list'))).users.find(row=>row.uid===user.uid).authMissing,false);
 });
+
+test('browser sign-in clears rejected authentication and invalidates an active workspace when membership is revoked',async()=>{
+ const {initializeApp:initializeClient,deleteApp:deleteClient}=await import('firebase/app');
+ const {getAuth:getClientAuth,connectAuthEmulator}=await import('firebase/auth');
+ const {getFirestore:getClientFirestore,connectFirestoreEmulator}=await import('firebase/firestore');
+ const {connectFirebase}=await import('../../src/firebase-db.js');
+ const config={projectId:'demo-decompro',apiKey:'emulator-only-key',authDomain:'demo-decompro.firebaseapp.com',appId:'emulator-only-app'};
+ const web=initializeClient(config,'decompro-demo-decompro'),webAuth=getClientAuth(web),webDb=getClientFirestore(web);
+ connectAuthEmulator(webAuth,`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`,{disableWarnings:true});
+ const [host,port]=process.env.FIRESTORE_EMULATOR_HOST.split(':');connectFirestoreEmulator(webDb,host,Number(port));
+ let client;
+ try {
+  await db.doc('teams/college-it/members/tech').update({active:false});
+  await assert.rejects(connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!'));
+  assert.equal(webAuth.currentUser,null);
+  await db.doc('teams/college-it/members/tech').update({active:true});
+  client=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!');assert.equal(client.role,'technician');
+  let timer;const revoked=new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Membership revocation was not observed')),5000);client.listen(()=>{},()=>{},error=>{clearTimeout(timer);client.stop();resolve(error);});});
+  await db.doc('teams/college-it/members/tech').update({active:false});
+  assert.ok(await revoked);
+ }finally{await client?.logout();await deleteClient(web);}
+});

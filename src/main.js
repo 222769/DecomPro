@@ -74,6 +74,11 @@ function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return
 function prompt() { if(state.collectionPaused)return;speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
 function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
+ if(sharedLocked&&!sharedClient) {
+  document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><div class="eyebrow">PRIVATE TEAM WORKSPACE</div><h1>Sign in to your team workspace.</h1><p>Confirm your team access before viewing saved equipment. Your cached records and unfinished scan are preserved.</p><p class="session-note">${navigator.onLine===false?'You are offline. Connect to the internet to verify your team membership.':escape(notice||'Checking your sign-in with Firebase…')}</p><button class="primary" id="unlock-workspace">Sign in to DecomPro</button></section></main><dialog id="database-dialog"></dialog>`;
+  document.querySelector('#unlock-workspace').onclick=openDatabase;
+  return;
+ }
  const current=fields[state.step]; const profile=state.profiles.find(p=>p.code===state.active);
  const modelMatch=state.step===1&&state.draft.serial?lookupSerial(state.draft.serial):null;
  const modelCandidates=modelMatch?.method==='conflict'?modelMatch.candidates||[]:[];
@@ -821,6 +826,7 @@ async function openMoveHistory(id) {
  }catch(error){if(results.isConnected&&dialog.open)results.textContent=`History unavailable: ${firebaseErrorMessage(error)}`;}
 }
 function updateRegister() {
+ if(!document.querySelector('#inventory'))return;
  for(const id of selectedEquipment)if(!state.items.some(item=>item.id===id))selectedEquipment.delete(id);
  updateSessionSummary();
  updateCollections();
@@ -869,6 +875,7 @@ function updateHandoverHistory(terms) {
  });
 }
 function updateHistory() {
+ if(!document.querySelector('#collection-history'))return;
  updateCollectionReview();
  document.querySelector('a[href="#overview"]').classList.toggle('active',location.hash==='#overview');
  const section=document.querySelector('#collection-history');section.hidden=location.hash!=='#collection-history';
@@ -951,6 +958,7 @@ function openDatabase() {
  saved.config ||= defaultFirebaseConfig;
  const dialog=document.querySelector('#database-dialog');
  dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary wide" id="check-connection">Check connection</button><p id="connection-check-result" aria-live="polite">Checks equipment, trolley and reference access directly with Firebase.</p>${sharedClient.role==='admin'?'<button class="secondary" id="team-access">Team access checklist</button><button class="secondary" id="copy-firestore-rules">Copy latest Firestore rules</button><p id="firestore-rules-result" aria-live="polite"></p><textarea id="firestore-rules-text" rows="8" aria-label="Latest Firestore rules" readonly hidden></textarea>':''}<button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Preview your preserved local equipment, check duplicates and import historical records without overwriting team items.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
+ dialog.addEventListener('close',()=>{const password=dialog.querySelector('#firebase-password');if(password)password.value='';},{once:true});
  dialog.showModal();
  document.querySelector('#copy-firestore-rules')?.addEventListener('click',async()=>{
   const output=document.querySelector('#firestore-rules-result');
@@ -960,7 +968,7 @@ function openDatabase() {
    catch{const text=document.querySelector('#firestore-rules-text');text.hidden=false;text.value=rules;text.focus();text.select();output.textContent='Copy the selected rules below. In Firebase → Cloud Firestore → Rules, replace the editor content and select Publish. Then refresh collections.';}
   }catch(error){output.textContent=`Rules could not load. Refresh the app and retry. ${error.message}`;}
  });
- document.querySelector('#close-database').onclick=()=>dialog.close();
+ document.querySelector('#close-database').onclick=()=>{const password=dialog.querySelector('#firebase-password');if(password)password.value='';dialog.close();};
  document.querySelector('#disconnect-database')?.addEventListener('click',disconnectDatabase);
  document.querySelector('#check-connection')?.addEventListener('click',checkSharedConnection);
  document.querySelector('#upload-local')?.addEventListener('click',uploadLocal);
@@ -968,7 +976,7 @@ function openDatabase() {
  document.querySelector('#database-form').onsubmit=async e=>{
   e.preventDefault();const button=e.target.querySelector('.primary');button.disabled=true;
   try {const form=new FormData(e.target);await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'));}
-  catch(error){document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+  catch(error){document.querySelector('#firebase-password').value='';document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
 }
 async function openTeamAccess() {
@@ -993,7 +1001,7 @@ async function activateDatabase(config,teamId,email,password) {
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='Connected to the shared Firebase team register.';persist();render();
   client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();updateHistory();updateReferenceLibrary();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();updateReferenceLibrary();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){state.trolleys=trolleys;persist();updateRegister();updateHistory();}},phase=>{if(sharedClient===client){connectionPhase=phase;if(phase==='connected')lastConfirmedAt=new Date().toISOString();updateConnectionStatus();}},corrections=>{if(sharedClient===client){state.referenceCorrections=corrections;persist();updateReferenceLibrary();}});
   refreshCollections(client);
- }catch(error){client.stop();throw error;}
+ }catch(error){try{if(client.logout)await client.logout();else client.stop();}catch{client.stop();}throw error;}
 }
 async function disconnectDatabase() {
  if(!confirm('Return to your preserved local workspace? Shared records remain in Firebase.'))return;

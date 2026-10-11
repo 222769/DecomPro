@@ -406,10 +406,11 @@ test('cached shared workspace shows offline recovery guidance and keeps scanned 
  await page.evaluate(()=>localStorage.setItem('decompro.mode','shared'));
  await page.addInitScript(()=>Object.defineProperty(navigator,'onLine',{get:()=>false}));
  await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:"export async function connectFirebase(){throw Error('Offline test');}"}));
- await page.reload();await expect(page.locator('#connection-status')).toContainText('Offline · team changes paused');await expect(page.locator('#connection-status')).toContainText('captured item stays here');
- await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await page.reload();await expect(page.locator('.workspace-lock')).toContainText('You are offline');
+ await expect(page.locator('.workspace-lock')).toContainText('unfinished scan are preserved');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('OFFLINE-DRAFT');
- await page.getByRole('button',{name:'Change trolley'}).click();await expect(page.getByRole('status')).toContainText('You are offline');
+ await expect(page.getByRole('button',{name:'Sign in to DecomPro',exact:true})).toBeVisible();
 });
 
 test('connection check reports server results and failures while retaining the scanned item',async({page})=>{
