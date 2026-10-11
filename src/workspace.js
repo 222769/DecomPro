@@ -5,6 +5,7 @@ import { cleanExamples } from './recognition';
 import {validateTrolleys,createTrolley} from './trolleys.js';
 import {validateCorrections} from './reference-library.js';
 import {validateMoveHistory} from './trolley-moves.js';
+import {validateCollections,validateAssignments} from './collection-sessions.js';
 
 export const defaultFields = [
   ['date', 'Disposal date', 'date'],
@@ -100,7 +101,20 @@ export function validateWorkspace(value) {
   const activeTrolleyId=value.activeTrolleyId||'';
   if(typeof activeTrolleyId!=='string'||(activeTrolleyId&&!trolleys.some(t=>t.id===activeTrolleyId)))throw Error('The selected trolley is not in this workspace.');
   const trolleyMoves=validateMoveHistory(value.trolleyMoves);
-  return { captureOrder:'serial-first', activeTrolleyId, trolleys, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  const collectionSessions=validateCollections(value.collectionSessions),collectionTrolleys=validateAssignments(value.collectionTrolleys,collectionSessions);
+  if(collectionTrolleys.some(row=>!trolleys.some(t=>t.id===row.trolleyId)))throw Error('A collection trolley is missing from this workspace.');
+  const activeCollectionId=value.activeCollectionId||'',collectionPaused=value.collectionPaused??false,collectionWorkspace=value.collectionWorkspace||'';
+  if(typeof activeCollectionId!=='string'||(activeCollectionId&&!collectionSessions.some(row=>row.id===activeCollectionId))||typeof collectionPaused!=='boolean'||typeof collectionWorkspace!=='string'||collectionWorkspace.length>200)throw Error('Invalid active collection session.');
+  const collectionScans={};
+  if(value.collectionScans!==undefined) {
+   if(!value.collectionScans||typeof value.collectionScans!=='object'||Array.isArray(value.collectionScans)||Object.keys(value.collectionScans).length>201)throw Error('Invalid saved collection scans.');
+   for(const [id,scan] of Object.entries(value.collectionScans)) {
+    if((id!=='unassigned'&&!collectionSessions.some(row=>row.id===id))||!scan||typeof scan!=='object')throw Error('Invalid saved collection scan.');
+    const checked=validateWorkspace({...value,...scan,collectionSessions:[],collectionTrolleys:[],collectionScans:undefined,activeCollectionId:'',collectionPaused:false});
+    collectionScans[id]={draft:checked.draft,step:checked.step,defaults:checked.defaults,activeTrolleyId:checked.activeTrolleyId};
+   }
+  }
+  return { captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

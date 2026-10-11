@@ -8,6 +8,7 @@ import { createId } from './ids.js';
 import {validateTrolleys} from './trolleys.js';
 import {validateCorrections,correctionKey} from './reference-library.js';
 import {validateHandoverLink} from './handover-data.js';
+import {validateCollections,validateAssignments,assignCollection} from './collection-sessions.js';
 
 export function validateFirebaseConfig(value) {
  if(!value||typeof value!=='object'||'private_key' in value||'client_email' in value)throw Error('Use the public Firebase web app configuration, never a service-account key.');
@@ -42,6 +43,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),corrections=collection(root,'referenceCorrections');
  const versions=new Map(),stops=[];
  const trolleyVersions=new Map(),correctionVersions=new Map();
+ const sessionVersions=new Map(),sessions=collection(root,'collectionSessions'),sessionTrolleys=collection(root,'collectionTrolleys');
  const decodeCorrections=snapshot=>validateCorrections(snapshot.docs.map(row=>{correctionVersions.set(row.data().payload.serial,row.data().version);return row.data().payload;}));
  const decodeTrolleys=snapshot=>validateTrolleys(snapshot.docs.map(row=>{trolleyVersions.set(row.id,row.data().version);return row.data().payload;}));
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
@@ -58,6 +60,31 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    return snapshot.docs.map(row=>({uid:row.id,...row.data()}));
   },
   versionFor(id){return versions.get(id)||0;},
+  sessionVersionFor(id){return sessionVersions.get(id)||0;},
+  async loadCollections() {
+   const [groups,links]=await Promise.all([getDocsFromServer(sessions),getDocsFromServer(sessionTrolleys)]);
+   const collectionSessions=validateCollections(groups.docs.map(row=>{sessionVersions.set(row.id,row.data().version);return row.data().payload;}));
+   const collectionTrolleys=validateAssignments(links.docs.map(row=>({trolleyId:row.id,sessionId:row.data().sessionId})).filter(row=>row.sessionId),collectionSessions);
+   return {collectionSessions,collectionTrolleys};
+  },
+  async writeSession(session,trolleyIds,expectedVersion=0) {
+   const current=await client.loadCollections(),records=await client.load();
+   assignCollection(current.collectionSessions,current.collectionTrolleys,session,trolleyIds,records.trolleys);
+   const previous=current.collectionTrolleys.filter(row=>row.sessionId===session.id).map(row=>row.trolleyId),ids=[...new Set([...previous,...trolleyIds])];
+   if(ids.length>12)throw Error('Detach some trolleys and save before adding their replacements (up to 12 assignments per save).');
+   const row=doc(sessions,session.id),revisionId=createId();
+   await runTransaction(db,async tx=>{
+    const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this collection. Reopen it and review the latest trolley assignments.');
+    const links=[];for(const id of ids)links.push(await tx.get(doc(sessionTrolleys,id)));
+    for(const link of links)if(link.exists()&&link.data().sessionId&&link.data().sessionId!==session.id)throw Error('A trolley was assigned to another collection. Review the latest assignments.');
+    const after={payload:session,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
+    tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,trolleyIds,at:serverTimestamp()});
+    for(const link of links)tx.set(link.ref,{trolleyId:link.id,sessionId:trolleyIds.includes(link.id)?session.id:'',changedInSession:session.id,version:(link.exists()?link.data().version:0)+1,updatedBy:uid,updatedAt:serverTimestamp()});
+   });
+   sessionVersions.set(session.id,expectedVersion+1);
+   return client.loadCollections();
+  },
   async moveHistory(id) {
    const snapshot=await getDocsFromServer(collection(doc(equipment,id),'revisions'));
    const rows=snapshot.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.before&&!r.after.deleted&&(r.before.payload.trolleyId&&r.after.payload.trolleyId?r.before.payload.trolleyId!==r.after.payload.trolleyId:r.before.payload.trolley!==r.after.payload.trolley));
@@ -148,13 +175,17 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   },
   stop(){stops.splice(0).forEach(stop=>stop());},
   async logout(){client.stop();if(auth)await signOut(auth);},
-  async write(item,expectedVersion=0,{deleted=false,historicalImport=false}={}) {
+  async write(item,expectedVersion=0,{deleted=false,historicalImport=false,collectionId=''}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical local records.');
    if(item.readinessNotes!==undefined)item={...item,readinessNotes:validateReadinessNotes(item.readinessNotes)};
    const touchedVersions=new Map();
    const serial=normalizeSerial(item.serial),newKey=deleted||serial==='N/A'?'':'s-'+serial.replaceAll('~','~~').replaceAll('/','~s'),row=doc(equipment,item.id),revisionId=createId();
    await runTransaction(db,async tx=>{
     const current=await tx.get(row),before=current.exists()?current.data():null;
+    if(collectionId) {
+     const assignment=await tx.get(doc(sessionTrolleys,item.trolleyId));
+     if(!assignment.exists()||assignment.data().sessionId!==collectionId)throw Error('The trolley is no longer assigned to your active collection. Review collection trolleys before saving.');
+    }
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this record. Refresh the register and review their changes before retrying.');
     if(before?.deleted&&!deleted)throw Error('This item was removed. Create a new record rather than overwriting its history.');
     const oldKey=before?.serialKey||'';

@@ -165,6 +165,51 @@ service cloud.firestore {
      allow update, delete: if false;
     }
    }
+   match /collectionSessions/{id} {
+    function valid(d) {
+     let p=d.payload;
+     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
+      && p.keys().hasOnly(['id','name','createdAt']) && p.id==id
+      && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+      && p.name is string && p.name.size()>0 && p.name.size()<=80 && p.createdAt is string && p.createdAt.size()>0
+      && d.version is int && d.createdBy is string && d.updatedBy==request.auth.uid && d.updatedAt==request.time && d.revisionId is string;
+    }
+    function audit(d) {
+     let r=getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(d.revisionId)).data;
+     return r.actor==request.auth.uid && r.after==d && r.at==request.time;
+    }
+    allow read: if member(team);
+    allow create: if member(team) && valid(request.resource.data) && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+     && getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
+    allow update: if member(team) && valid(request.resource.data) && request.resource.data.version==resource.data.version+1
+     && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt && request.resource.data.payload.createdAt==resource.data.payload.createdAt
+     && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
+    allow delete: if false;
+    match /revisions/{revision} {
+     allow read: if member(team);
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','trolleyIds','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time
+      && request.resource.data.trolleyIds is list && request.resource.data.trolleyIds.size()<=12 && request.resource.data.trolleyIds.toSet().size()==request.resource.data.trolleyIds.size()
+      && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)).data && request.resource.data.after.revisionId==revision;
+     allow update, delete: if false;
+    }
+   }
+   match /collectionTrolleys/{id} {
+    function valid(d) {
+     let owner=getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(d.changedInSession)).data;
+     return d.keys().hasOnly(['trolleyId','sessionId','changedInSession','version','updatedBy','updatedAt']) && d.trolleyId==id
+      && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+      && exists(/databases/$(database)/documents/teams/$(team)/trolleys/$(id))
+      && d.sessionId is string && (d.sessionId=='' || d.sessionId==d.changedInSession)
+      && owner.updatedBy==request.auth.uid && owner.updatedAt==request.time
+      && d.version is int && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
+    }
+    allow read: if member(team);
+    allow create: if member(team) && valid(request.resource.data) && request.resource.data.sessionId!='' && request.resource.data.version==1;
+    allow update: if member(team) && valid(request.resource.data) && request.resource.data.version==resource.data.version+1
+     && (resource.data.sessionId=='' || resource.data.sessionId==request.resource.data.changedInSession)
+     && (request.resource.data.sessionId!='' || request.resource.data.changedInSession==resource.data.sessionId);
+    allow delete: if false;
+   }
    match /references/{reference} {
     allow read: if member(team);
     allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','source','importedBy','importedAt'])

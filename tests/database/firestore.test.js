@@ -246,3 +246,28 @@ test('browser clients cannot bypass account administration or rewrite its audit,
  await assertFails(getDocs(collection(context('tech'),'teams/college-it/memberAudit')));
  await assertFails(deleteDoc(doc(db,'teams/college-it/memberAudit/test-event')));
 });
+
+test('named collections share trolley ownership without changing equipment and reject stale edits or forged assignments',async()=>{
+ const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ await owner.write({...sample(),technician:'OLD'},0,{historicalImport:true});const session=createCollection('Summer 2026');await owner.writeSession(session,[initialTrolley.id]);
+ const groups=await tech.loadCollections();assert.equal(groups.collectionSessions[0].name,'Summer 2026');assert.equal(groups.collectionTrolleys[0].sessionId,session.id);assert.equal((await tech.load()).items[0].technician,'OLD');
+ await tech.write({...sample('next-item','NEXT'),asset:'N/A'},0,{collectionId:session.id});
+ await owner.writeSession({...session,name:'Summer updated'},[initialTrolley.id],1);await assert.rejects(tech.writeSession({...session,name:'Stale'},[initialTrolley.id],1),/Another technician/);
+ await assertFails(setDoc(doc(context('tech'),'teams/college-it/collectionTrolleys',initialTrolley.id),{trolleyId:initialTrolley.id,sessionId:'',changedInSession:session.id,version:3,updatedBy:'tech',updatedAt:serverTimestamp()}));
+ await owner.writeSession({...session,name:'Summer updated'},[],2);await assert.rejects(tech.write(sample('outside','OUTSIDE'),0,{collectionId:session.id}),/no longer assigned/);
+ assert.equal((await tech.load()).items.length,2);const revisions=await getDocs(collection(context('tech'),'teams/college-it/collectionSessions',session.id,'revisions'));assert.equal(revisions.size,3);await assertFails(deleteDoc(revisions.docs[0].ref));
+ await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'teams/college-it/collectionSessions')));
+});
+
+test('concurrent collection creation cannot assign one trolley to two collections',async()=>{
+ const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ const outcomes=await Promise.allSettled([owner.writeSession(createCollection('First'),[initialTrolley.id]),tech.writeSession(createCollection('Second'),[initialTrolley.id])]);assert.equal(outcomes.filter(row=>row.status==='fulfilled').length,1);assert.equal(outcomes.filter(row=>row.status==='rejected').length,1);
+ const groups=await owner.loadCollections();assert.equal(groups.collectionSessions.length,1);assert.equal(groups.collectionTrolleys.length,1);
+});
+
+test('a twelve-trolley collection commits within Firestore access limits and preserves ready and collected statuses',async()=>{
+ const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin);const cages=[initialTrolley];for(let n=1;n<12;n++){const trolley=createTrolley(`Session trolley ${n}`);await owner.writeTrolley(trolley);cages.push(trolley);}
+ // Grouping is metadata; physical status changes are retained independently.
+ await env.withSecurityRulesDisabled(c=>setDoc(doc(c.firestore(),'teams/college-it/trolleys',initialTrolley.id),{payload:{...initialTrolley,status:'collected',company:'Supplier',collectedAt:new Date().toISOString(),collectedBy:'OLD'},version:1,createdBy:'admin',updatedBy:'admin',createdAt:new Date(),updatedAt:new Date(),revisionId:'seed'}));
+ await owner.writeSession(createCollection('Twelve trolleys'),cages.map(t=>t.id));assert.equal((await owner.loadCollections()).collectionTrolleys.length,12);assert.equal((await owner.load()).trolleys.find(t=>t.id===initialTrolley.id).status,'collected');
+});
