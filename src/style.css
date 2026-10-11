@@ -288,3 +288,5 @@ html[data-theme="dark"] .compact-connection .connection-chip { background:#16223
 /* Overview stays focused on collection readiness; scanning has its own shortcut. */
 .overview-view :is(.stats,.station-layout,#inventory) { display:none; }
 .nav:not(.active) .nav-active-dot { display:none; }
+.station #save-feedback.save-message { text-align:left; background:#ffffff0d; border:1px solid #7d9ccb; border-radius:12px; padding:14px; color:#edf3ff; line-height:1.7; margin-top:14px; }
+[aria-invalid="true"] { outline:2px solid #d48b51; outline-offset:2px; }

@@ -150,13 +150,19 @@ function capture(value) {
 }
 
 function saveFeedback(message,field) {
- notice=message;render();
- if(field)document.querySelector(field==='manufacturer'&&state.draft.manufacturer!==undefined?'#recognized-maker':`#default-${field}`)?.focus();
+ notice=message;
+ const feedback=document.querySelector('#save-feedback');
+ if(feedback){feedback.textContent=message;feedback.classList.add('save-message');feedback.setAttribute('role','status');feedback.tabIndex=-1;feedback.focus({preventScroll:true});feedback.scrollIntoView({block:'nearest'});}
+ if(field)document.querySelector(field==='manufacturer'&&state.draft.manufacturer!==undefined?'#recognized-maker':`#default-${field}`)?.setAttribute('aria-invalid','true');
 }
 async function saveItem() {
- if(saving||!writable())return;
- if(state.collectionPaused){saveFeedback('This collection session is paused. Resume it before saving.');return;}
- if(storageError&&!sharedClient){saveFeedback('Local saving is paused because browser storage is unavailable. Back up your workspace before refreshing or changing browser settings.');return;}
+ if(saving){saveFeedback('Saving is still in progress. Your scan will stay here until confirmation arrives.');return;}
+ const client=sharedClient,locked=sharedLocked;
+ let waiting;
+ try {
+  if(!writable())return;
+  if(state.collectionPaused){saveFeedback('This collection session is paused. Resume it before saving.');return;}
+  if(storageError&&!client){saveFeedback('Local saving is paused because browser storage is unavailable. Back up your workspace before refreshing or changing browser settings.');return;}
  const profile=state.profiles.find(p=>p.code===state.active);
  if(!profile){saveFeedback('Choose a technician first.');return;}
  const batch=Object.fromEntries([...new FormData(document.querySelector('#defaults'))].map(([k,v])=>[k,v.trim()]));
@@ -169,25 +175,32 @@ async function saveItem() {
  if(!validAssetNumber(state.draft.asset)){saveFeedback('Asset number must be A followed by four digits, for example A1234, or N/A. Use Previous field to correct it.');return;}
  if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the suggested model and manufacturer against this equipment, then tick the confirmation before saving.');return;}
  if(duplicateSerial(state.items,state.draft.serial)){saveFeedback('This serial number is already in the register. Check the current item before saving.');speak(notice);return;}
- saving=true;updateConnectionStatus();
- const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
- document.querySelector('#save-feedback').textContent=sharedClient?'Saving to the shared team database…':'Saving item…';
- try {
+
+  saving=true;
+  const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
+  saveFeedback(client?'Saving to the shared team database…':'Saving item…');
+  waiting=setTimeout(()=>saveFeedback('Confirmation is taking longer than expected. Your scan is kept here. Check your connection; wait for this save to finish before retrying.'),15000);
+  updateConnectionStatus();
   const trolley=await resolveTrolley(batch.trolley);
+  if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed during saving. Sign in again to retrieve confirmed records. Your unfinished scan has been kept.');
   if(trolley.status!=='open')throw Error('This trolley is ready or collected. Reopen a ready trolley or select an open trolley before saving.');
-  const item={...batch,...(state.draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:state.draft.recognitionNeedsReview,recognitionConfirmed:state.draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:sharedClient?.profile.code||profile.code,id:createId()};
+  const item={...batch,...(state.draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:state.draft.recognitionNeedsReview,recognitionConfirmed:state.draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:client?.profile.code||profile.code,id:createId()};
   assertCollectionTrolley(trolley);
-  if(sharedClient)await sharedClient.write(item,0,{collectionId:state.activeCollectionId||''});
+  if(client)await client.write(item,0,{collectionId:state.activeCollectionId||''});
+  if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed after the save was sent. Sign in again to check the team register. Your unfinished scan has been kept.');
   const next={...state,defaults:batch,items:[...state.items.filter(i=>i.id!==item.id),item],draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:0};
-  // A local save must reach storage before clearing the scanned draft.
-  if(!sharedClient)localStorage.setItem(key,JSON.stringify(next));
-  state=next;if(sharedClient)persist();
-  notice=sharedClient?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';render();
+  if(!client)localStorage.setItem(key,JSON.stringify(next));
+  state=next;if(client)persist();
+  notice=client?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';render();
   speak(`Item recorded. Place it in the caged trolley. Next, ${fields[state.step][1]}.`);
  }catch(error){
-  if(error.name==='QuotaExceededError'||error.name==='SecurityError')saveFeedback('Item not saved: browser storage is unavailable or full. Your scanned item is still here. Download a backup before refreshing.');
+  if(error?.name==='QuotaExceededError'||error?.name==='SecurityError')saveFeedback('Item not saved: browser storage is unavailable or full. Your scanned item is still here. Download a backup before refreshing.');
   else saveFeedback(`Item not saved. ${firebaseErrorMessage(error)}`);
- }finally {saving=false;updateConnectionStatus();document.querySelector('#save')?.removeAttribute('disabled');const remaining=document.querySelector('#save');if(remaining)remaining.innerHTML=`Save item & start next ${icon('arrow')}`;}
+ }finally {
+  clearTimeout(waiting);saving=false;
+  const button=document.querySelector('#save');if(button){button.disabled=false;button.innerHTML=`Save item & start next ${icon('arrow')}`;}
+  try{updateConnectionStatus();}catch(error){console.error('Save overview refresh failed:',error);}
+ }
 }
 
 function writable() {

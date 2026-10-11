@@ -32,3 +32,19 @@ test('an equipment edit stays open while Firebase confirms it and only submits o
  await page.locator('#edit-form').evaluate(form=>form.requestSubmit());expect(await page.evaluate(()=>window.editCalls)).toBe(1);
  await page.evaluate(()=>window.finishEdit());await expect(page.locator('#edit-dialog')).not.toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('P2419H');
 });
+
+async function readyToSave(page){await page.goto('/');await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');for(const value of ['SAVE-TEST-NEW','Manual model','N/A','N/A','A1234']){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}await expect(page.locator('#save')).toBeVisible();}
+test('save preparation errors appear beneath the button and allow a successful retry with the draft preserved',async({page})=>{
+ await readyToSave(page);await page.evaluate(()=>{const original=window.FormData;window.restoreSaveForm=()=>window.FormData=original;window.FormData=class extends original{constructor(form){if(form?.id==='defaults')throw Error('Save preparation test failure');super(form);}};});
+ await page.locator('#save').click();await expect(page.locator('#save-feedback')).toContainText('Save preparation test failure');await expect(page.locator('#save')).toBeEnabled();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('SAVE-TEST-NEW');
+ await page.evaluate(()=>window.restoreSaveForm());await page.locator('#save').click();await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('SAVE-TEST-NEW');
+});
+
+test('pending shared saves remain visible, reject duplicates and preserve the scan if the workspace locks before confirmation',async({page})=>{
+ await page.clock.install();await readyToSave(page);
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'application/javascript',body:`export async function connectFirebase(){return {uid:'save-user',profile:{name:'Jawad',code:'JA'},role:'technician',email:'test@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,phase){phase('connected');},async load(){return {items:[],trolleys:${JSON.stringify(state.trolleys)},examples:[],corrections:[]};},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]};},async write(item){window.sharedSaveCalls=(window.sharedSaveCalls||0)+1;await new Promise(resolve=>window.confirmSave=resolve);},async logout(){}};}`}));
+ await page.getByRole('button',{name:'Shared database',exact:true}).click();await page.getByLabel('Team account email').fill('test@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.locator('#save').click();await expect(page.locator('#save')).toBeDisabled();await expect(page.locator('#save-feedback')).toContainText('Saving to the shared');await page.clock.fastForward('00:16');await expect(page.locator('#save-feedback')).toContainText('taking longer');expect(await page.evaluate(()=>window.sharedSaveCalls)).toBe(1);
+ await page.getByRole('button',{name:'Lock workspace',exact:true}).click();await expect(page.locator('.workspace-lock')).toBeVisible();await page.evaluate(()=>window.confirmSave());expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('SAVE-TEST-NEW');await expect(page.locator('.workspace-lock')).toBeVisible();
+});

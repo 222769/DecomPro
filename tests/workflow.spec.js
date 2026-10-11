@@ -168,7 +168,7 @@ test('missing batch defaults are explained beside Save and the draft is kept',as
  await page.goto('/');await item(page,'MISSING-DEFAULT-001');
  await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('#save-feedback')).toContainText('Enter manufacturer before saving');
- await expect(page.getByLabel('Manufacturer',{exact:true})).toBeFocused();
+ await expect(page.getByLabel('Manufacturer',{exact:true})).toHaveAttribute('aria-invalid','true');await expect(page.locator('#save-feedback')).toBeFocused();
  await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
  await page.getByRole('button',{name:'Save item & start next'}).click();

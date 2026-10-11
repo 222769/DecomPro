@@ -28,3 +28,9 @@ Recovery is applied when the updated app loads; do not clear browser data. Valid
 Startup recovery and initial theme selection now run directly from the HTML, with exact script hashes generated in the Content Security Policy. A missing separate recovery-script download can no longer leave the app behind the opening screen. A plain **Reload the latest app** link works without JavaScript, and stalled component downloads expose the timed Refresh app control. The legacy public startup files remain available for older cached pages.
 
 Validation: 12 targeted browser tests passed, including missing and stalled component downloads, initializer failures, script injection protection and lock/draft recovery. Production desktop/phone checks loaded with no runtime or CSP errors, and a deliberately failed production module download exposed recovery controls. Live-site requests are blocked by the execution network proxy, so deployment status must be checked separately in GitHub Actions.
+
+## Save feedback
+
+The whole save preparation path now runs inside error handling. Exceptions before the database request can no longer fail silently or leave the saving flag stuck. Feedback is an accessible status message directly below Save; required fields are highlighted without jumping focus away from that message. Slow confirmation displays a notice after 15 seconds while keeping the pending save guarded against duplicate submission. Shared saves capture their connection context and preserve the unfinished draft if locking or a workspace switch happens before confirmation.
+
+Validation: 62 save/scanning/recognition/import/export browser tests and the production build passed. Regression cases cover an injected preparation exception followed by a successful retry, delayed Firebase confirmation, and locking before confirmation without discarding the scanned item.
