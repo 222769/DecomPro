@@ -736,3 +736,11 @@ test('imported suffix families fill model and manufacturer for changing starts a
  await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Ends 987654');
  await page.reload();const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.draft.model).toBe('Panel 24');expect(state.draft.recognitionEvidence.suffix).toBe('987654');expect(state.draft.recognitionConfirmed).toBe(false);
 });
+
+test('spreadsheet analysis families recognise changing Toshiba middles and keep ambiguous assembler brands manual',async({page})=>{
+ await page.goto('/');await scan(page,'I0X554880RSSKC902300JENB');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Starts I; 24 characters');
+ await page.reload();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
+ page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item',exact:true}).click();await scan(page,'ST348722');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveCount(0);
+});

@@ -103,3 +103,22 @@ test('shared numeric or alphanumeric endings recognize models across changing pr
  assert.equal(recognizeSerial('NEW987654',facts.slice(0,2)),null);
  const conflicting=recognizeSerial('NEW987654',[...facts,{serial:'GHW987654',manufacturer:'Other maker',model:'Other panel'}]);assert.equal(conflicting.method,'conflict');assert.equal(conflicting.manufacturer,undefined);
 });
+
+test('short maker prefixes span changing layouts without asserting a model or overruling conflicting brands',()=>{
+ const facts=['6VDFPRNW','6VDFT3RQ','6VDDQE3R','6VDFBBP3','6VDFT506'].map(serial=>({serial,manufacturer:'Seagate',model:'Recorded drive model'}));
+ const result=recognizeSerial('6VMXQA12',facts);assert.equal(result.manufacturer,'Seagate');assert.equal(result.model,undefined);assert.equal(result.prefix,'6V');
+ assert.equal(recognizeSerial('6VMXQA12',[...facts,{serial:'6VXXQ123',manufacturer:'Other maker',model:'Other drive'}]),null);
+});
+test('anchored terminal families tolerate changing middle formats and preserve uncertainty',()=>{
+ const serials=['I7C554880RSSKC902300JENB','I8C409506RSSKDH00G004ENB','IZB029552KSSC1M01700KENB','IXD096674SSSCG702G041ENB'];
+ const facts=serials.map(serial=>({serial,manufacturer:'Toshiba',model:'Satellite Pro'}));
+ const result=recognizeSerial('I0X123456ABCDEFGH12345ENB',facts);assert.equal(result,null); // length mismatch
+ const candidate='I0X554880RSSKC902300JENB';assert.equal(candidate.length,24);
+ const match=recognizeSerial(candidate,facts);assert.equal(match.model,'Satellite Pro');assert.equal(match.suffix,'ENB');assert.equal(snapshotEvidence(match).format,'Starts I; 24 characters');
+ const mixed=recognizeSerial(candidate,[...facts,{serial:'I9C554880RSSKC902300JENB',manufacturer:'Toshiba',model:'Other model'}]);assert.equal(mixed.method,'conflict');assert.equal(mixed.manufacturer,'Toshiba');
+});
+
+test('manufacturer-only four-character families do not hide mixed manufacturers in their parent family',()=>{
+ const facts=[{serial:'ST348671',manufacturer:'Zoostorm',model:'A'},{serial:'ST348759',manufacturer:'Zoostorm',model:'A'},{serial:'ST349764',manufacturer:'Zoostorm',model:'B'},{serial:'ST390573',manufacturer:'Stone',model:'C'}];
+ const result=recognizeSerial('ST348721',facts);assert.equal(result.method,'conflict');assert.equal(result.manufacturer,undefined);assert.equal(result.prefix,'ST3');
+});

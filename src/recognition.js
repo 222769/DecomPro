@@ -34,6 +34,12 @@ export function recognizeSerial(value,examples) {
   if(new Set(matches.map(f=>f.serial)).size<(length>4?3:2))continue;
   const result=describe(matches,'pattern',prefix);
   if(result.method!=='conflict')return result;
+  // Four characters can be a shared assembler numbering scheme. If models
+  // already differ, inspect the parent family before suggesting its maker.
+  if(length===4&&result.manufacturer) {
+   const parent=prefix.slice(0,3),family=facts.filter(f=>f.serial.startsWith(parent));
+   if(new Set(family.map(f=>f.manufacturer.toLowerCase())).size>1){conflict ||= describe(family,'pattern',parent);continue;}
+  }
   conflict ||= result;
  }
  // Conflicting established families take priority over a sparse suffix match.
@@ -69,6 +75,24 @@ export function recognizeSerial(value,examples) {
   suffixConflict ||= result;
  }
  if(suffixConflict)return suffixConflict;
+ // A short terminal code plus a literal leading letter and fixed length can
+ // identify a family even when the middle changes its letter/digit layout.
+ const terminal=serial.match(/[A-Z]{3}$/)?.[0],head=serial[0];
+ if(serial.length>=12&&terminal&&/^[A-Z]$/.test(head)) {
+  const family=facts.filter(f=>f.serial.length===serial.length&&f.serial.startsWith(head)&&f.serial.endsWith(terminal));
+  if(new Set(family.map(f=>f.serial)).size>=4&&new Set(family.map(f=>f.serial.slice(0,3))).size>=2) {
+   return {...describe(family,'pattern',head),suffix:terminal,format:`Starts ${head}; ${serial.length} characters`};
+  }
+ }
+ // Short prefixes identify makers, not models, when independent units agree
+ // across different serial layouts. Keep pure numeric prefixes out of this rule.
+ for(const length of [3,2]) {
+  const prefix=serial.slice(0,length);if(serial.length<8||!/[A-Z]/.test(prefix))continue;
+  const family=facts.filter(f=>f.serial.length===serial.length&&f.serial.startsWith(prefix));
+  if(new Set(family.map(f=>f.serial)).size<(length===3?3:5)||new Set(family.map(f=>f.manufacturer.toLowerCase())).size!==1)continue;
+  const result=describe(family,'pattern',prefix),candidates=result.candidates||[{model:result.model,manufacturer:result.manufacturer,support:result.support}];
+  return {...result,method:'conflict',basis:'pattern',model:undefined,manufacturer:family[0].manufacturer,candidates};
+ }
  // A terminal maker code can survive changing production prefixes. Require
  // the entire serial format, independent examples and varied leading families.
  // This evidence suggests only the maker; a suffix does not prove the model.
