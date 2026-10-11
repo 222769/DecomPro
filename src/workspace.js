@@ -22,6 +22,18 @@ export function validDate(value) {
   const date = new Date(value + 'T12:00:00Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
+export function validateEquipmentRecord(item,{maxLength=1000}={}) {
+  if(!item||!text(item.id)||item.id.length>maxLength||!text(item.technician)||item.technician.length>maxLength||!validDate(item.date))throw Error('Equipment has an invalid ID, technician or disposal date.');
+  const clean={id:item.id,technician:item.technician};
+  if(item.trolleyId!==undefined){if(!text(item.trolleyId))throw Error('Invalid equipment trolley reference.');clean.trolleyId=item.trolleyId;}
+  for(const [key,label] of [...defaultFields,...fields]) {
+    if(!text(item[key])||item[key].length>maxLength)throw Error(`Equipment ${label.toLowerCase()} must contain 1 to 1,000 characters.`);
+    clean[key]=item[key];
+  }
+  if(item.readinessNotes!==undefined)clean.readinessNotes=validateReadinessNotes(item.readinessNotes);
+  for(const flag of ['recognitionNeedsReview','recognitionConfirmed'])if(item[flag]!==undefined){if(typeof item[flag]!=='boolean')throw Error('Invalid saved recognition review state.');clean[flag]=item[flag];}
+  return clean;
+}
 export function validateWorkspace(value) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.items) ||
       !Array.isArray(value.profiles) || !value.profiles.length ||
@@ -44,14 +56,7 @@ export function validateWorkspace(value) {
   const items = value.items.map(item => {
     if (!item || !text(item.id) || ids.has(item.id) || !text(item.technician) || !validDate(item.date)) throw Error('The backup has invalid or repeated item IDs or dates.');
     ids.add(item.id);
-    const clean = { id: item.id, technician: item.technician };
-    if(item.trolleyId!==undefined){if(!text(item.trolleyId))throw Error('Invalid equipment trolley reference.');clean.trolleyId=item.trolleyId;}
-    for (const [key] of [...defaultFields, ...fields]) {
-      if (!text(item[key])) throw Error('The backup has an incomplete equipment record.');
-      clean[key] = item[key];
-    }
-    if(item.readinessNotes!==undefined)clean.readinessNotes=validateReadinessNotes(item.readinessNotes);
-    for(const flag of ['recognitionNeedsReview','recognitionConfirmed'])if(item[flag]!==undefined){if(typeof item[flag]!=='boolean')throw Error('Invalid saved recognition review state.');clean[flag]=item[flag];}
+    const clean = validateEquipmentRecord(item,{maxLength:Infinity});
     return clean;
   });
   const draft = {};

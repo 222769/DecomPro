@@ -21,7 +21,7 @@ import { defaultFirebaseConfig } from './firebase-config';
 import { firebaseErrorMessage } from './firebase-errors';
 import { createId } from './ids';
 import {createTrolley,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
-import { defaultFields, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
+import { defaultFields, validateEquipmentRecord, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
  dashboard:'<rect x="3" y="3" width="7" height="10" rx="2"/><rect x="14" y="3" width="7" height="6" rx="2"/><rect x="3" y="17" width="7" height="4" rx="1"/><rect x="14" y="13" width="7" height="8" rx="2"/>',
@@ -100,7 +100,7 @@ function render() {
  ${recognitionEvidenceCard()}
  ${modelCandidates.length?`<div class="model-candidates"><strong>Choose a matching model</strong><p>${modelMatch.suffix?`Serial ending ${escape(modelMatch.suffix)}${modelMatch.format?` · format ${escape(modelMatch.format)}`:''}`:modelMatch.prefix?`Prefix ${escape(modelMatch.prefix)}`:'This serial'} has ${modelCandidates.length>1?'conflicting reference models':'reference models'} to check. Confirm the equipment label before choosing.</p><label for="model-candidate">Reference model and manufacturer</label><select id="model-candidate"><option value="">Choose a suggestion…</option>${modelCandidates.map((candidate,index)=>`<option value="${index}">${escape(candidate.model)} · ${escape(candidate.manufacturer)} (${candidate.support} example${candidate.support===1?'':'s'})</option>`).join('')}</select><button type="button" class="secondary" id="use-model-candidate">Use selected model</button><p>You can also scan or type the model above.</p></div>`:''}
  ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>
- <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
+ <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" maxlength="1000" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="register-filters"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="collection-filter-field"><label for="collection-register-filter">Collection inventory</label><select id="collection-register-filter"></select></div></div><div class="backup-actions"><button class="secondary" id="equipment-import">Import equipment Excel</button><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="bulk-move-tools"></div><div id="review-filter"></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th class="selection-cell"><input type="checkbox" id="select-visible" aria-label="Select visible equipment"></th><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. The collection filter applies when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-review" class="card collection-review" aria-label="Collection review" hidden></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><button class="secondary" id="prepare-history-handover">Prepare handover pack</button><div id="handover-history"></div><div id="history-results"></div></section>
@@ -110,6 +110,7 @@ function render() {
 function capture(value) {
  if(state.collectionPaused){notice='This collection session is paused. Resume it before scanning.';render();return;}
  value=value.trim();if(!value||state.step>=fields.length)return;
+ if(value.length>1000){notice='This scan is too long (maximum 1,000 characters). Check the barcode or enter a shorter value.';const hint=document.querySelector('.hint');if(hint){hint.textContent=notice;hint.setAttribute('role','status');}return;}
  const scannedTrolley=findTrolley(value,state.trolleys);
  if(scannedTrolley||/^TSU-[A-F0-9]{32}$/i.test(value)) {
   if(scannedTrolley)viewTrolley(scannedTrolley.id);
@@ -158,9 +159,9 @@ function saveFeedback(message,field) {
 async function saveItem() {
  if(saving){saveFeedback('Saving is still in progress. Your scan will stay here until confirmation arrives.');return;}
  const client=sharedClient,locked=sharedLocked;
- let waiting;
+ let waiting,confirmed=false;
  try {
-  if(!writable())return;
+  if(!writable()){saveFeedback(notice);return;}
   if(state.collectionPaused){saveFeedback('This collection session is paused. Resume it before saving.');return;}
   if(storageError&&!client){saveFeedback('Local saving is paused because browser storage is unavailable. Back up your workspace before refreshing or changing browser settings.');return;}
  const profile=state.profiles.find(p=>p.code===state.active);
@@ -176,6 +177,7 @@ async function saveItem() {
  if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the suggested model and manufacturer against this equipment, then tick the confirmation before saving.');return;}
  if(duplicateSerial(state.items,state.draft.serial)){saveFeedback('This serial number is already in the register. Check the current item before saving.');speak(notice);return;}
 
+  const draft=structuredClone(state.draft),draftText=JSON.stringify(draft),defaultsText=JSON.stringify(state.defaults);
   saving=true;
   const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
   saveFeedback(client?'Saving to the shared team database…':'Saving item…');
@@ -184,17 +186,19 @@ async function saveItem() {
   const trolley=await resolveTrolley(batch.trolley);
   if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed during saving. Sign in again to retrieve confirmed records. Your unfinished scan has been kept.');
   if(trolley.status!=='open')throw Error('This trolley is ready or collected. Reopen a ready trolley or select an open trolley before saving.');
-  const item={...batch,...(state.draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:state.draft.recognitionNeedsReview,recognitionConfirmed:state.draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,state.draft[key]])),asset:normalizeAssetNumber(state.draft.asset),manufacturer,technician:client?.profile.code||profile.code,id:createId()};
+  const item=validateEquipmentRecord({...batch,...(draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:draft.recognitionNeedsReview,recognitionConfirmed:draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,draft[key]])),asset:normalizeAssetNumber(draft.asset),manufacturer,technician:client?.profile.code||profile.code,id:createId()});
   assertCollectionTrolley(trolley);
-  if(client)await client.write(item,0,{collectionId:state.activeCollectionId||''});
+  if(client){await client.write(item,0,{collectionId:state.activeCollectionId||''});confirmed=true;}
   if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed after the save was sent. Sign in again to check the team register. Your unfinished scan has been kept.');
-  const next={...state,defaults:batch,items:[...state.items.filter(i=>i.id!==item.id),item],draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:0};
-  if(!client)localStorage.setItem(key,JSON.stringify(next));
+  const changedDraft=JSON.stringify(state.draft)!==draftText||state.step!==fields.length;
+  const next={...state,defaults:JSON.stringify(state.defaults)===defaultsText?batch:state.defaults,items:[...state.items.filter(i=>i.id!==item.id),item],draft:changedDraft?state.draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:changedDraft?state.step:0};
+  if(!client){localStorage.setItem(key,JSON.stringify(next));confirmed=true;}
   state=next;if(client)persist();
-  notice=client?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';render();
-  speak(`Item recorded. Place it in the caged trolley. Next, ${fields[state.step][1]}.`);
+  notice=client?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';if(changedDraft)notice+=' Your newer scan changes are kept. Review the saved record before saving again.';render();
+  speak(changedDraft?'Item recorded. Your newer scan changes are kept. Review the saved record before saving again.':`Item recorded. Place it in the caged trolley. Next, ${fields[0][1]}.`);
  }catch(error){
-  if(error?.name==='QuotaExceededError'||error?.name==='SecurityError')saveFeedback('Item not saved: browser storage is unavailable or full. Your scanned item is still here. Download a backup before refreshing.');
+  if(confirmed){saveFeedback(`Save was confirmed, but the workspace could not finish updating. ${firebaseErrorMessage(error)} Check the register before trying again.`);}
+  else if(error?.name==='QuotaExceededError'||error?.name==='SecurityError')saveFeedback('Item not saved: browser storage is unavailable or full. Your scanned item is still here. Download a backup before refreshing.');
   else saveFeedback(`Item not saved. ${firebaseErrorMessage(error)}`);
  }finally {
   clearTimeout(waiting);saving=false;
