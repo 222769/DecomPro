@@ -49,6 +49,21 @@ const icons = {
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]||icons.box}</svg>`;
 const testWorkspace=new URLSearchParams(location.search).get('workspace')==='demo';
 const key = testWorkspace?'decompro.demo.v1':'decompro.v1';
+// One editor per local workspace prevents whole-register writes from stale tabs.
+let localTabBlocked=false,releaseLocalTab,localTabReason='';
+async function acquireLocalTab() {
+ if(releaseLocalTab)return;
+ if(!navigator.locks){localTabBlocked=true;localTabReason='This browser cannot safely coordinate local workspace tabs. Use a current browser.';return;}
+ await new Promise((resolve,reject)=>navigator.locks.request(`decompro.editor:${key}`,{ifAvailable:true},lock=>{
+  if(!lock){localTabBlocked=true;localTabReason='This workspace is already open in another tab. Close that tab, then retry here to load its latest saved records.';resolve();return;}
+  localTabBlocked=false;
+  return new Promise(release=>{releaseLocalTab=()=>{releaseLocalTab=undefined;release();};resolve();});
+ }).catch(reject));
+}
+let startsShared=false;try{startsShared=!testWorkspace&&localStorage.getItem('decompro.mode')==='shared';}catch{}
+if(!startsShared)await acquireLocalTab();
+window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
+let pendingScan=null;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 let state = { captureOrder:'serial-first', activeCollectionId:'',collectionPaused:false,collectionSessions:[],collectionTrolleys:[],collectionScans:{},collectionWorkspace:'',activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[], referenceCorrections:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
@@ -67,7 +82,7 @@ let pendingImport=null,importBusy=false,importLimit=60,importFilter='all';
 let summaryExpanded=false,missingDetailsOnly=false;
 const selectedEquipment=new Set();
 let search = '', pendingRestore = null,collectionViewId='',collectionError='',collectionBusy=false;
-try { sharedLocked=!testWorkspace&&localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved));else if(testWorkspace){state=createTestWorkspace(today());localStorage.setItem(key,JSON.stringify(state));} } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
+try { sharedLocked=!testWorkspace&&localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved));else if(testWorkspace){state=createTestWorkspace(today());if(!localTabBlocked)localStorage.setItem(key,JSON.stringify(state));} } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
 if(!sharedLocked) {
  for(const name of new Set([state.defaults.trolley,...state.items.map(item=>item.trolley)]))if(name&&!state.trolleys.some(t=>t.name===name))state.trolleys.push(createTrolley(name));
  for(const item of state.items)if(!item.trolleyId)item.trolleyId=state.trolleys.find(t=>t.name===item.trolley)?.id;
@@ -76,11 +91,15 @@ let trolleyViewId=readTrolleyHash();collectionViewId=state.activeCollectionId||'
 function workspaceUrl(demo){const url=new URL(location.href);url.searchParams.delete('app-refresh');if(demo)url.searchParams.set('workspace','demo');else url.searchParams.delete('workspace');url.hash='overview';return url.href;}
 function readTrolleyHash(){return location.hash.match(/^#trolley\/([A-Za-z0-9-]+)$/)?.[1]||'';}
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function persist() { if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
+function persist() { if(localTabBlocked)return false; if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
 function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=utteranceFor(text,state.settings); speechSynthesis.speak(u); }
 function prompt() { if(state.collectionPaused)return;speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
 function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
+ if(localTabBlocked){
+  document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><h1>${navigator.locks?'Workspace open in another tab':'Local workspace needs a current browser'}</h1><p>${escape(localTabReason)}</p><button class="primary" id="retry-local-tab">Retry workspace</button></section></main>`;
+  document.querySelector('#retry-local-tab').onclick=()=>location.reload();return;
+ }
  if(sharedLocked&&!sharedClient) {
   document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><div class="eyebrow">PRIVATE TEAM WORKSPACE</div><h1>Sign in to your team workspace.</h1><p>Confirm your team access before viewing saved equipment. Your cached records and unfinished scan are preserved.</p><p class="session-note">${navigator.onLine===false?'You are offline. Connect to the internet to verify your team membership.':escape(notice||'Checking your sign-in with Firebase…')}</p><button class="primary" id="unlock-workspace">Sign in to DecomPro</button></section></main><dialog id="database-dialog"></dialog>`;
   document.querySelector('#unlock-workspace').onclick=openDatabase;
@@ -99,7 +118,7 @@ function render() {
  <section id="session-summary" class="card session-summary" aria-label="Session summary"></section>
  <div class="station-layout"><section id="station" class="card station"><div class="section-top"><span class="eyebrow"><span class="station-dot"></span> SCAN STATION</span><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><div class="steps">${fields.map((f,i)=>`<button class="step ${i===state.step?'current':''} ${i<state.step?'complete':''}" data-step="${i}" ${i>state.step?'disabled':''}><span>${i<state.step?icon('check'):i+1}</span>${escape(f[1].replace(' number',''))}</button>`).join('')}</div>
  ${state.settings.reuseModel?`<div class="batch-model-chip">Batch model <strong>${escape(state.settings.batchModel)}</strong></div>`:''}<div class="scan-icon">${icon(current?'barcode':'check')}</div><div class="scan-label">${current?`FIELD ${state.step+1} OF ${fields.length}`:'READY TO RECORD'}</div><h2>${current?escape(current[1]):'Review this equipment'}</h2><p>${current?'Scan the label or type its value, then press Enter.':'Check the values below, then save this item to the collection register.'}</p>
- ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" ${state.collectionPaused?'disabled':''} autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
+ ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" ${state.collectionPaused?'disabled':''} autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(pendingScan?.step===state.step&&pendingScan.collectionId===state.activeCollectionId?pendingScan.value:state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
  ${recognitionEvidenceCard()}
  ${modelCandidates.length?`<div class="model-candidates"><strong>Choose a matching model</strong><p>${modelMatch.suffix?`Serial ending ${escape(modelMatch.suffix)}${modelMatch.format?` · format ${escape(modelMatch.format)}`:''}`:modelMatch.prefix?`Prefix ${escape(modelMatch.prefix)}`:'This serial'} has ${modelCandidates.length>1?'conflicting reference models':'reference models'} to check. Confirm the equipment label before choosing.</p><label for="model-candidate">Reference model and manufacturer</label><select id="model-candidate"><option value="">Choose a suggestion…</option>${modelCandidates.map((candidate,index)=>`<option value="${index}">${escape(candidate.model)} · ${escape(candidate.manufacturer)} (${candidate.support} example${candidate.support===1?'':'s'})</option>`).join('')}</select><button type="button" class="secondary" id="use-model-candidate">Use selected model</button><p>You can also scan or type the model above.</p></div>`:''}
  ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>
@@ -125,6 +144,7 @@ function capture(value) {
   value=normalizeAssetNumber(value);
  }
  if(state.step===0) {
+  pendingScan=null;
   const match=value.toUpperCase()==='N/A'?null:lookupSerial(value);
   delete state.draft.recognitionEvidence;delete state.draft.recognitionCorrected;
   if(match)state.draft.recognitionEvidence=snapshotEvidence(match);
@@ -149,7 +169,7 @@ function capture(value) {
   lastEmpty=0;persist();render();speak(state.step===1?'Serial captured. Next, model number.':'Serial captured. Next, barcode.');return;
  }
  if(state.step===1&&state.draft.recognitionNeedsReview)state.draft.recognitionConfirmed=false;
- state.draft[fields[state.step][0]]=value;state.step++;
+ pendingScan=null;state.draft[fields[state.step][0]]=value;state.step++;
  lastEmpty=0;notice='';persist();render();prompt();
 }
 
@@ -180,6 +200,7 @@ async function saveItem() {
  if(state.draft.recognitionNeedsReview&&!state.draft.recognitionConfirmed){saveFeedback('Check the suggested model and manufacturer against this equipment, then tick the confirmation before saving.');return;}
  if(duplicateSerial(state.items,state.draft.serial)){saveFeedback('This serial number is already in the register. Check the current item before saving.');speak(notice);return;}
 
+  const savedCollectionId=state.activeCollectionId,savedNextDraft=state.settings.reuseModel?{model:state.settings.batchModel}:{};
   const draft=structuredClone(state.draft),draftText=JSON.stringify(draft),defaultsText=JSON.stringify(state.defaults);
   saving=true;
   const button=document.querySelector('#save');if(button){button.disabled=true;button.textContent='Saving…';}
@@ -188,13 +209,16 @@ async function saveItem() {
   updateConnectionStatus();
   const trolley=await resolveTrolley(batch.trolley);
   if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed during saving. Sign in again to retrieve confirmed records. Your unfinished scan has been kept.');
+  if(state.activeCollectionId!==savedCollectionId)throw Error('Collection changed before saving. Resume the original collection and retry.');
   if(trolley.status!=='open')throw Error('This trolley is ready or collected. Reopen a ready trolley or select an open trolley before saving.');
   const item=validateEquipmentRecord({...batch,...(draft.recognitionNeedsReview!==undefined?{recognitionNeedsReview:draft.recognitionNeedsReview,recognitionConfirmed:draft.recognitionConfirmed===true}:{}),trolleyId:trolley.id,...Object.fromEntries(fields.map(([key])=>[key,draft[key]])),asset:normalizeAssetNumber(draft.asset),manufacturer,technician:client?.profile.code||profile.code,id:createId()});
   assertCollectionTrolley(trolley);
-  if(client){await client.write(item,0,{collectionId:state.activeCollectionId||''});confirmed=true;}
+  if(client){await client.write(item,0,{collectionId:savedCollectionId||''});confirmed=true;}
   if(client!==sharedClient||locked!==sharedLocked)throw Error('The workspace changed after the save was sent. Sign in again to check the team register. Your unfinished scan has been kept.');
-  const changedDraft=JSON.stringify(state.draft)!==draftText||state.step!==fields.length;
-  const next={...state,defaults:JSON.stringify(state.defaults)===defaultsText?batch:state.defaults,items:[...state.items.filter(i=>i.id!==item.id),item],draft:changedDraft?state.draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:changedDraft?state.step:0};
+  const changedDraft=state.activeCollectionId!==savedCollectionId||JSON.stringify(state.draft)!==draftText||state.step!==fields.length;
+  const collectionScans={...state.collectionScans},checkpoint=collectionScans[savedCollectionId||'unassigned'];
+  if(checkpoint?.step===fields.length&&JSON.stringify(checkpoint.draft)===draftText)collectionScans[savedCollectionId||'unassigned']={...checkpoint,draft:savedNextDraft,step:0};
+  const next={...state,collectionScans,defaults:JSON.stringify(state.defaults)===defaultsText?batch:state.defaults,items:[...state.items.filter(i=>i.id!==item.id),item],draft:changedDraft?state.draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:changedDraft?state.step:0};
   if(!client){localStorage.setItem(key,JSON.stringify(next));confirmed=true;}
   state=next;if(client)persist();
   notice=client?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';if(changedDraft)notice+=' Your newer scan changes are kept. Review the saved record before saving again.';render();
@@ -211,6 +235,7 @@ async function saveItem() {
 }
 
 function writable() {
+ if(localTabBlocked){notice=localTabReason;render();return false;}
  if(sharedLocked&&navigator.onLine===false){notice='You are offline. Team changes are paused; your captured item is kept here. Reconnect before saving, or download a backup before closing this browser.';render();return false;}
  if(sharedLocked&&!sharedClient){notice='Reconnect to the shared database before changing team records, or disconnect to return to your local workspace.';render();return false;}
  return true;
@@ -229,6 +254,7 @@ function bind() {
  document.querySelector('#profile').onchange=e=>{state.active=e.target.value;persist();render();};
  document.querySelector('#voice').onclick=()=>{state.voice=!state.voice;persist();render();if(state.voice)prompt();else window.speechSynthesis?.cancel();};
  document.querySelector('#start')?.addEventListener('click',()=>{if(state.collectionPaused){notice='Resume this collection before scanning.';render();return;}scanning=true;focus();prompt();});
+ document.querySelector('#scan')?.addEventListener('input',e=>{pendingScan={step:state.step,collectionId:state.activeCollectionId,value:e.target.value};});
  document.querySelector('#scan-form')?.addEventListener('submit',e=>{e.preventDefault();scanning=true;const value=document.querySelector('#scan').value;if(value.trim())capture(value);else {const now=Date.now();if(lastEmpty&&now-lastEmpty<state.settings.skipWindow){capture('N/A');}else {lastEmpty=now;notice=`Press Enter again within ${state.settings.skipWindow/1000} seconds to skip this field.`;document.querySelector('.hint').textContent=notice;}}});
  document.querySelector('#skip')?.addEventListener('click',()=>{scanning=true;capture('N/A');});
  document.querySelector('#save')?.addEventListener('click',saveItem);
@@ -240,8 +266,8 @@ function bind() {
  });
  document.querySelector('#recognized-maker')?.addEventListener('input',e=>{state.draft.manufacturer=e.target.value;if(state.draft.recognitionNeedsReview){state.draft.recognitionConfirmed=false;const check=document.querySelector('#confirm-recognition');if(check)check.checked=false;if(state.draft.recognitionCorrected){const certainty=document.querySelector('#recognition-certainty');if(certainty)certainty.textContent='Edited details need a fresh label check.';}}persist();});
  document.querySelector('#confirm-recognition')?.addEventListener('change',e=>{state.draft.recognitionConfirmed=e.target.checked;persist();});
- document.querySelector('#back').onclick=()=>{if(state.step>0){state.step--;lastEmpty=0;persist();render();prompt();}};
- document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{state.step=Number(b.dataset.step);lastEmpty=0;persist();render();prompt();});
+ document.querySelector('#back').onclick=()=>{if(state.step>0){pendingScan=null;state.step--;lastEmpty=0;persist();render();prompt();}};
+ document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{pendingScan=null;state.step=Number(b.dataset.step);lastEmpty=0;persist();render();prompt();});
  document.querySelector('#reset').onclick=()=>{if(Object.keys(state.draft).length&&!confirm('Clear the current unsaved item?'))return;resetDraft();lastEmpty=0;persist();render();prompt();};
  document.querySelector('#defaults').addEventListener('input',e=>{
   if(!defaultFields.some(([key])=>key===e.target.name))return;
@@ -286,7 +312,7 @@ function commitScanSession(next) {
 }
 function resumeCollection(id) {
  try {
-  commitScanSession(switchCollection(state,id));collectionViewId=id;selectedEquipment.clear();trolleyViewId='';lastEmpty=0;scanning=true;
+  commitScanSession(switchCollection(state,id));pendingScan=null;collectionViewId=id;selectedEquipment.clear();trolleyViewId='';lastEmpty=0;scanning=true;
   notice=id?`Resumed ${state.collectionSessions.find(row=>row.id===id).name}. Your captured progress is restored.`:'Resumed your general scan session. Trolleys keep their collection assignments.';
   render();location.hash='station';prompt();
  }catch(error){notice=`Could not resume collection. ${error.message}`;render();}
@@ -400,6 +426,7 @@ async function openEquipmentWorkbook() {
  finally{equipmentImportOpening=false;}
 }
 function resetDraft() {
+ pendingScan=null;
  state.draft=state.settings.reuseModel?{model:state.settings.batchModel}:{};
  state.step=0;
 }
@@ -671,7 +698,7 @@ function openSettings() {
  document.querySelector('#import-excel').onclick=()=>document.querySelector('#reference-file').click();
  document.querySelector('#reference-file').onchange=importReference;
  document.querySelector('#cancel-settings').onclick=()=>dialog.close();
- document.querySelector('#reset-test-data')?.addEventListener('click',()=>{if(!confirm('Reset this test workspace to its original 96 synthetic records? Only test data will be replaced.'))return;try{const next=createTestWorkspace(today());localStorage.setItem(key,JSON.stringify(next));state=next;storageError='';collectionViewId=state.activeCollectionId;notice='Synthetic test data reset.';render();}catch(error){document.querySelector('#settings-error').textContent=`Test data was not reset. ${error.message}`;}});
+ document.querySelector('#reset-test-data')?.addEventListener('click',()=>{if(!confirm('Reset this test workspace to its original 96 synthetic records? Only test data will be replaced.'))return;try{const next=createTestWorkspace(today());localStorage.setItem(key,JSON.stringify(next));state=next;storageError='';pendingScan=null;search='';historySearch='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';dashboardCollectionId='';dashboardStatus='all';collectionViewId=state.activeCollectionId;scanning=false;lastEmpty=0;location.hash='inventory';notice='Synthetic test data reset.';render();}catch(error){document.querySelector('#settings-error').textContent=`Test data was not reset. ${error.message}`;}});
  document.querySelector('#settings-lock')?.addEventListener('click',()=>lockWorkspace());
  document.querySelector('#settings-signout')?.addEventListener('click',()=>{dialog.close();disconnectDatabase();});
  dialog.querySelectorAll('[data-settings-tool]').forEach(button=>button.onclick=()=>{dialog.close();({database:openDatabase,trolleys:openTrolleyManager,import:openEquipmentWorkbook,backup:downloadBackup,restore:()=>document.querySelector('#backup-file').click()})[button.dataset.settingsTool]();});
@@ -1040,7 +1067,7 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
   workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
-  selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
+  selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;releaseLocalTab?.();connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
   client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();updateHistory();updateReferenceLibrary();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();updateReferenceLibrary();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){state.trolleys=trolleys;persist();updateRegister();updateHistory();}},phase=>{if(sharedClient===client){connectionPhase=phase;if(phase==='connected')lastConfirmedAt=new Date().toISOString();updateConnectionStatus();}},corrections=>{if(sharedClient===client){state.referenceCorrections=corrections;persist();updateReferenceLibrary();}});
   refreshCollections(client);
  }catch(error){try{if(client.logout)await client.logout();else client.stop();}catch{client.stop();}throw error;}
@@ -1051,7 +1078,7 @@ async function disconnectDatabase() {
   const local=localStorage.getItem(localWorkspaceKey);if(!local)throw Error('No preserved local workspace was found. Export the cached team register before continuing.');
   const restored=validateWorkspace(JSON.parse(local));
   if(sharedClient)await sharedClient.logout();else{const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}
-  selectedEquipment.clear();sharedClient=null;sharedLocked=false;localStorage.removeItem('decompro.mode');state=restored;collectionViewId=state.activeCollectionId||'';collectionError='';notice='Returned to your local workspace. Shared records are unchanged.';persist();render();
+  selectedEquipment.clear();sharedClient=null;sharedLocked=false;localStorage.removeItem('decompro.mode');await acquireLocalTab();state=restored;collectionViewId=state.activeCollectionId||'';collectionError='';notice='Returned to your local workspace. Shared records are unchanged.';persist();render();
  }catch(error){notice=error.message;render();}
 }
 async function uploadLocal() {
@@ -1199,4 +1226,4 @@ window.addEventListener('storage',event=>{if(event.key==='decompro.workspaceLock
 setInterval(checkInactivity,1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkInactivity();});
 render();
-resumeDatabase();
+if(!localTabBlocked)resumeDatabase();

@@ -633,6 +633,7 @@ test('local import previews duplicates, preserves originals and safely retries a
  expect(await page.evaluate(()=>window.importWrites)).toEqual([local.items[0].id,local.items[1].id,local.items[1].id]);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('PRESERVED-SHARED-DRAFT');
  await page.locator('#close-local-import').click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Sign out & return to local workspace'}).click();
+ await expect(page.locator('.alert')).toContainText('Returned to your local workspace');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items)).toEqual(local.items);
 });
 

@@ -19,3 +19,6 @@ Appearance and other device preferences remain device settings. Equipment, scans
 Validation includes sentinel checks that real register/local-backup/configuration/mode/lock values remain unchanged, zero Firebase requests, persisted test edits, collection Excel row counts, PDF labels, synthetic reset and phone popup/navigation behavior.
 
 Final validation: all 112 browser tests and the production build passed. Built desktop/phone checks each loaded 96 test records, suggested OptiPlex 7050 for `TEST-DL7050-99999`, made zero Firebase API requests, produced no runtime errors/overflow, and preserved real register/mode/lock sentinel values.
+
+
+Only one tab can edit a local test workspace at a time. If another tab owns it, close that tab and select **Retry workspace** to load its latest data. The real workspace and test workspace use separate editing locks, so one of each can stay open together. Local editing requires a current browser with Web Locks over HTTPS (localhost is supported for development).
