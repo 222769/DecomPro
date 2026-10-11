@@ -81,3 +81,14 @@ test('sparse suffix matches never override an established conflicting model or m
  assert.equal(recognizeSerial('ABC012345999',shortPrefix).method,'conflict');
  const contradictory=recognizeSerial('001917BD354B',[{serial:'001917BD323B',model:'XTE30722',manufacturer:'posiflex'},{serial:'001917BD323B',model:'Other model',manufacturer:'posiflex'}]);assert.equal(contradictory.method,'conflict');assert.equal(contradictory.model,undefined);assert.equal(contradictory.manufacturer,'posiflex');
 });
+
+test('suffix families suggest only a unanimous manufacturer across varied production prefixes',()=>{
+ const facts=['7F020669H','8E154818H','9E180986H'].map((serial,i)=>({serial,manufacturer:'Toshiba',model:i?'Protege':'Satellite Pro'}));
+ const result=recognizeSerial('8F020669H',facts);
+ assert.equal(result.manufacturer,'Toshiba');assert.equal(result.method,'conflict');assert.equal(result.model,undefined);assert.equal(result.suffix,'H');assert.equal(result.format,'9A999999A');
+ assert.equal(recognizeSerial('8F020669H',[...facts,{serial:'5E014556H',manufacturer:'Other maker',model:'Other'}]),null);
+ assert.equal(recognizeSerial('8F020669H',facts.slice(0,2)),null);
+ assert.equal(recognizeSerial('8F020669H',[facts[0],facts[0],facts[0]]),null);
+ assert.equal(recognizeSerial('8F020669H',facts.map(f=>({...f,serial:f.serial.replace(/^.../,'7F0')}))),null);
+ assert.equal(recognizeSerial('7F020669H',facts).method,'exact');
+});

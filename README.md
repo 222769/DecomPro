@@ -173,3 +173,5 @@ Open **Collection review** in the navigation (or the session summary) to prepare
 ### Appearance
 
 In **Settings → Appearance**, choose Light, Dark (midnight blue), or Follow device. The selector previews the theme; **Save settings** remembers it across reloads. Cancel or Escape restores the saved theme. Appearance is a browser preference, separate from equipment backups and team records. Follow device responds when the operating system theme changes. The loading and recovery screen also respects the saved preference.
+
+When no stronger exact or prefix family matches, recognition can suggest a manufacturer from the same full serial format and trailing letter code. This fallback requires at least three distinct reference serials across at least two leading families, all agreeing on the manufacturer. Conflicting manufacturers block the fallback. Suffix evidence never automatically fills a model; the technician checks the equipment label and enters or selects the model. The matching format and ending remain visible in recognition evidence and captured-progress backups.

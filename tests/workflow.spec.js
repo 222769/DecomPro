@@ -718,3 +718,14 @@ test('admin errors retain account form details for correction',async({page})=>{
  await page.getByRole('button',{name:'Administration',exact:true}).click();await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Technician name',{exact:true}).fill('Keep these details');await page.getByLabel('Account email',{exact:true}).fill('keep@example.invalid');await page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true}).fill('AD');await page.getByRole('button',{name:'Create user account',exact:true}).click();
  await expect(page.locator('#admin-form-error')).toContainText('initials already belong');await expect(page.getByLabel('Technician name',{exact:true})).toHaveValue('Keep these details');
 });
+
+test('Toshiba terminal-code family suggests manufacturer for a new production prefix and preserves evidence on reload',async({page})=>{
+ await page.goto('/');await scan(page,'8F020669H');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('9A999999A · ends H');
+ await expect(page.locator('.alert')).toContainText('36 distinct supporting examples');
+ await page.reload();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+ expect(state.draft.serial).toBe('8F020669H');expect(state.draft.model).toBeUndefined();expect(state.draft.recognitionEvidence.suffix).toBe('H');expect(state.draft.recognitionConfirmed).toBe(false);
+});

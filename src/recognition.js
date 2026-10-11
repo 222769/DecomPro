@@ -57,6 +57,18 @@ export function recognizeSerial(value,examples) {
   const family=compatible.filter(f=>f.serial.startsWith(prefix));
   if(family.length)return {...describe(family,'similar',prefix),referenceSerials:[...new Set(family.map(f=>f.serial))]};
  }
+ // A terminal maker code can survive changing production prefixes. Require
+ // the entire serial format, independent examples and varied leading families.
+ // This evidence suggests only the maker; a suffix does not prove the model.
+ const suffix=serial.match(/[A-Z]+$/)?.[0];
+ if(serial.length>=8&&suffix&&suffix.length<=3) {
+  const family=compatible.filter(f=>f.serial.endsWith(suffix));
+  if(new Set(family.map(f=>f.serial)).size>=3&&new Set(family.map(f=>f.serial.slice(0,3))).size>=2&&new Set(family.map(f=>f.manufacturer.toLowerCase())).size===1) {
+   const result=describe(family,'pattern');
+   const candidates=result.candidates||[{model:result.model,manufacturer:result.manufacturer,support:result.support}];
+   return {...result,method:'conflict',basis:'pattern',model:undefined,manufacturer:family[0].manufacturer,candidates,suffix,format:shape(serial)};
+  }
+ }
  return null;
 }
 export async function referenceRowsFromWorkbook(buffer) {
