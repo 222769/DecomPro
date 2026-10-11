@@ -15,7 +15,7 @@ test('failed equipment removal preserves visible inventory, stored records and u
  await expect(page.locator('#inventory tbody')).toContainText('REPAIR-001');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);
 });
 test('restoring a backup clears previous review and search filters so restored records are visible',async({page})=>{
- const state=await seed(page);await page.getByRole('button',{name:'Review missing details'}).click();await page.getByLabel('Search collection register').fill('not-in-restored-backup');
+ const state=await seed(page);await page.getByRole('button',{name:'Today’s progress',exact:true}).click();await page.getByRole('button',{name:'Review missing details'}).click();await page.getByLabel('Search collection register').fill('not-in-restored-backup');
  const restored={...state,items:[{...state.items[0],id:'restored-one',serial:'RESTORED-001',model:'P2419H',manufacturer:'Dell'}]};
  await page.locator('#backup-file').setInputFiles({name:'restored.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({app:'DecomPro',version:1,state:restored}))});
  await page.getByRole('button',{name:'Replace workspace & restore'}).click();

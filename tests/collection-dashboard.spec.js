@@ -14,6 +14,7 @@ async function seed(page) {
 
 test('dashboard separates unresolved records, physical checks, pickup and collection; filters preserve the active scan',async({page})=>{
  const {summer,autumn,trolleys}=await seed(page);const dashboard=page.getByRole('region',{name:'Collection dashboard',exact:true});
+ await dashboard.locator('summary').click();
  await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','1','1','1']);
  await expect(dashboard.locator('.dashboard-badge')).toHaveText(['Empty trolley','Needs review','Awaiting physical check','Ready for pickup','Collected']);
  await expect(dashboard).toContainText('1 of 4 items collected');

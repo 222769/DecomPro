@@ -29,7 +29,7 @@ Pushing GitHub changes does not publish Firebase rules. The updated rules were v
 ## Remaining controls
 
 - Browser storage and downloaded Excel/JSON/PDF files are unencrypted. The sign-in gate protects the app interface, not against someone with access to the device, browser developer tools or profile files. Use managed devices and sign out when finished. A downloaded backup remains readable without signing in.
-- Firebase normally remembers sign-in on a device. The app revalidates active membership with the server on reopening; an unlocked device with a valid remembered session can still reopen the workspace.
+- Sign-in defaults to Firebase browser-session persistence. Remember me is an explicit trusted-device option. Manual or inactivity locking signs out and sets a persistent lock marker, so refreshing cannot automatically reopen a locked workspace. Browser session restoration can retain session storage; lock or sign out when leaving a shared device.
 - Spreadsheet reference facts previously approved for bundling remain public in the website and source. Making the repository private would not make bundled website assets private.
 - GitHub Pages does not let this repository set custom HTTP response security headers. The meta policy cannot enforce `frame-ancestors`, HTTP HSTS or `X-Content-Type-Options`. A hosting proxy or a future cPanel deployment can supply these headers.
 - Restrict Firebase Authentication's authorized domains to the domains actually used, enforce HTTPS in GitHub Pages, protect administrator Google/GitHub accounts with MFA, and enable GitHub secret scanning/push protection where available.
@@ -40,3 +40,9 @@ Pushing GitHub changes does not publish Firebase rules. The updated rules were v
 Security checks include script injection attempts, unavailable shared membership, password cleanup, cross-team and revoked access, oversized and forged records, shared audit retrieval, and auth/membership listener invalidation. Existing scanning, Excel imports/exports, PDFs, backups, collection grouping and dark-phone workflows are also exercised. Production builds and both production dependency audits are checked separately from emulator tests. Passing these checks is not a claim that every possible security flaw has been eliminated.
 
 Final validation: **93 browser tests, 47 unit tests, 21 database emulator tests and 10 account/auth emulator tests passed** (171 total). The production build passed, and desktop/phone production checks showed no runtime errors or horizontal overflow while the shared sign-in gate preserved unfinished scans. Both production dependency audits reported zero known advisories. Functions-emulator warnings about unconfigured Authentication triggers did not prevent the account tests from executing and passing.
+
+## Shared-device controls
+
+Use **Lock workspace** in the top toolbar or **Settings → Device security → Lock workspace now**. The app signs out, hides the shared register, and preserves accepted scan fields plus any partly typed current scan input. Sign in with a password to continue. Locking one tab also locks other open shared-workspace tabs. An already submitted server write may finish after locking; the next sign-in retrieves confirmed records.
+
+Inactivity locking defaults to five minutes; Settings offers 5, 10, 15 or 30 minutes. Scanner keyboard input, pointer presses and form input count as activity. Returning from a background tab checks elapsed inactivity. Device security preferences are stored separately from workspace backups. Local-only profiles do not provide authenticated locking.

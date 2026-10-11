@@ -274,3 +274,17 @@ html[data-theme="dark"] .status-ready { background:#183f34; color:#8fe2bf; }
 
 main.workspace-lock { margin:0 auto; max-width:640px; min-height:100vh; display:grid; align-content:center; padding:32px 20px; }
 .workspace-lock .card { padding:32px; }.workspace-lock .eyebrow { margin-top:24px; }.workspace-lock h1 { font-size:32px; max-width:none; margin:16px 0; }.workspace-lock p { line-height:1.8; color:var(--muted); }.workspace-lock .primary { margin-top:12px; }
+
+.workspace-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px; }
+.workspace-toolbar-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }.workspace-toolbar-actions .secondary { font-size:11px; }
+.connection-status.compact-connection { display:block; padding:0; border:0; background:transparent; margin:0; }
+.connection-chip { display:inline-flex; align-items:center; gap:9px; border:1px solid var(--border); background:#fff; color:var(--muted); border-radius:24px; padding:9px 13px; font-size:12px; }
+.connection-chip svg { width:17px; height:17px; }.connection-chip>span:not(.sr-only) { display:inline; }.connection-chip i { width:7px; height:7px; border-radius:50%; background:#91a0b6; }.connected .connection-chip i { background:#39b78b; }.warning .connection-chip i { background:#d69433; }
+.dashboard-trolley-details { border-top:1px solid var(--border); margin-top:18px; padding-top:16px; }.dashboard-trolley-details>summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); }.dashboard-trolley-details>summary span { float:right; font-weight:400; }
+.settings-tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0; }.settings-tool-grid button { text-align:left; display:flex; align-items:center; gap:8px; font-size:11px; }.settings-tool-grid svg { width:17px; height:17px; }
+html[data-theme="dark"] .compact-connection .connection-chip { background:#162238; color:#bdcbe0; border-color:#2c3c55; }
+@media(max-width:700px) { .workspace-toolbar { gap:10px; margin-bottom:20px; }.workspace-toolbar-actions { gap:8px; }.workspace-toolbar-actions .text-button { font-size:11px; }.settings-tool-grid { grid-template-columns:1fr; } }
+#collections[hidden],#session-summary[hidden] { display:none; }
+/* Overview stays focused on collection readiness; scanning has its own shortcut. */
+.overview-view :is(.stats,.station-layout,#inventory) { display:none; }
+.nav:not(.active) .nav-active-dot { display:none; }

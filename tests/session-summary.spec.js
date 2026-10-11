@@ -16,7 +16,7 @@ async function seed(page) {
   ].map(item=>({...item,barcode:'N/A',etch:'N/A',asset:'A1234'}));
   localStorage.setItem('decompro.v1',JSON.stringify({captureOrder:'serial-first',activeTrolleyId:trolleys[0].id,trolleys,profiles:[{name:'Muhammad Ali',code:'MA'},{name:'Jawad',code:'JA'}],active:'MA',defaults,items,draft:{serial:'UNFINISHED-SCAN'},step:1,voice:false,settings,referenceExamples:[],referenceCorrections:[]}));
  },{trolleys:[open,ready,collected],settings:defaultSettings});
- await page.goto('/');return {open,ready,collected};
+ await page.goto('/');await page.getByRole('button',{name:'Today’s progress',exact:true}).click();return {open,ready,collected};
 }
 
 test('summary reviews missing details across trolleys and refreshes after correcting a record without clearing the scan',async({page})=>{

@@ -1,6 +1,6 @@
 import {checkReadiness,validateReadinessNotes} from './readiness.js';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import {getFunctions,httpsCallable} from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
@@ -26,11 +26,12 @@ async function hash(value) {
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
  return [...new Uint8Array(bytes)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
-export async function connectFirebase(config,teamId,email,password) {
+export async function connectFirebase(config,teamId,email,password,{remember=false}={}) {
  config=validateFirebaseConfig(config);
  if(!/^[A-Za-z0-9_-]{1,80}$/.test(teamId))throw Error('Use a team ID containing only letters, numbers, underscores or hyphens.');
  const name=`decompro-${config.projectId}`;
  const app=getApps().find(app=>app.name===name)||initializeApp(config,name),auth=getAuth(app),db=getFirestore(app);
+ if(typeof window!=='undefined')await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);
  if(email)await signInWithEmailAndPassword(auth,email,password);
  else await new Promise(resolve=>{const unsubscribe=onAuthStateChanged(auth,()=>{unsubscribe();resolve();});});
  if(!auth.currentUser)throw Error('Sign in with your Firebase team account.');
@@ -181,6 +182,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    trolleyVersions.set(trolley.id,expectedVersion+1);
   },
   stop(){stops.splice(0).forEach(stop=>stop());},
+  async rememberDevice(remember){if(auth&&typeof window!=='undefined')await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);},
   async logout(){client.stop();if(auth)await signOut(auth);},
   async write(item,expectedVersion=0,{deleted=false,historicalImport=false,collectionId=''}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical local records.');
