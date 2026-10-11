@@ -1011,9 +1011,10 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
  const client=await connectFirebase(config,teamId,email,password,{remember});
  try {
   const records=await client.load();
-  devicePreferences=saveDevicePreferences({...devicePreferences,remember});workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
+  devicePreferences=saveDevicePreferences({...devicePreferences,remember});
   const workspaceId=`${config.projectId}/${teamId}/${client.uid}`,sameCollections=state.collectionWorkspace===workspaceId;
   const next=validateWorkspace({...state,...(!sameCollections?{collectionSessions:[],collectionTrolleys:[],collectionScans:{},activeCollectionId:'',collectionPaused:false,...(state.collectionWorkspace?{draft:{},step:0}:{})}:{}),collectionWorkspace:workspaceId,activeTrolleyId:records.trolleys.some(t=>t.id===state.activeTrolleyId)?state.activeTrolleyId:'',profiles:[client.profile],active:client.profile.code,trolleyMoves:[],items:records.items,trolleys:records.trolleys,referenceExamples:records.examples,referenceCorrections:records.corrections||[]});
+  workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
@@ -1163,7 +1164,7 @@ function recordActivity() {lastActivity=Date.now();try{sessionStorage.setItem('d
 async function lockWorkspace(message='Workspace locked. Sign in to continue.') {
  if(!sharedLocked||lockInProgress)return;
  lockInProgress=true;workspaceManuallyLocked=true;try{localStorage.setItem('decompro.workspaceLocked','true');}catch{}
- const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){state.draft[fields[state.step][0]]=input.value;}persist();
+ const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){if(input.value.trim())state.draft[fields[state.step][0]]=input.value;else delete state.draft[fields[state.step][0]];}persist();
  const client=sharedClient;sharedClient=null;scanning=false;window.speechSynthesis?.cancel();notice=message;render();
  try {if(client?.logout)await client.logout();else {client?.stop();const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}}
  catch{notice='Workspace locked. Firebase sign-out could not be confirmed; sign in again before continuing.';render();}

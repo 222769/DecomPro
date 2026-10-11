@@ -57,8 +57,9 @@ export function validateWorkspace(value) {
   const draft = {};
   for (const [key] of fields) {
     if (value.draft[key] !== undefined) {
-      if (!text(value.draft[key])) throw Error('The backup has invalid captured values.');
-      draft[key] = value.draft[key];
+      if (!text(value.draft[key], true)) throw Error('The backup has invalid captured values.');
+      // Older lock logic saved empty current inputs. They are uncaptured fields.
+      if (value.draft[key].trim()) draft[key] = value.draft[key];
     }
   }
   if (value.draft.manufacturer !== undefined) {

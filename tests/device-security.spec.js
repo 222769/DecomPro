@@ -13,6 +13,7 @@ async function mockTeam(page) {
  `}));
 }
 async function signin(page,remember=false){
+ await page.locator('#station,.workspace-lock').first().waitFor({state:'attached'});
  const gate=page.getByRole('button',{name:'Sign in to DecomPro',exact:true});if(await gate.count())await gate.click();else await page.getByRole('button',{name:'Shared database',exact:true}).click();
  await page.getByLabel('Team account email').fill('tech@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only-password');if(remember)await page.getByRole('checkbox',{name:'Remember me on this trusted device',exact:true}).check();
  await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#connection-status')).toContainText('Database connected');
@@ -47,4 +48,16 @@ test('locking one team tab also locks another open tab without clearing its scan
  const other=await context.newPage();await mockTeam(other);await other.goto('/');await expect(other.locator('#connection-status')).toContainText('Database connected');
  await other.locator('#scan').fill('OTHER-TAB-DRAFT');await page.getByRole('button',{name:'Lock workspace',exact:true}).click();
  await expect(other.locator('.workspace-lock')).toBeVisible();await expect(other.locator('.workspace-lock')).toContainText('another tab');expect(await other.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('OTHER-TAB-DRAFT');
+});
+
+test('empty scan locks reconnect safely and legacy blank drafts recover without losing equipment or accepted serials',async({page})=>{
+ await mockTeam(page);await page.goto('/');await page.locator('#voice').click();
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.items=[{...state.defaults,id:'recovery-item',serial:'SAVED-EQUIPMENT',model:'Known model',manufacturer:'Dell',asset:'N/A',barcode:'N/A',etch:'N/A',technician:state.active,trolleyId:state.trolleys[0].id}];localStorage.setItem('decompro.v1',JSON.stringify(state));});
+ await signin(page);await page.getByRole('button',{name:'Lock workspace',exact:true}).click();await expect(page.locator('.workspace-lock')).toBeVisible();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBeUndefined();await signin(page);await page.locator('#scan').fill('UNFINISHED-SERIAL');await page.locator('#scan').press('Enter');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Lock workspace',exact:true}).click();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
+ await signin(page);await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('SAVED-EQUIPMENT');
+ await page.getByRole('button',{name:'Lock workspace',exact:true}).click();
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.draft.model='';localStorage.setItem('decompro.v1',JSON.stringify(state));});
+ await page.reload();await signin(page);await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('SAVED-EQUIPMENT');
+ const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(restored.draft.serial).toBe('UNFINISHED-SERIAL');expect(restored.draft.model).toBeUndefined();expect(restored.items).toHaveLength(1);
 });
