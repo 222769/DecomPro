@@ -122,3 +122,24 @@ test('manufacturer-only four-character families do not hide mixed manufacturers 
  const facts=[{serial:'ST348671',manufacturer:'Zoostorm',model:'A'},{serial:'ST348759',manufacturer:'Zoostorm',model:'A'},{serial:'ST349764',manufacturer:'Zoostorm',model:'B'},{serial:'ST390573',manufacturer:'Stone',model:'C'}];
  const result=recognizeSerial('ST348721',facts);assert.equal(result.method,'conflict');assert.equal(result.manufacturer,undefined);assert.equal(result.prefix,'ST3');
 });
+
+test('small suffix families suggest a maker using a fixed format or anchored changing middle',()=>{
+ const facts=['59FACYWKTCN3','59F2C08LTCN3'].map(serial=>({serial,manufacturer:'Toshiba',model:'MK1652GSX'}));
+ const match=recognizeSerial('59F9Z77QTCN3',facts);
+ assert.equal(match.manufacturer,'Toshiba');assert.equal(match.model,undefined);assert.equal(match.support,2);assert.equal(match.suffix,'TCN3');assert.equal(match.format,'Starts 59; 12 characters');
+ assert.equal(match.candidates[0].model,'MK1652GSX');assert.equal(snapshotEvidence(match).suffix,'TCN3');
+ assert.equal(recognizeSerial('59F9Z77QTCN3',[facts[0],facts[0]]),null);
+ assert.equal(recognizeSerial('89F9Z77QTCN3',facts),null);
+ assert.equal(recognizeSerial('59F9Z777QTCN3',facts),null);
+ assert.equal(recognizeSerial('59F9Z77QTCN3',[...facts,{serial:'89F9Z77QTCN3',manufacturer:'Other maker',model:'Other'}]).manufacturer,undefined);
+ const formatted=['AX100TYPE','BZ200TYPE'].map(serial=>({serial,manufacturer:'Example maker',model:'Panel'}));
+ const result=recognizeSerial('CW300TYPE',formatted);assert.equal(result.manufacturer,'Example maker');assert.equal(result.model,undefined);assert.equal(result.format,'AA999AAAA');
+ assert.equal(recognizeSerial('CW300TYPE',[...formatted,{serial:'DZ400TYPE',manufacturer:'Other maker',model:'Other'}]).manufacturer,undefined);
+});
+
+test('two independent short-prefix references suggest only a maker and check other layouts for conflicts',()=>{
+ const facts=['DRV100AA','DRV200BB'].map(serial=>({serial,manufacturer:'Maker',model:'Drive'}));
+ const result=recognizeSerial('DRV300CC',facts);assert.equal(result.manufacturer,'Maker');assert.equal(result.model,undefined);assert.equal(result.prefix,'DRV');assert.equal(result.support,2);
+ assert.equal(recognizeSerial('DRV300CC',[facts[0],facts[0]]),null);
+ assert.equal(recognizeSerial('DRV300CC',[...facts,{serial:'DRVAB123',manufacturer:'Other maker',model:'Other'}]),null);
+});

@@ -744,3 +744,15 @@ test('spreadsheet analysis families recognise changing Toshiba middles and keep 
  page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item',exact:true}).click();await scan(page,'ST348722');
  await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveCount(0);
 });
+
+test('small spreadsheet suffix family suggests manufacturer with model choices and retained evidence',async({page})=>{
+ await page.goto('/');await scan(page,'59F9Z77QTCN3');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
+ await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Starts 59; 12 characters');
+ await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('TCN3');
+ await expect(page.locator('.alert')).toContainText('2 distinct supporting examples');
+ await page.reload();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
+ expect(state.draft.model).toBeUndefined();expect(state.draft.recognitionEvidence.suffix).toBe('TCN3');expect(state.draft.recognitionConfirmed).toBe(false);
+});

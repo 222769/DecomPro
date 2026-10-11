@@ -105,6 +105,26 @@ export function recognizeSerial(value,examples) {
    return {...result,method:'conflict',basis:'pattern',model:undefined,manufacturer:family[0].manufacturer,candidates,suffix,format:shape(serial)};
   }
  }
+ // Small imported families can identify the maker before enough units exist
+ // for a model prediction. Require a marker plus the full format, or a long
+ // suffix family anchored by two leading characters and a fixed length;
+ // check all same-length marker matches for contradictory makers first.
+ // A pair is never enough to assert the model, even if its labels agree.
+ if(serial.length>=8) {
+  for(const kind of ['prefix','suffix']) {
+   const length=kind==='prefix'?3:4,marker=kind==='prefix'?serial.slice(0,length):serial.slice(-length);
+   if(!/[A-Z]/.test(marker))continue;
+   const family=facts.filter(f=>f.serial.length===serial.length&&(kind==='prefix'?f.serial.startsWith(marker):f.serial.endsWith(marker)));
+   if(new Set(family.map(f=>f.manufacturer.toLowerCase())).size!==1)continue;
+   const formatted=family.filter(f=>shape(f.serial)===shape(serial));
+   const matches=new Set(formatted.map(f=>f.serial)).size>=2?formatted:kind==='suffix'&&serial.length>=10?family.filter(f=>f.serial.startsWith(serial.slice(0,2))):[];
+   if(new Set(matches.map(f=>f.serial)).size<2)continue;
+   const result=describe(matches,'pattern',kind==='prefix'?marker:'');
+   const candidates=result.candidates||[{model:result.model,manufacturer:result.manufacturer,support:result.support}];
+   const format=matches.every(f=>shape(f.serial)===shape(serial))?shape(serial):`Starts ${serial.slice(0,2)}; ${serial.length} characters`;
+   return {...result,method:'conflict',basis:'pattern',model:undefined,candidates,format,...(kind==='suffix'?{suffix:marker}:{})};
+  }
+ }
  return null;
 }
 export async function referenceRowsFromWorkbook(buffer) {
