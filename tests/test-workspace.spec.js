@@ -1,0 +1,24 @@
+import {test,expect} from '@playwright/test';
+import ExcelJS from 'exceljs';
+
+test('test workspace seeds varied data, retains edits and leaves real shared records/configuration unchanged',async({page})=>{
+ const real={'decompro.v1':'REAL REGISTER SENTINEL','decompro.localWorkspace':'REAL LOCAL SENTINEL','decompro.mode':'shared','decompro.firebaseConfig':'REAL CONFIG SENTINEL','decompro.workspaceLocked':'true'};
+ await page.addInitScript(real=>{if(!localStorage.getItem('qa.seeded')){for(const [key,value]of Object.entries(real))localStorage.setItem(key,value);localStorage.setItem('qa.seeded','true');}},real);
+ const requests=[];page.on('request',request=>{if(/googleapis|cloudfunctions|firebaseio/.test(request.url()))requests.push(request.url());});
+ await page.goto('/?workspace=demo#overview');await expect(page.locator('.test-workspace-banner')).toContainText('TEST WORKSPACE');await expect(page.locator('.dashboard-metrics strong')).toHaveText(['96','8','8','2','2']);
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.demo.v1')));expect(state.profiles).toHaveLength(3);expect(state.collectionSessions).toHaveLength(2);expect(state.items.every(item=>item.description.startsWith('TEST'))).toBe(true);
+ await page.getByRole('button',{name:'Shared database',exact:true}).click();await expect(page.locator('.alert')).toContainText('cannot connect to Firebase');await expect(page.locator('#database-form')).toHaveCount(0);
+ await page.getByRole('link',{name:/Collection register/}).click();await page.getByRole('button',{name:`Edit item ${state.items[5].serial}`,exact:true}).click();await page.locator('#edit-model').fill('TEST Changed model');await page.getByRole('button',{name:'Save changes',exact:true}).click();await page.reload();await expect(page.locator('#inventory tbody')).toContainText('TEST Changed model');
+ const stored=await page.evaluate(keys=>Object.fromEntries(keys.map(key=>[key,localStorage.getItem(key)])),Object.keys(real));expect(stored).toEqual(real);expect(requests).toEqual([]);
+});
+
+test('test collection export, labels and reset work without modifying real storage',async({page})=>{
+ await page.goto('/?workspace=demo#collections');await expect(page.locator('.test-workspace-banner')).toBeVisible();const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.demo.v1')));
+ const first=page.locator('.collection-session-card').filter({hasText:'TEST Current collection'});const download=page.waitForEvent('download');await first.getByRole('button',{name:'Export collection Excel',exact:true}).click();const file=await download,book=new ExcelJS.Workbook();await book.xlsx.readFile(await file.path());expect(book.worksheets[0].rowCount).toBe(73);expect(book.worksheets[0].getRow(2).getCell(2).value).toContain('TEST');
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();const card=page.locator('.trolley-card').first();const label=page.waitForEvent('download');await card.getByRole('button',{name:'PDF label',exact:true}).click();expect((await label).suggestedFilename()).toContain('.pdf');await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Reset synthetic data',exact:true}).click();await expect(page.locator('.alert')).toContainText('Synthetic test data reset');const reset=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.demo.v1')));expect(reset.items).toHaveLength(96);expect(reset.trolleys[0].id).not.toBe(state.trolleys[0].id);expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBeNull();
+});
+
+test('real Settings opens an isolated test tab and phone navigation preserves synthetic scan progress',async({page,context})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/');await page.locator('#voice').click();const real=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByRole('button',{name:'Open settings',exact:true}).click();const popup=context.waitForEvent('page');await page.getByRole('link',{name:'Open test workspace',exact:true}).click();const demo=await popup;await demo.waitForLoadState();await expect(demo.locator('.test-workspace-banner')).toBeVisible();await demo.getByRole('link',{name:'Scan station',exact:true}).click();await demo.locator('#scan').fill('TEST-UNFINISHED');await demo.locator('#scan').press('Enter');await demo.reload();expect(await demo.evaluate(()=>JSON.parse(localStorage.getItem('decompro.demo.v1')).draft.serial)).toBe('TEST-UNFINISHED');expect(await demo.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(real);expect(await demo.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
