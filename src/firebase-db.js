@@ -66,8 +66,9 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   sessionVersionFor(id){return sessionVersions.get(id)||0;},
   async loadCollections() {
    const [groups,links]=await Promise.all([getDocsFromServer(sessions),getDocsFromServer(sessionTrolleys)]);
-   const collectionSessions=validateCollections(groups.docs.map(row=>{sessionVersions.set(row.id,row.data().version);return row.data().payload;}));
-   const collectionTrolleys=validateAssignments(links.docs.map(row=>({trolleyId:row.id,sessionId:row.data().sessionId})).filter(row=>row.sessionId),collectionSessions);
+   const deleted=new Set(groups.docs.filter(row=>row.data().deleted===true).map(row=>row.id));
+   const collectionSessions=validateCollections(groups.docs.filter(row=>!deleted.has(row.id)).map(row=>{sessionVersions.set(row.id,row.data().version);return row.data().payload;}));
+   const collectionTrolleys=validateAssignments(links.docs.map(row=>({trolleyId:row.id,sessionId:row.data().sessionId})).filter(row=>row.sessionId&&!deleted.has(row.sessionId)),collectionSessions);
    return {collectionSessions,collectionTrolleys};
   },
   async writeSession(session,trolleyIds,expectedVersion=0) {
@@ -78,6 +79,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    const row=doc(sessions,session.id),revisionId=createId();
    await runTransaction(db,async tx=>{
     const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    if(before?.deleted)throw Error('This collection has been deleted. Refresh collections.');
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this collection. Reopen it and review the latest trolley assignments.');
     const links=[];for(const id of ids)links.push(await tx.get(doc(sessionTrolleys,id)));
     for(const link of links)if(link.exists()&&link.data().sessionId&&link.data().sessionId!==session.id)throw Error('A trolley was assigned to another collection. Review the latest assignments.');
@@ -87,6 +89,24 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    });
    sessionVersions.set(session.id,expectedVersion+1);
    return client.loadCollections();
+  },
+  async deleteSession(id,expectedVersion) {
+   if(member.role!=='admin')throw Error('Only a team administrator can delete a collection.');
+   const current=await client.loadCollections();
+   if(!current.collectionSessions.some(row=>row.id===id))throw Error('This collection is no longer available.');
+   const ids=current.collectionTrolleys.filter(row=>row.sessionId===id).map(row=>row.trolleyId),row=doc(sessions,id),revisionId=createId();
+   await runTransaction(db,async tx=>{
+    const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    if(!before||before.deleted)throw Error('This collection is no longer available.');
+    if(before.version!==expectedVersion)throw Error('Another technician changed this collection. Reopen deletion and review it again.');
+    const links=[];for(const trolleyId of ids)links.push(await tx.get(doc(sessionTrolleys,trolleyId)));
+    for(const link of links)if(!link.exists()||link.data().sessionId!==id)throw Error('Trolley assignments changed. Refresh collections and retry.');
+    const after={...before,deleted:true,version:expectedVersion+1,updatedBy:uid,updatedAt:serverTimestamp(),revisionId};
+    tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,trolleyIds:[],at:serverTimestamp()});
+    for(const link of links)tx.set(link.ref,{...link.data(),sessionId:'',changedInSession:id,version:link.data().version+1,updatedBy:uid,updatedAt:serverTimestamp()});
+   });
+   sessionVersions.delete(id);
+   try{return await client.loadCollections();}catch{throw Error('Deletion confirmed, but collections could not refresh. Reconnect and refresh collections before retrying.');}
   },
   async moveHistory(id) {
    const snapshot=await getDocsFromServer(collection(doc(equipment,id),'revisions'));

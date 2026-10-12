@@ -1,7 +1,7 @@
 import {createTestWorkspace} from './test-workspace.js';
 import {readDevicePreferences,saveDevicePreferences,idleExpired} from './device-preferences.js';
 import {collectionDashboard,dashboardStatuses} from './collection-dashboard.js';
-import {createCollection,assignCollection,collectionScope,collectionProgress,switchCollection,scanCheckpoint} from './collection-sessions.js';
+import {createCollection,assignCollection,collectionScope,collectionProgress,switchCollection,scanCheckpoint,removeCollection} from './collection-sessions.js';
 import {themePreference,previewTheme,saveTheme} from './theme.js';
 import {collectionReview} from './collection-review.js';
 import {handoverGroups,handoverReference} from './handover-data.js';
@@ -327,7 +327,8 @@ async function refreshCollections(client=sharedClient) {
  if(!client){updateCollections();return;}
  try {
   const [records,equipment]=await Promise.all([client.loadCollections(),client.load()]);if(sharedClient!==client)return;
-  state={...state,trolleys:equipment.trolleys,...records};collectionError='';persist();updateRegister();
+  let next=state;for(const session of state.collectionSessions)if(!records.collectionSessions.some(row=>row.id===session.id))next=removeCollection(next,session.id);
+  const changedScan=next.activeCollectionId!==state.activeCollectionId;state={...next,trolleys:equipment.trolleys,...records};collectionError='';persist();if(changedScan){pendingScan=null;render();}else updateRegister();
  }catch(error){if(sharedClient===client){collectionError=`Shared collections are unavailable. ${client.role==='admin'?'In Database, copy the latest Firestore rules and publish them in Firebase, then refresh collections.':'Ask your team administrator to publish the latest Firestore rules, then refresh collections.'} ${firebaseErrorMessage(error)}`;updateCollections();}}
 }
 function updateCollectionDashboard() {
@@ -359,7 +360,7 @@ function updateCollections() {
  updateCollectionDashboard();
  const node=document.querySelector('#collections');if(!node)return;
  const active=state.collectionSessions.find(row=>row.id===state.activeCollectionId);
- node.innerHTML=`<div class="section-top"><div><div class="eyebrow">KEEP EACH COLLECTION TOGETHER</div><h2>Your collections</h2><p>${active?`${escape(active.name)} · ${state.collectionPaused?'Paused — progress saved':'Active scan session'}`:'Choose a collection to resume its saved scan, or create one for this week’s work.'}</p></div><div class="trolley-actions"><button class="primary" id="new-collection">Create collection</button>${sharedLocked?'<button class="secondary" id="refresh-collections">Refresh collections</button>':''}</div></div>${collectionError?`<p class="collection-error" role="alert">${escape(collectionError)}</p>`:''}${active?`<div class="collection-active-actions"><button class="secondary" id="pause-collection">${state.collectionPaused?'Resume session':'Pause session'}</button><button class="text-button" id="leave-collection">General scan session</button></div>`:''}<p class="session-note">Collection names and trolley grouping ${sharedLocked?'are shared with your team':'are stored in this workspace'}. Unfinished scans stay in this browser and your backup. Refresh shared collections to check another technician’s changes.</p><div class="collection-session-grid">${state.collectionSessions.map(session=>{const progress=collectionProgress(session.id,state.collectionTrolleys,state.trolleys,state.items,{shared:sharedLocked});return `<article class="collection-session-card"><div class="section-top"><h3>${escape(session.name)}</h3><span class="tag">${progress.complete?'Collected':session.id===state.activeCollectionId?state.collectionPaused?'Paused':'Active':'Available'}</span></div><div class="collection-session-metrics"><span><strong>${progress.items.length}</strong> equipment items</span><span><strong>${progress.issues}</strong> checks remaining</span><span><strong>${progress.collectedItems}</strong> items collected</span></div><progress value="${progress.collected}" max="${progress.trolleys.length||1}" aria-label="${escape(session.name)} trolley collection progress"></progress><p>${progress.open} open · ${progress.ready} ready · ${progress.collected} collected trolleys</p><small>${progress.trolleys.map(t=>escape(t.name)).join(' · ')||'No trolleys assigned yet.'}</small><div class="trolley-actions"><button class="primary" data-resume-collection="${escape(session.id)}">Resume ${escape(session.name)}</button><button class="secondary" data-view-collection="${escape(session.id)}">View collection inventory</button><button class="secondary" data-edit-collection="${escape(session.id)}">Manage collection trolleys</button><button class="secondary" data-export-collection="${escape(session.id)}" ${!progress.items.length||exporting?'disabled':''}>Export collection Excel</button></div></article>`;}).join('')||'<p>No named collections yet. Existing equipment remains in the register; assign its trolley when creating a collection.</p>'}</div>`;
+ node.innerHTML=`<div class="section-top"><div><div class="eyebrow">KEEP EACH COLLECTION TOGETHER</div><h2>Your collections</h2><p>${active?`${escape(active.name)} · ${state.collectionPaused?'Paused — progress saved':'Active scan session'}`:'Choose a collection to resume its saved scan, or create one for this week’s work.'}</p></div><div class="trolley-actions"><button class="primary" id="new-collection">Create collection</button>${sharedLocked?'<button class="secondary" id="refresh-collections">Refresh collections</button>':''}</div></div>${collectionError?`<p class="collection-error" role="alert">${escape(collectionError)}</p>`:''}${active?`<div class="collection-active-actions"><button class="secondary" id="pause-collection">${state.collectionPaused?'Resume session':'Pause session'}</button><button class="text-button" id="leave-collection">General scan session</button></div>`:''}<p class="session-note">Collection names and trolley grouping ${sharedLocked?'are shared with your team':'are stored in this workspace'}. Unfinished scans stay in this browser and your backup. Refresh shared collections to check another technician’s changes.</p><div class="collection-session-grid">${state.collectionSessions.map(session=>{const progress=collectionProgress(session.id,state.collectionTrolleys,state.trolleys,state.items,{shared:sharedLocked});return `<article class="collection-session-card"><div class="section-top"><h3>${escape(session.name)}</h3><span class="tag">${progress.complete?'Collected':session.id===state.activeCollectionId?state.collectionPaused?'Paused':'Active':'Available'}</span></div><div class="collection-session-metrics"><span><strong>${progress.items.length}</strong> equipment items</span><span><strong>${progress.issues}</strong> checks remaining</span><span><strong>${progress.collectedItems}</strong> items collected</span></div><progress value="${progress.collected}" max="${progress.trolleys.length||1}" aria-label="${escape(session.name)} trolley collection progress"></progress><p>${progress.open} open · ${progress.ready} ready · ${progress.collected} collected trolleys</p><small>${progress.trolleys.map(t=>escape(t.name)).join(' · ')||'No trolleys assigned yet.'}</small><div class="trolley-actions"><button class="primary" data-resume-collection="${escape(session.id)}">Resume ${escape(session.name)}</button><button class="secondary" data-view-collection="${escape(session.id)}">View collection inventory</button><button class="secondary" data-edit-collection="${escape(session.id)}">Manage collection trolleys</button>${!sharedLocked||sharedClient?.role==='admin'?`<button class="text-button remove" data-delete-collection="${escape(session.id)}">Delete collection</button>`:''}<button class="secondary" data-export-collection="${escape(session.id)}" ${!progress.items.length||exporting?'disabled':''}>Export collection Excel</button></div></article>`;}).join('')||'<p>No named collections yet. Existing equipment remains in the register; assign its trolley when creating a collection.</p>'}</div>`;
  node.querySelector('#new-collection').onclick=()=>editCollection();
  node.querySelector('#refresh-collections')?.addEventListener('click',()=>refreshCollections());
  node.querySelector('#pause-collection')?.addEventListener('click',()=>state.collectionPaused?resumeCollection(state.activeCollectionId):pauseCollection());
@@ -367,7 +368,30 @@ function updateCollections() {
  node.querySelectorAll('[data-resume-collection]').forEach(button=>button.onclick=()=>resumeCollection(button.dataset.resumeCollection));
  node.querySelectorAll('[data-edit-collection]').forEach(button=>button.onclick=()=>editCollection(button.dataset.editCollection));
  node.querySelectorAll('[data-view-collection]').forEach(button=>button.onclick=()=>{collectionViewId=button.dataset.viewCollection;trolleyViewId='';search='';missingDetailsOnly=false;selectedEquipment.clear();location.hash='inventory';updateRegister();document.querySelector('#inventory').scrollIntoView({behavior:'smooth'});});
+ node.querySelectorAll('[data-delete-collection]').forEach(button=>button.onclick=()=>deleteCollection(button.dataset.deleteCollection));
  node.querySelectorAll('[data-export-collection]').forEach(button=>button.onclick=()=>exportCollection(button.dataset.exportCollection));
+}
+async function deleteCollection(id) {
+ if(collectionBusy||!writable())return;
+ if(saving){notice='Wait for the current item to finish saving before deleting a collection.';render();return;}
+ if(sharedLocked&&sharedClient?.role!=='admin'){notice='Only a team administrator can delete a shared collection.';render();return;}
+ collectionBusy=true;const client=sharedClient,locked=sharedLocked,current=()=>client===sharedClient&&locked===sharedLocked;
+ try {
+  const {openSessionDeletion}=await import('./collection-session-ui.js');
+  await openSessionDeletion({dialog:document.querySelector('#collection-session-dialog'),id,current,
+   load:async()=>{if(!client)return state;const [records,groups]=await Promise.all([client.load(),client.loadCollections()]);return {...state,...records,...groups};},
+   version:sessionId=>client?.sessionVersionFor(sessionId)||0,
+   remove:async(sessionId,version)=>{
+    if(!current()||saving)throw Error('Workspace changed or a save is pending. Reopen deletion.');
+    const groups=client?await client.deleteSession(sessionId,version):null;
+    if(!current())throw Error('Workspace changed. Reconnect and refresh collections to check deletion.');
+    const activeRemoved=state.activeCollectionId===sessionId;commitTrolleyWorkspace({...removeCollection(state,sessionId),...(groups||{})});
+    if(activeRemoved)pendingScan=null;if(collectionViewId===sessionId)collectionViewId='';if(dashboardCollectionId===sessionId)dashboardCollectionId='';selectedEquipment.clear();
+   },
+   done:session=>{notice=`Deleted ${session.name}. Saved equipment, trolleys and pickup history are preserved.`;render();}
+  });
+ }catch(error){notice=`Collection deletion could not open. ${firebaseErrorMessage(error)}`;render();}
+ finally{collectionBusy=false;}
 }
 async function editCollection(id='') {
  if(collectionBusy||!writable())return;collectionBusy=true;

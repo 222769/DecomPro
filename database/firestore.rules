@@ -171,7 +171,8 @@ service cloud.firestore {
    match /collectionSessions/{id} {
     function valid(d) {
      let p=d.payload;
-     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
+     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId','deleted'])
+      && d.get('deleted',false) is bool
       && p.keys().hasOnly(['id','name','createdAt']) && p.id==id
       && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
       && p.name is string && p.name.size()>0 && p.name.size()<=80 && p.createdAt is string && p.createdAt.size()>0
@@ -179,12 +180,12 @@ service cloud.firestore {
     }
     function audit(d) {
      let r=getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(d.revisionId)).data;
-     return r.actor==request.auth.uid && r.after==d && r.at==request.time;
+     return r.actor==request.auth.uid && r.after==d && r.at==request.time && (!d.get('deleted',false) || r.trolleyIds.size()==0);
     }
     allow read: if member(team);
-    allow create: if member(team) && valid(request.resource.data) && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+    allow create: if member(team) && !request.resource.data.get('deleted',false) && valid(request.resource.data) && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
-    allow update: if member(team) && valid(request.resource.data) && request.resource.data.version==resource.data.version+1
+    allow update: if member(team) && !resource.data.get('deleted',false) && (!request.resource.data.get('deleted',false) || admin(team)) && valid(request.resource.data) && request.resource.data.version==resource.data.version+1
      && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt && request.resource.data.payload.createdAt==resource.data.payload.createdAt
      && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/collectionSessions/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
     allow delete: if false;
@@ -203,6 +204,7 @@ service cloud.firestore {
       && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
       && exists(/databases/$(database)/documents/teams/$(team)/trolleys/$(id))
       && d.sessionId is string && (d.sessionId=='' || d.sessionId==d.changedInSession)
+      && (!owner.get('deleted',false) || d.sessionId=='')
       && owner.updatedBy==request.auth.uid && owner.updatedAt==request.time
       && d.version is int && d.updatedBy==request.auth.uid && d.updatedAt==request.time;
     }

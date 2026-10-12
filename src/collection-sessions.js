@@ -33,3 +33,10 @@ export function switchCollection(state,id) {
  const trolley=collectionScope(id,state.collectionTrolleys||[],state.trolleys,state.items).trolleys.find(t=>t.status==='open');
  return {...state,collectionScans:checkpoints,activeCollectionId:id,collectionPaused:false,...(target||{draft:{},step:0,defaults:{...state.defaults,trolley:trolley?.name||''},activeTrolleyId:trolley?.id||''})};
 }
+
+export function removeCollection(state,id) {
+ if(!state.collectionSessions.some(row=>row.id===id))throw Error('This collection is no longer available.');
+ const next=state.activeCollectionId===id?switchCollection(state,''):state;
+ const collectionScans={...next.collectionScans};delete collectionScans[id];
+ return {...next,collectionScans,collectionSessions:next.collectionSessions.filter(row=>row.id!==id),collectionTrolleys:next.collectionTrolleys.filter(row=>row.sessionId!==id)};
+}

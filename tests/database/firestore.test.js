@@ -290,3 +290,19 @@ test('security: technicians can resolve audit names but cannot enumerate members
  await assertFails(getDoc(doc(db,'teams/college-it/members/admin')));
  await assert.rejects(createTeamStore(db,'tech','college-it',member).write(sample()),error=>error.code==='permission-denied');
 });
+
+test('collection deletion is audited, administrator-only, revision-checked and preserves saved equipment',async()=>{
+ const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ await tech.write(sample());const session=createCollection('Delete me');await owner.writeSession(session,[initialTrolley.id]);await assert.rejects(tech.deleteSession(session.id,1),/administrator/);
+ const forged=createTeamStore(context('tech'),'tech','college-it',{...member,role:'admin'});await assert.rejects(forged.deleteSession(session.id,1),/permission/i);
+ await owner.writeSession({...session,name:'Changed'},[initialTrolley.id],1);await assert.rejects(owner.deleteSession(session.id,1),/changed this collection/);assert.equal((await owner.loadCollections()).collectionSessions.length,1);
+ await owner.deleteSession(session.id,2);const groups=await owner.loadCollections();assert.equal(groups.collectionSessions.length,0);assert.equal(groups.collectionTrolleys.length,0);assert.equal((await owner.load()).items.length,1);assert.equal((await owner.load()).trolleys.length,1);
+ const row=await getDoc(doc(context('admin'),'teams/college-it/collectionSessions',session.id));assert.equal(row.data().deleted,true);assert.equal(row.data().version,3);assert.equal((await getDocs(collection(context('admin'),'teams/college-it/collectionSessions',session.id,'revisions'))).size,3);
+ await assert.rejects(owner.writeSession(session,[initialTrolley.id],3),/deleted/);await assertFails(deleteDoc(row.ref));
+ const fresh=createCollection('Reuse released trolley');await tech.writeSession(fresh,[initialTrolley.id]);assert.equal((await tech.loadCollections()).collectionTrolleys[0].sessionId,fresh.id);
+});
+
+test('deleting a twelve-trolley collection is atomic and stays within Firestore access limits',async()=>{
+ const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin);const ids=[initialTrolley.id];for(let n=1;n<12;n++){const t=createTrolley(`Delete trolley ${n}`);await owner.writeTrolley(t);ids.push(t.id);}
+ const session=createCollection('Delete twelve');await owner.writeSession(session,ids);await owner.deleteSession(session.id,1);const groups=await owner.loadCollections();assert.equal(groups.collectionSessions.length,0);assert.equal(groups.collectionTrolleys.length,0);assert.equal((await owner.load()).trolleys.length,12);
+});

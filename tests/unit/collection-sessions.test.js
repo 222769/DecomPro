@@ -20,3 +20,9 @@ test('switching collections saves independent checkpoints and restores drafts an
  const next=switchCollection(state,second.id);assert.equal(next.step,0);assert.deepEqual(next.draft,{});assert.equal(next.defaults.trolley,b.name);assert.equal(next.collectionPaused,false);assert.deepEqual(state.collectionScans,{});
  const restored=switchCollection({...next,draft:{serial:'SECOND'},step:1},first.id);assert.equal(restored.draft.serial,'UNFINISHED');assert.equal(restored.activeTrolleyId,a.id);assert.equal(restored.collectionScans[second.id].draft.serial,'SECOND');assert.throws(()=>switchCollection(state,'missing'),/no longer available/);
 });
+
+test('deletion restores the general checkpoint, removes only the selected grouping and retains equipment and trolley history',async()=>{
+ const {removeCollection}=await import('../../src/collection-sessions.js');const general={draft:{serial:'GENERAL'},step:1,defaults:{trolley:a.name},activeTrolleyId:a.id};
+ const state={collectionSessions:[first,second],collectionTrolleys:[{sessionId:first.id,trolleyId:a.id},{sessionId:second.id,trolleyId:b.id}],collectionScans:{unassigned:general,[first.id]:{draft:{serial:'DELETED'}}},activeCollectionId:first.id,collectionPaused:false,trolleys:[a,b],items:[{id:'saved'}],draft:{serial:'DELETE-DRAFT'},step:1,defaults:{trolley:a.name},activeTrolleyId:a.id};
+ const result=removeCollection(state,first.id);assert.equal(result.activeCollectionId,'');assert.equal(result.draft.serial,'GENERAL');assert.equal(result.collectionScans[first.id],undefined);assert.deepEqual(result.collectionSessions,[second]);assert.equal(result.items,state.items);assert.equal(result.trolleys,state.trolleys);assert.equal(state.draft.serial,'DELETE-DRAFT');assert.throws(()=>removeCollection(result,first.id),/no longer available/);
+});

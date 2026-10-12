@@ -17,3 +17,23 @@ export async function openSessionEditor({dialog,id='',load,current,save,done,ver
  };
  dialog.showModal();
 }
+
+export async function openSessionDeletion({dialog,id,load,current,version,remove,done}) {
+ const state=await load();if(!current())throw Error('Workspace changed. Reopen deletion.');
+ const session=state.collectionSessions.find(row=>row.id===id);if(!session)throw Error('This collection is no longer available.');
+ const scope=collectionScope(id,state.collectionTrolleys,state.trolleys,state.items),expected=version(id);let busy=false;
+ dialog.innerHTML=`<form id="delete-collection-form"><div class="eyebrow">DELETE COLLECTION</div><h2>Delete ${escape(session.name)}?</h2><p>${scope.items.length} saved equipment items · ${scope.trolleys.length} trolleys</p><p class="restore-warning">This removes the named collection and releases its trolley assignments. Saved equipment, physical trolleys and pickup history stay in the register. Any unfinished scan saved for this collection will be removed.</p><label for="delete-collection-word">Type DELETE to confirm</label><input id="delete-collection-word" autocomplete="off" spellcheck="false" required><label class="toggle-label"><input type="checkbox" id="delete-collection-understood"> I understand the collection and its unfinished scan will be removed. Saved equipment and trolleys will remain.</label><p id="delete-collection-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-delete-collection">Cancel</button><button type="submit" class="primary" id="confirm-delete-collection" disabled>Delete collection</button></div></form>`;
+ const word=dialog.querySelector('#delete-collection-word'),ack=dialog.querySelector('#delete-collection-understood'),button=dialog.querySelector('#confirm-delete-collection'),cancel=dialog.querySelector('#cancel-delete-collection'),error=dialog.querySelector('#delete-collection-error');
+ const confirmed=()=>word.value==='DELETE'&&ack.checked;
+ const sync=()=>{button.disabled=busy||!confirmed();};word.oninput=sync;ack.onchange=sync;
+ cancel.onclick=()=>{if(!busy)dialog.close();};dialog.oncancel=event=>{if(busy)event.preventDefault();};
+ dialog.querySelector('form').onsubmit=async event=>{
+  event.preventDefault();if(busy||!confirmed())return;
+  if(!current()){error.textContent='Workspace changed. Reopen deletion.';return;}
+  busy=true;word.disabled=ack.disabled=cancel.disabled=true;sync();error.textContent='Deleting collection…';
+  try{await remove(id,expected);if(!current())throw Error('Workspace changed. Refresh collections to check whether deletion was confirmed.');dialog.close();done(session);}
+  catch(failure){error.textContent=failure.message;}
+  finally{busy=false;word.disabled=ack.disabled=cancel.disabled=false;sync();}
+ };
+ dialog.showModal();word.focus();
+}
