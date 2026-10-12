@@ -293,3 +293,5 @@ html[data-theme="dark"] .compact-connection .connection-chip { background:#16223
 .test-workspace-banner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; padding:16px 20px; margin-bottom:20px; border:1px solid #e4c16b; border-radius:14px; background:#fff6dc; color:#795b19; }
 .test-workspace-banner strong,.test-workspace-banner span { display:block; }.test-workspace-banner strong { font-size:12px; letter-spacing:1px; }.test-workspace-banner span { font-size:12px; line-height:1.7; margin-top:5px; }.test-workspace-banner .secondary { font-size:11px; }.test-workspace-link { display:inline-flex; margin-bottom:10px; font-size:12px; }
 html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-color:#8d733d; color:#f0d99c; }
+
+.scan-order-cell{width:48px;text-align:center;font-variant-numeric:tabular-nums;font-weight:650}
