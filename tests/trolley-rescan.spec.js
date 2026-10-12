@@ -89,3 +89,15 @@ test('A0803 identifies and moves its saved register record without duplicating i
 test('an asset absent from inventory explains the separate equipment import without creating a record',async({page})=>{
  await seed(page);const before=await stored(page);await lookup(page,'A0803');await expect(page.locator('#rescan-message')).toContainText('No saved item matches A0803');await expect(page.locator('#rescan-message')).toContainText('Collection register → Import equipment Excel');await expect(page.locator('#confirm-rescan')).toHaveCount(0);expect((await stored(page)).items).toEqual(before.items);
 });
+
+async function mockSpeech(page){await page.addInitScript(()=>{window.spoken=[];Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return []},speak(u){window.spoken.push(u.text)}}});});}
+test('rescan speaks saved details after scanner Enter, repeats them and respects voice off',async({page})=>{
+ await mockSpeech(page);await seed(page);await page.locator('#voice').click();await page.locator('#rescan-mode').check();await page.evaluate(()=>window.spoken=[]);
+ await page.locator('#rescan-serial').fill('A0042');await page.locator('#rescan-serial').press('Enter');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Saved item found. Checked maker Checked model');
+ await page.locator('#repeat-rescan-prompt').click();expect(await page.evaluate(()=>window.spoken.length)).toBe(2);
+ await page.locator('#voice').click();await page.evaluate(()=>window.spoken=[]);await page.locator('#rescan-serial').fill('ORIGINAL-ETCH');await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#rescan-message')).toContainText('Saved details found');expect(await page.evaluate(()=>window.spoken)).toEqual([]);
+ await page.locator('#voice').click();await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Saved item found');
+});
+test('rescan speaks unsuccessful lookup instead of silently stopping',async({page})=>{
+ await mockSpeech(page);await seed(page);await page.locator('#voice').click();await lookup(page,'NO-SUCH-ITEM');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Rescan stopped');
+});
