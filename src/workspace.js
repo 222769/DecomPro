@@ -16,7 +16,7 @@ export const defaultFields = [
   ['reason', 'Reason for disposal', 'text'],
   ['trolley', 'Caged trolley', 'text'],
 ];
-export const blankBatchDefaults = (trolley='') => Object.fromEntries(defaultFields.map(([key])=>[key,key==='trolley'?trolley:'']));
+export const newBatchDefaults = (trolley='') => ({...Object.fromEntries(defaultFields.map(([key])=>[key,key==='trolley'?trolley:''])),source:'Storage',reason:'EOL'});
 export const defaultSettings = { keepBatchDefaults:false, speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: true };
 const text = (value, allowEmpty = false) => typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 export function validDate(value) {
