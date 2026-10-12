@@ -186,7 +186,7 @@ function updateEquipmentDescription(draft=state.draft,candidates=null) {
 function capture(value) {
  if(state.collectionPaused){notice='This collection session is paused. Resume it before scanning.';render();return;}
  value=value.trim();if(!value||state.step>=fields.length)return;
- if(value.length>1000){notice='This scan is too long (maximum 1,000 characters). Check the barcode or enter a shorter value.';const hint=document.querySelector('.hint');if(hint){hint.textContent=notice;hint.setAttribute('role','status');}return;}
+ if(value.length>1000){notice='This scan is too long (maximum 1,000 characters). Check the barcode or enter a shorter value.';const hint=document.querySelector('.hint');if(hint){hint.textContent=notice;hint.setAttribute('role','status');}document.querySelector('#scan')?.select();return;}
  const scannedTrolley=findTrolley(value,state.trolleys);
  if(scannedTrolley||/^TSU-[A-F0-9]{32}$/i.test(value)) {
   if(scannedTrolley)viewTrolley(scannedTrolley.id);
@@ -194,7 +194,8 @@ function capture(value) {
   return;
  }
  if(fields[state.step][0]==='asset') {
-  if(!validAssetNumber(value)){notice='Asset number must be A followed by four digits, for example A1234. If this is not applicable, use Skip to mark it as not applicable.';render();document.querySelector('#scan')?.focus();speak(notice);return;}
+  // Select the rejected scan so the next scanner read replaces it instead of being inserted beside it.
+  if(!validAssetNumber(value)){notice='Asset number must be A followed by four digits, for example A1234. If this is not applicable, use Skip to mark it as not applicable.';render();document.querySelector('#scan')?.focus();document.querySelector('#scan')?.select();speak(notice);return;}
   value=normalizeAssetNumber(value);
  }
  if(state.step===0) {

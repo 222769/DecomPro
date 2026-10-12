@@ -760,3 +760,12 @@ test('small spreadsheet suffix family suggests manufacturer with model choices a
  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(state.draft.model).toBeUndefined();expect(state.draft.recognitionEvidence.suffix).toBe('TCN3');expect(state.draft.recognitionConfirmed).toBe(false);
 });
+test('a rejected asset scan is replaced by the next scanner read instead of being joined to it',async({page})=>{
+ await page.goto('/');await defaults(page);
+ for(const value of ['REJECT-0001','P2419H','BC1','ET1'])await page.locator('#scan').pressSequentially(value).then(()=>page.locator('#scan').press('Enter'));
+ await page.locator('#scan').pressSequentially('ETCH-3');await page.locator('#scan').press('Enter');
+ await expect(page.locator('#scan')).toHaveValue('ETCH-3');
+ await page.locator('#scan').pressSequentially('a0003');await page.locator('#scan').press('Enter');
+ await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.asset)).toBe('A0003');
+});
