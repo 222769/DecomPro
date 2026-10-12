@@ -38,3 +38,27 @@ export async function createSharedTrolley(name,department=defaultDepartment,work
  const hex=[...bytes].map(b=>b.toString(16).padStart(2,'0')).join(''),id=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
  return {...createTrolley(name,department),id,reference:`TSU-${id.replaceAll('-','').toUpperCase()}`};
 }
+
+export function restoreLocalTrolleys(workspace) {
+ const trolleys=[...workspace.trolleys],items=workspace.items.map(item=>({...item})),defaults={...workspace.defaults};
+ const byId=new Map(trolleys.map(t=>[t.id,t]));
+ for(const item of items) {
+  if(item.trolleyId){const trolley=byId.get(item.trolleyId);if(trolley)item.trolley=trolley.name;continue;}
+  const matches=trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(item.trolley));
+  if(matches.length===1){item.trolleyId=matches[0].id;item.trolley=matches[0].name;}
+  // Legacy rows without a reference can establish a trolley; a stale name with
+  // an existing permanent reference must never create another one.
+  else if(!matches.length&&!workspace.collectionWorkspace){const trolley=createTrolley(item.trolley);trolleys.push(trolley);byId.set(trolley.id,trolley);item.trolleyId=trolley.id;item.trolley=trolley.name;}
+ }
+ let activeTrolleyId=workspace.activeTrolleyId||'';
+ const selected=byId.get(activeTrolleyId);
+ if(selected)defaults.trolley=selected.name;
+ else {
+  const matches=trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(defaults.trolley));
+  if(matches.length===1){activeTrolleyId=matches[0].id;defaults.trolley=matches[0].name;}
+  // Only initialise a genuinely new local workspace. A typed default name
+  // is not an instruction to create a new trolley during reload or sign-in.
+  else if(!trolleys.length&&!items.length&&defaults.trolley&&!workspace.collectionWorkspace){const trolley=createTrolley(defaults.trolley);trolleys.push(trolley);activeTrolleyId=trolley.id;defaults.trolley=trolley.name;}
+ }
+ return {...workspace,trolleys,items,defaults,activeTrolleyId};
+}

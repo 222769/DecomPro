@@ -2,7 +2,7 @@ import {validateReadinessNotes} from './readiness.js';
 import {validateEvidence} from './recognition-evidence.js';
 import { fields } from './data';
 import { cleanExamples } from './recognition';
-import {validateTrolleys,createTrolley} from './trolleys.js';
+import {validateTrolleys,createTrolley,trolleyNameKey} from './trolleys.js';
 import {validateCorrections} from './reference-library.js';
 import {validateMoveHistory} from './trolley-moves.js';
 import {validateCollections,validateAssignments} from './collection-sessions.js';
@@ -101,8 +101,8 @@ export function validateWorkspace(value) {
   settings.serialFirst = true;
   const trolleys=validateTrolleys(value.trolleys||[]);
   if(value.trolleys===undefined) {
-   for(const name of new Set([defaults.trolley,...items.map(item=>item.trolley)]))if(name)trolleys.push(createTrolley(name));
-   for(const item of items)if(!item.trolleyId)item.trolleyId=trolleys.find(t=>t.name===item.trolley)?.id;
+   for(const name of new Set([defaults.trolley,...items.map(item=>item.trolley)]))if(name&&!trolleys.some(t=>trolleyNameKey(t.name)===trolleyNameKey(name)))trolleys.push(createTrolley(name));
+   for(const item of items)if(!item.trolleyId){const trolley=trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(item.trolley));item.trolleyId=trolley?.id;if(trolley)item.trolley=trolley.name;}
   }
   const activeTrolleyId=value.activeTrolleyId||'';
   if(typeof activeTrolleyId!=='string'||(activeTrolleyId&&!trolleys.some(t=>t.id===activeTrolleyId)))throw Error('The selected trolley is not in this workspace.');

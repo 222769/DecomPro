@@ -22,7 +22,7 @@ import { availableVoices, utteranceFor } from './speech';
 import { defaultFirebaseConfig } from './firebase-config';
 import { firebaseErrorMessage } from './firebase-errors';
 import { createId } from './ids';
-import {createTrolley,createSharedTrolley,trolleyNameKey,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
+import {createTrolley,createSharedTrolley,restoreLocalTrolleys,trolleyNameKey,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
 import { defaultFields, validateEquipmentRecord, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -85,10 +85,8 @@ let summaryExpanded=false,missingDetailsOnly=false;
 const selectedEquipment=new Set();
 let search = '', pendingRestore = null,collectionViewId='',collectionError='',collectionBusy=false;
 try { sharedLocked=!testWorkspace&&localStorage.getItem('decompro.mode')==='shared'; const saved=localStorage.getItem(key); if(saved) state=validateWorkspace(JSON.parse(saved));else if(testWorkspace){state=createTestWorkspace(today());if(!localTabBlocked)localStorage.setItem(key,JSON.stringify(state));} } catch { storageError='Saved data could not be loaded. Export any visible records before continuing. Storage has been paused to protect the saved data.'; }
-if(!sharedLocked) {
- for(const name of new Set([state.defaults.trolley,...state.items.map(item=>item.trolley)]))if(name&&!state.trolleys.some(t=>t.name===name))state.trolleys.push(createTrolley(name));
- for(const item of state.items)if(!item.trolleyId)item.trolleyId=state.trolleys.find(t=>t.name===item.trolley)?.id;
-}
+if(!sharedLocked)state=restoreLocalTrolleys(state);
+
 let trolleyViewId=readTrolleyHash();collectionViewId=state.activeCollectionId||'';
 function workspaceUrl(demo){const url=new URL(location.href);url.searchParams.delete('app-refresh');if(demo)url.searchParams.set('workspace','demo');else url.searchParams.delete('workspace');url.hash='overview';return url.href;}
 function readTrolleyHash(){return location.hash.match(/^#trolley\/([A-Za-z0-9-]+)$/)?.[1]||'';}

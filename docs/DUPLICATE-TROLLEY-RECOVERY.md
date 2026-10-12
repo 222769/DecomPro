@@ -26,3 +26,11 @@ No Firebase rule change or new account permission is required. Jawad remains a t
 Existing live duplicate documents were not removed or merged: this execution environment cannot administer the live Firebase project. The tests reproduce two legacy same-name entries using a simulated Jawad technician account and verify reference selection and saving. A Firestore emulator test verifies concurrent creation commits one shared reference while preserving existing trolley records.
 
 Verification: 138 browser tests, 55 unit tests, 24 Firestore emulator tests and three production-build scenarios passed. The production build succeeded. The pending-save test now uses an existing shared trolley; its old empty-server fixture depended on the automatic creation behavior intentionally removed by this fix.
+
+## Reload and sign-in recovery update
+
+Startup now restores trolley selection using the permanent ID before inspecting display names. Equipment carrying an existing ID uses that trolley's current name; an old label cannot create another trolley. Legacy name matching normalises spacing/case and assigns a reference only when one match exists. A typed default name does not create a trolley during reload. Empty shared caches and orphaned permanent references do not manufacture replacement identities. Older backups without a trolley register also deduplicate normalised legacy names during migration.
+
+Sign-in loads the server trolley register and does not write trolley documents. The new regression scenario creates exactly one shared trolley as a simulated Jawad technician, locks/signs back in three times, refreshes after each sign-in, clears the device trolley cache and reconnects, then saves equipment. The test requires exactly one creation write and the same permanent reference throughout. Another regression checks repeated local reloads with a stale equipment name and differently cased/spaced defaults.
+
+This update does not delete or merge existing live trolley documents. Compare permanent TSU references and equipment contents before deciding how to resolve existing entries. No additional Firestore rules change is needed for this recovery update; the preceding renaming feature still needs its updated rules published.
