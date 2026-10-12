@@ -32,3 +32,34 @@ test('Jawad creates one trolley and repeated sign-ins, refreshes and empty-cache
  await page.locator('#default-manufacturer').fill('Dell');
  for(const value of ['RELOGIN-NEW-001','N/A','N/A','N/A','A0001']){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}await page.locator('#save').click();await expect(page.locator('#save')).toHaveCount(0);const remote=await page.evaluate(()=>JSON.parse(localStorage.getItem('test.remote')));expect(remote.items).toHaveLength(1);expect(remote.items[0].trolleyId).toBe(created.id);expect(remote.items[0].technician).toBe('JA');expect(remote.trolleys).toHaveLength(1);expect(await page.evaluate(()=>localStorage.getItem('test.trolleyWrites'))).toBe('1');
 });
+
+test('a trolley creation confirmed after an inactivity lock is not applied to the next workspace and cannot be duplicated after re-login',async({page})=>{
+ await page.addInitScript(()=>{if(!localStorage.getItem('test.remote'))localStorage.setItem('test.remote',JSON.stringify({items:[],trolleys:[],examples:[],corrections:[]}));});
+ await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`
+ const read=()=>JSON.parse(localStorage.getItem('test.remote')),key=name=>name.trim().replace(/\\s+/g,' ').toLowerCase();
+ export async function connectFirebase(){return {uid:'jawad',profile:{name:'Jawad Ahmed',code:'JA'},role:'technician',projectId:'decompro-236e9',teamId:'college-it',email:'jawad@example.invalid',stop(){},async logout(){},listen(a,b,c,d,phase){phase('connected')},async load(){return read()},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},trolleyVersionFor(){return 1},versionFor(){return 1},
+  async writeTrolley(trolley){
+   while(localStorage.getItem('test.holdWrite'))await new Promise(resolve=>setTimeout(resolve,50));
+   const data=read(),existing=data.trolleys.find(t=>key(t.name)===key(trolley.name));
+   if(existing)throw Object.assign(Error('A trolley named "'+existing.name+'" already exists ('+existing.reference+'). Select it with Use trolley instead of creating another.'),{code:'duplicate-trolley-name'});
+   data.trolleys.push(trolley);localStorage.setItem('test.remote',JSON.stringify(data));},
+  async write(item){const data=read();data.items.push(item);localStorage.setItem('test.remote',JSON.stringify(data));}}}
+ export async function disconnectFirebaseAuth(){}
+ `}));
+ await page.goto('/');await login(page);
+ await page.evaluate(()=>localStorage.setItem('test.holdWrite','1'));
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByLabel('New trolley name',{exact:true}).fill('1.1');await page.getByRole('button',{name:'Create trolley',exact:true}).click();
+ // The inactivity lock fires while Firebase is still confirming the creation.
+ await page.evaluate(()=>window.dispatchEvent(new StorageEvent('storage',{key:'decompro.workspaceLocked',newValue:'true'})));
+ await expect(page.locator('.workspace-lock')).toBeVisible();
+ await page.evaluate(()=>localStorage.removeItem('test.holdWrite'));
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('test.remote')).trolleys.length)).toBe(1);
+ await expect(page.getByText('before the new trolley was confirmed').first()).toBeVisible();
+ expect((await stored(page)).trolleys).toHaveLength(0);
+ await login(page);
+ expect((await stored(page)).trolleys).toHaveLength(1);
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await expect(page.locator('.trolley-card')).toHaveCount(1);
+ await page.getByLabel('New trolley name',{exact:true}).fill(' 1.1 ');await page.getByRole('button',{name:'Create trolley',exact:true}).click();
+ await expect(page.locator('#trolley-manager-error')).toContainText('already uses that name');
+ const remote=await page.evaluate(()=>JSON.parse(localStorage.getItem('test.remote')));expect(remote.trolleys).toHaveLength(1);expect(remote.trolleys[0].name).toBe('1.1');
+});

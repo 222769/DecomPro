@@ -24,7 +24,7 @@ import { availableVoices, utteranceFor } from './speech';
 import { defaultFirebaseConfig } from './firebase-config';
 import { firebaseErrorMessage } from './firebase-errors';
 import { createId } from './ids';
-import {createTrolley,createSharedTrolley,restoreLocalTrolleys,reconcileTrolleySelection,removeTrolley,trolleyNameKey,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
+import {createTrolley,createSharedTrolley,restoreLocalTrolleys,reconcileTrolleySelection,removeTrolley,trolleyNameKey,duplicateTrolleyError,defaultDepartment,findTrolley,trolleyForItem} from './trolleys';
 import { defaultFields, validateEquipmentRecord, validateWorkspace, parseBackup, filteredItems, validDate, defaultSettings } from './workspace';
 const icons = {
  barcode:'<path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8"/>',
@@ -622,9 +622,20 @@ function openTrolleyManager() {
   if(!name||!department)return;
   if(state.trolleys.some(t=>trolleyNameKey(t.name)===trolleyNameKey(name))){document.querySelector('#trolley-manager-error').textContent='A trolley already uses that name. Choose a new name so histories stay distinct.';return;}
   button.disabled=true;
-  try{const client=sharedClient;if(client){const records=await client.load();if(client!==sharedClient)throw Error('Workspace changed. Reopen Trolleys.');state.trolleys=records.trolleys;if(state.trolleys.some(t=>trolleyNameKey(t.name)===trolleyNameKey(name)))throw Error('A shared trolley already uses this name. Select its existing reference.');}
-   const trolley=client?(client.allocateTrolley?await client.allocateTrolley(name,department):await createSharedTrolley(name,department,`${client.projectId||'decompro-236e9'}/${client.teamId||'college-it'}`)):createTrolley(name,department);if(client)await client.writeTrolley(trolley,0);commitTrolleyWorkspace({...state,trolleys:[...state.trolleys.filter(t=>t.id!==trolley.id),trolley]});dialog.close();openTrolleyManager();}
-  catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+  // A lock, timeout or reconnection while Firebase is answering replaces the workspace; the late result must not be applied to it.
+  const client=sharedClient,locked=sharedLocked,current=()=>client===sharedClient&&locked===sharedLocked,stale='The workspace locked or changed before the new trolley was confirmed. Sign in and open Trolleys: if it was created it is listed there. Do not create it again.';
+  try{if(client){const records=await client.load();if(!current())throw Error(stale);state.trolleys=records.trolleys;const existing=state.trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(name));if(existing)throw duplicateTrolleyError(existing);}
+   const trolley=client?(client.allocateTrolley?await client.allocateTrolley(name,department):await createSharedTrolley(name,department,`${client.projectId||'decompro-236e9'}/${client.teamId||'college-it'}`)):createTrolley(name,department);
+   if(!current())throw Error(stale);
+   if(client)await client.writeTrolley(trolley,0);
+   if(!current())throw Error(stale);
+   commitTrolleyWorkspace({...state,trolleys:[...state.trolleys.filter(t=>t.id!==trolley.id),trolley]});dialog.close();openTrolleyManager();}
+  catch(error){
+   if(!dialog.isConnected||!dialog.open){notice=error.message===stale?stale:`Trolley not created. ${firebaseErrorMessage(error)}`;render();return;}
+   let message=firebaseErrorMessage(error);
+   // Rules refuse a name another device has just claimed; explain that instead of a generic access error.
+   if(error.code==='permission-denied'&&current()){try{const existing=(await client.load()).trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(name));if(existing)message=duplicateTrolleyError(existing).message;}catch{}}
+   document.querySelector('#trolley-manager-error').textContent=message;button.disabled=false;}
  };
  dialog.querySelectorAll('[data-status]').forEach(button=>button.onclick=()=>openTrolleyStatus(button.dataset.status));
  dialog.querySelectorAll('[data-unlock-trolley]').forEach(button=>button.onclick=()=>openTrolleyUnlock(button.dataset.unlockTrolley));

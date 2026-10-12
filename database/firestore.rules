@@ -49,6 +49,9 @@ service cloud.firestore {
     && notes.get('manufacturer','') is string && notes.get('manufacturer','').size()<=500
     && p.get('recognitionNeedsReview',false) is bool && p.get('recognitionConfirmed',false) is bool;
   }
+  // Must match trolleyClaimKey in src/trolleys.js: ASCII whitespace runs collapse, ends trim, case folds.
+  function trolleyNameKey(name) { return 'n-'+hashing.sha256(name.replace('[\\t\\n\\f\\r ]+',' ').replace('^ | $','').lower()).toHexString().lower(); }
+  function trolleyNameClaimed(team,p) { return getAfter(/databases/$(database)/documents/teams/$(team)/trolleyNames/$(trolleyNameKey(p.name))).data.trolleyId==p.id; }
   function boundedText(value) { return value is string && value.size()>0 && value.size()<=1000; }
   function itemShape(p) {
    return p.keys().hasOnly(['id','date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician','trolley','trolleyId','readinessNotes','recognitionNeedsReview','recognitionConfirmed'])
@@ -133,6 +136,7 @@ service cloud.firestore {
     }
     allow read: if member(team);
     allow create: if member(team) && !request.resource.data.get('deleted',false) && valid(request.resource.data) && request.resource.data.payload.status=='open' && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+     && trolleyNameClaimed(team,request.resource.data.payload)
      && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
     allow update: if member(team) && !resource.data.get('deleted',false)
      && (!request.resource.data.get('deleted',false) || (admin(team) && resource.data.payload.status=='open' && request.resource.data.payload==resource.data.payload
@@ -146,7 +150,9 @@ service cloud.firestore {
      && (request.resource.data.payload.status=='collected' ? resource.data.payload.status=='ready' || admin(team) : true)
      && (resource.data.payload.status=='ready' ?
       (request.resource.data.payload.status=='open' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','readyAt','readyBy'])) ||
-      (request.resource.data.payload.status=='collected' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','collectedAt','collectedBy','company','handover'])) : true)
+      (request.resource.data.payload.status=='collected' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','collectedAt','collectedBy','company','handover'])) :
+      // Only open trolleys can be renamed (ready and collected changes exclude name), so only they pay for the claim check.
+      resource.data.payload.status=='collected' || request.resource.data.payload.name==resource.data.payload.name || trolleyNameClaimed(team,request.resource.data.payload))
      && request.resource.data.version==resource.data.version+1 && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
      && request.resource.data.payload.id==resource.data.payload.id && request.resource.data.payload.reference==resource.data.payload.reference && request.resource.data.payload.createdAt==resource.data.payload.createdAt
      && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
@@ -159,6 +165,21 @@ service cloud.firestore {
       && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)).data && request.resource.data.after.revisionId==revision;
      allow update, delete: if false;
     }
+   }
+   // One claim per normalised trolley name. A claim moves only once its holder is deleted or renamed.
+   match /trolleyNames/{key} {
+    function holds(trolleyId) {
+     let t=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(trolleyId)).data;
+     return !t.get('deleted',false) && trolleyNameKey(t.payload.name)==key;
+    }
+    function released(trolleyId) {
+     return !existsAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(trolleyId)) || !holds(trolleyId);
+    }
+    allow read: if member(team);
+    allow create: if member(team) && request.resource.data.keys().hasOnly(['trolleyId']) && request.resource.data.trolleyId is string && holds(request.resource.data.trolleyId);
+    allow update: if member(team) && request.resource.data.keys().hasOnly(['trolleyId']) && request.resource.data.trolleyId is string && holds(request.resource.data.trolleyId)
+     && (resource.data.trolleyId==request.resource.data.trolleyId || released(resource.data.trolleyId));
+    allow delete: if member(team) && released(resource.data.trolleyId);
    }
    match /serials/{key} {
     allow read: if member(team);

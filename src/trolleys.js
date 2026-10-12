@@ -31,6 +31,16 @@ export function findTrolley(value,trolleys) {
 }
 
 export const trolleyNameKey=name=>name.trim().replace(/\s+/g,' ').toLowerCase();
+// Firestore rules recompute this key (database/firestore.rules trolleyNameKey), so it
+// uses only the ASCII whitespace that the rules' RE2 patterns recognise.
+export async function trolleyClaimKey(name) {
+ const normal=name.replace(/[\t\n\f\r ]+/g,' ').replace(/^ | $/g,'').toLowerCase();
+ const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(normal)));
+ return 'n-'+[...digest].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+export function duplicateTrolleyError(existing) {
+ return Object.assign(Error(`A trolley named "${existing.name}" already exists (${existing.reference}). Select it with Use trolley instead of creating another.`),{code:'duplicate-trolley-name',trolleyId:existing.id});
+}
 export async function createSharedTrolley(name,department=defaultDepartment,workspace='college-it',generation=0) {
  // A shared name resolves to one ID across devices, without changing existing trolley references.
  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`decompro.trolley/${workspace}/${trolleyNameKey(name)}${generation?`/generation/${generation}`:''}`)));

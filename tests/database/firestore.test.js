@@ -388,3 +388,40 @@ test('six linked collected trolleys unlock atomically within rules access limits
  const batch=writeBatch(db);batch.set(ref,after);batch.set(doc(ref,'revisions','partial'),{actor:'admin',before,after,action:'unlock',reason:'Partial group',at:serverTimestamp()});await assertFails(batch.commit());
  const unlocked=await owner.unlockTrolleys(trolleys[3].id,versions,'Correct linked pickup');assert.equal(unlocked.length,6);assert.ok((await owner.load()).trolleys.every(t=>t.status==='open'&&!t.handover));
 });
+
+test('a trolley name is claimed atomically: concurrent random references, stale retries and forged writes cannot duplicate it',async()=>{
+ const {trolleyClaimKey}=await import('../../src/trolleys.js');
+ const tech=createTeamStore(context('tech'),'tech','college-it',member),owner=createTeamStore(context('admin'),'admin','college-it',admin);
+ const a=createTrolley('Trolley 1.1'),b=createTrolley(' trolley   1.1 ');
+ const results=await Promise.allSettled([tech.writeTrolley(a,0),owner.writeTrolley(b,0)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.match(results.find(r=>r.status==='rejected').reason.message,/already exists/);
+ assert.equal((await owner.load()).trolleys.filter(t=>t.name.trim().toLowerCase().replace(/\s+/g,' ')==='trolley 1.1').length,1);
+ const winner=results[0].status==='fulfilled'?a:b,loser=winner===a?b:a,key=await trolleyClaimKey('Trolley 1.1');
+ assert.equal((await getDoc(doc(context('tech'),`teams/college-it/trolleyNames/${key}`))).data().trolleyId,winner.id);
+ // A request finishing after a timeout and re-login retries with another reference: it is refused.
+ await assert.rejects(tech.writeTrolley(createTrolley('TROLLEY 1.1'),0),error=>error.code==='duplicate-trolley-name'&&error.message.includes(winner.reference));
+ // Direct writes that skip or steal the claim are refused by the rules.
+ const db=context('tech'),forged=doc(db,`teams/college-it/trolleys/${loser.id}`),after={payload:loser,version:1,createdBy:'tech',updatedBy:'tech',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),revisionId:'forged'};
+ let batch=writeBatch(db);batch.set(forged,after);batch.set(doc(forged,'revisions','forged'),{actor:'tech',before:null,after,action:'create',at:serverTimestamp()});await assertFails(batch.commit());
+ batch=writeBatch(db);batch.set(forged,after);batch.set(doc(forged,'revisions','forged'),{actor:'tech',before:null,after,action:'create',at:serverTimestamp()});batch.set(doc(db,`teams/college-it/trolleyNames/${key}`),{trolleyId:loser.id});await assertFails(batch.commit());
+ await assertFails(deleteDoc(doc(db,`teams/college-it/trolleyNames/${key}`)));
+});
+
+test('renaming and deleting release trolley names; renaming onto a used or legacy unclaimed name is refused',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),first=createTrolley('Cage A'),second=createTrolley('Cage B');
+ await owner.writeTrolley(first,0);await owner.writeTrolley(second,0);
+ await assert.rejects(owner.writeTrolley({...second,name:'cage a'},1),/already exists/);
+ await owner.writeTrolley({...first,name:'Cage C'},1);
+ await owner.writeTrolley({...second,name:'Cage A'},1);
+ await assert.rejects(owner.writeTrolley(createTrolley('Cage C'),0),/already exists/);
+ await owner.deleteTrolley(first.id,2);
+ const reused=createTrolley('Cage C');await owner.writeTrolley(reused,0);
+ const legacy=createTrolley('Legacy cage');
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),`teams/college-it/trolleys/${legacy.id}`),{payload:legacy,version:1,createdBy:'admin',updatedBy:'admin',createdAt:new Date(),updatedAt:new Date(),revisionId:'seed'});});
+ await assert.rejects(owner.writeTrolley(createTrolley('LEGACY CAGE'),0),/already exists/);
+ await assert.rejects(owner.writeTrolley({...reused,name:'legacy  cage'},1),/already exists/);
+ // Status changes on unclaimed legacy trolleys keep working.
+ await owner.writeTrolley({...legacy,department:'Estates'},1);
+ assert.equal((await owner.load()).trolleys.length,4);
+});

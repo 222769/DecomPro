@@ -26,3 +26,9 @@ test('retry comparison ignores field order but detects changed equipment and rev
  assert.ok(sameRecord({id:'one',readinessNotes:{serial:'Checked',model:'Missing'}},{readinessNotes:{model:'Missing',serial:'Checked'},id:'one'}));
  assert.equal(sameRecord({id:'one',model:'Original'},{id:'one',model:'Changed'}),false);
 });
+test('import never creates a second shared trolley with an existing normalised name',()=>{
+ const shared=createTrolley(' IMPORT   cage ');
+ const [row]=localImportPlan({items:[item('one','ABC001')],trolleys:[trolley]},{items:[],trolleys:[shared]});
+ assert.equal(row.status,'blocked');assert.match(row.reason,/already uses this name/);
+ assert.equal(localImportPlan({items:[item('one','ABC001')],trolleys:[trolley]},{items:[],trolleys:[trolley]})[0].status,'new');
+});

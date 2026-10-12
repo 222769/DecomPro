@@ -6,7 +6,7 @@ import {getFunctions,httpsCallable} from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
-import {validateTrolleys,createSharedTrolley,removeTrolley,trolleyNameKey} from './trolleys.js';
+import {validateTrolleys,createSharedTrolley,removeTrolley,trolleyNameKey,trolleyClaimKey,duplicateTrolleyError} from './trolleys.js';
 import {validateCorrections,correctionKey} from './reference-library.js';
 import {validateHandoverLink} from './handover-data.js';
 import {validateCollections,validateAssignments,assignCollection} from './collection-sessions.js';
@@ -47,7 +47,7 @@ export async function connectFirebase(config,teamId,email,password,{remember=fal
  }catch(error){await signOut(auth).catch(()=>{});throw error;}
 }
 export function createTeamStore(db,uid,teamId,member,auth=null) {
- const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),corrections=collection(root,'referenceCorrections');
+ const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),trolleyNames=collection(root,'trolleyNames'),corrections=collection(root,'referenceCorrections');
  const versions=new Map(),stops=[];
  const trolleyVersions=new Map(),correctionVersions=new Map();
  const sessionVersions=new Map(),sessions=collection(root,'collectionSessions'),sessionTrolleys=collection(root,'collectionTrolleys');
@@ -238,15 +238,28 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
      expectedVersion=client.trolleyVersionFor(trolley.id)||expectedVersion;
     }
    }
-   const row=doc(trolleys,trolley.id),revisionId=createId();
+   const row=doc(trolleys,trolley.id),revisionId=createId(),key=await trolleyClaimKey(trolley.name);
    await runTransaction(db,async tx=>{
     const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this trolley. Reopen trolley management and review the latest details.');
     if(before?.deleted)throw Error('This trolley was deleted. Create a new trolley reference.');
     if(before?.payload.status==='collected')throw Error('This trolley has already been collected. Its history is locked.');
+    const renamed=!before||before.payload.name!==trolley.name,claimRow=doc(trolleyNames,key);
+    let oldClaimRow=null;
+    if(renamed) {
+     // Legacy trolleys predate name claims, so check the server register as well as the claim.
+     const named=(await getDocsFromServer(trolleys)).docs.find(other=>other.id!==trolley.id&&!other.data().deleted&&trolleyNameKey(other.data().payload.name)===trolleyNameKey(trolley.name));
+     if(named)throw duplicateTrolleyError(named.data().payload);
+     // The transaction re-reads the claim on contention, so two devices cannot both claim one name.
+     const claim=await tx.get(claimRow);
+     if(claim.exists()&&claim.data().trolleyId!==trolley.id){const holder=await tx.get(doc(trolleys,claim.data().trolleyId));if(holder.exists()&&!holder.data().deleted&&await trolleyClaimKey(holder.data().payload.name)===key)throw duplicateTrolleyError(holder.data().payload);}
+     if(before){const oldKey=await trolleyClaimKey(before.payload.name);if(oldKey!==key){const old=await tx.get(doc(trolleyNames,oldKey));if(old.exists()&&old.data().trolleyId===trolley.id)oldClaimRow=old.ref;}}
+    }
     const payload={...trolley,...(trolley.status==='ready'?{readyBy:member.code}:{}),collectedBy:trolley.status==='collected'?(historicalImport?trolley.collectedBy:member.code):''};
     const after={payload,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
     tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:payload.status==='collected'?'collect':before?'update':'create',at:serverTimestamp()});
+    if(renamed)tx.set(claimRow,{trolleyId:trolley.id});
+    if(oldClaimRow)tx.delete(oldClaimRow);
    });
    trolleyVersions.set(trolley.id,expectedVersion+1);
   },

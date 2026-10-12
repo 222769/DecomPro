@@ -1,4 +1,5 @@
 import {normalizeSerial} from './recognition.js';
+import {trolleyNameKey} from './trolleys.js';
 
 export function sameRecord(a,b) {
  const stable=value=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().filter(key=>value[key]!==undefined).map(key=>[key,stable(value[key])])):value;
@@ -21,6 +22,7 @@ export function localImportPlan(local,remote) {
   else if(counts.get(serial)>1){status='blocked';reason='This serial is repeated in the local register';}
   else if(serials.has(serial)){status='blocked';reason='This serial is already in the shared register';}
   else if(sharedTrolley&&(sharedTrolley.status!=='open'||sharedTrolley.name!==item.trolley)){status='blocked';reason='The shared trolley is locked or has a different name';}
+  else if(!sharedTrolley&&remote.trolleys.some(t=>trolleyNameKey(t.name)===trolleyNameKey(trolley.name))){status='blocked';reason='A different shared trolley already uses this name. Rename the local trolley or move the item to the shared reference before importing';}
   return {item,trolley,status,reason};
  });
 }
