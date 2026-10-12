@@ -1,3 +1,4 @@
+import {retentionSettings} from './batch-retention.js';
 import {validateUnlockHistory} from './trolley-unlock.js';
 import {validateReadinessNotes} from './readiness.js';
 import {validateEvidence} from './recognition-evidence.js';
@@ -99,6 +100,7 @@ export function validateWorkspace(value) {
     }
     for (const key of Object.keys(defaultSettings)) if (input[key] !== undefined) settings[key] = input[key];
   }
+  settings.keepFields=retentionSettings(value.settings||{});
   if (value.referenceExamples !== undefined && !Array.isArray(value.referenceExamples)) throw Error('Invalid recognition catalogue.');
   const referenceExamples = cleanExamples(value.referenceExamples || []);
   const referenceCorrections=validateCorrections(value.referenceCorrections===undefined?[]:value.referenceCorrections);

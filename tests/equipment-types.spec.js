@@ -3,17 +3,17 @@ import {createTrolley} from '../src/trolleys.js';
 async function scan(page,value){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
 async function seed(page,facts){await page.goto('/');await page.locator('#voice').click();await page.evaluate(({facts,trolley})=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.referenceExamples=facts;state.defaults={date:'2026-10-12',description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:trolley.name};state.trolleys=[trolley];state.activeTrolleyId=trolley.id;state.settings.keepBatchDefaults=true;localStorage.setItem('decompro.v1',JSON.stringify(state));},{facts,trolley:createTrolley('Trolley 01')});await page.reload();}
 const refs=[{serial:'QA-LAPTOP-001',model:'G15',manufacturer:'Lenovo',description:'Laptop',source:'Excel'},{serial:'QA-SCREEN-001',model:'QA Display',manufacturer:'Other maker',description:'Monitor',source:'Excel'}];
-test('recognition sets this item description, saves it, and restores batch type for the next scan',async({page})=>{
+test('recognition sets this item description, saves it, and keeps the checked description for the next scan',async({page})=>{
  await seed(page,refs);await scan(page,refs[0].serial);await expect(page.locator('#default-description')).toHaveValue('Laptop');await page.reload();await expect(page.locator('#default-description')).toHaveValue('Laptop');
  await page.getByRole('button',{name:'Apply batch defaults',exact:true}).click();for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A',exact:true}).click();await page.locator('#save').click();
  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(1);
- const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.items[0].description).toBe('Laptop');expect(state.defaults.description).toBe('Monitor');await expect(page.locator('#default-description')).toHaveValue('Monitor');
+ const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.items[0].description).toBe('Laptop');expect(state.defaults.description).toBe('Laptop');await expect(page.locator('#default-description')).toHaveValue('Laptop');
  await scan(page,refs[1].serial);await expect(page.locator('#default-description')).toHaveValue('Monitor');
 });
 test('physical-label correction stays editable through reload and saves without changing the batch default',async({page})=>{
  await seed(page,refs);await scan(page,refs[0].serial);await page.locator('#default-description').fill('Laptop with dock');await page.reload();await expect(page.locator('#default-description')).toHaveValue('Laptop with dock');
  await page.locator('[data-step="1"]').click();await scan(page,'ThinkPad T450');await expect(page.locator('#default-description')).toHaveValue('Laptop with dock');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A',exact:true}).click();await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items[0]?.description)).toBe('Laptop with dock');
- await scan(page,'QA-UNKNOWN-123');await expect(page.locator('#default-description')).toHaveValue('Monitor');
+ await scan(page,'QA-UNKNOWN-123');await expect(page.locator('#default-description')).toHaveValue('Laptop with dock');
 });
 test('changing a recognised model recalculates the category instead of keeping the old suggestion',async({page})=>{
  await seed(page,refs);await scan(page,refs[0].serial);await page.locator('[data-step="1"]').click();await scan(page,'ThinkCentre M700');await expect(page.locator('#default-description')).toHaveValue('Desktop');

@@ -332,5 +332,8 @@ footer .app-version{display:block;margin-top:6px;font-size:11px;color:var(--mute
 #settings-dialog .app-version{font-size:12px;color:var(--muted)}
 #app-build-info p{line-height:1.9;overflow-wrap:anywhere}
 .workspace-lock .app-version{font-size:11px;margin-top:20px}
-.defaults .retain-defaults{display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.5;padding:12px;border:1px solid var(--border);border-radius:10px}
-.defaults .retain-defaults input{width:18px;height:18px;flex:0 0 18px;margin:0;padding:0}
+#batch-config-dialog{width:min(480px,calc(100vw - 32px));max-height:85vh;overflow:auto}
+#batch-config-dialog .retention-option{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid var(--border);border-radius:12px;font-size:13px}
+.retention-option span{display:grid;gap:5px}.retention-option small{font-weight:400;color:var(--muted)}
+#batch-config-dialog input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;accent-color:var(--blue)}
+#batch-config-error{color:#a74444}

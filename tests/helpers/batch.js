@@ -5,5 +5,5 @@ export async function ensureTrolley(page){
 }
 export async function configureBatch(page){
  for(const [key,value] of Object.entries({date:'2026-10-12',description:'Monitor',manufacturer:'Dell',source:'Storage',reason:'EOL'}))await page.locator(`#default-${key}`).fill(value);
- await page.locator('#keep-batch-defaults').check();await ensureTrolley(page);
+ await page.locator('#batch-config').click();for(const key of ['date','description','manufacturer','source','reason'])await page.locator(`#keep-${key}`).check();await page.getByRole('button',{name:'Save configuration',exact:true}).click();await ensureTrolley(page);
 }
