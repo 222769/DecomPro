@@ -298,3 +298,9 @@ html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-colo
 
 .trolley-list button{flex-wrap:wrap;gap:6px}.trolley-list span{overflow-wrap:anywhere}#save-feedback .secondary{display:block;margin-top:12px}
 .rescan-toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:#e4efff}.rescan-toggle input{width:18px;height:18px;margin:0;accent-color:var(--blue)}.rescan-target{padding:14px;margin:18px 0;border:1px solid #718caf;border-radius:12px}.rescan-target strong,.rescan-target span{display:block;overflow-wrap:anywhere}.rescan-target span{font-size:11px;color:#c6d6f0;margin-top:6px}#rescan-form input{background:#fff;color:#17253a;margin:8px 0 12px}#rescan-message{overflow-wrap:anywhere;color:#dce7ff}
+
+#inventory .register-sort{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;letter-spacing:inherit;padding:6px 0;cursor:pointer;text-align:left;white-space:nowrap}
+#inventory .register-sort span{display:inline;font-size:13px;opacity:.65;margin:0;color:inherit}
+#inventory th[aria-sort="ascending"] .register-sort span,#inventory th[aria-sort="descending"] .register-sort span{opacity:1}
+#inventory .register-sort:hover{color:var(--blue)}
+#inventory .register-sort:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
