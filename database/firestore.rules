@@ -19,8 +19,14 @@ service cloud.firestore {
      && (p.handover.trolleyIds.size()<3 || handoverPeer(team,p,2)) && (p.handover.trolleyIds.size()<4 || handoverPeer(team,p,3))
      && (p.handover.trolleyIds.size()<5 || handoverPeer(team,p,4)) && (p.handover.trolleyIds.size()<6 || handoverPeer(team,p,5))));
   }
-  function openTrolley(team,p) { return ('trolleyId' in p) && (p.trolleyId is string && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open' && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.name==p.trolley); }
-  function existingOpenTrolley(team,p) { return getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open'; }
+  function openTrolley(team,p) {
+   let trolley=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
+   return ('trolleyId' in p) && p.trolleyId is string && !trolley.get('deleted',false) && trolley.payload.status=='open' && trolley.payload.name==p.trolley;
+  }
+  function existingOpenTrolley(team,p) {
+   let trolley=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
+   return !trolley.get('deleted',false) && trolley.payload.status=='open';
+  }
   function inventoryTouch(team,p) {
    let before=get(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
    let after=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
@@ -96,8 +102,9 @@ service cloud.firestore {
    match /trolleys/{id} {
     function valid(d) {
      let p=d.payload;
-     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId'])
+     return d.keys().hasOnly(['payload','version','createdBy','updatedBy','createdAt','updatedAt','revisionId','deleted'])
       && p.keys().hasOnly(['id','reference','name','department','status','createdAt','collectedAt','collectedBy','company','readyAt','readyBy','handover'])
+      && d.get('deleted',false) is bool
       && handoverValid(team,p)
       && p.id==id && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
       && p.reference=='TSU-'+id.upper().replace('-','')
@@ -116,9 +123,12 @@ service cloud.firestore {
      return r.actor==request.auth.uid && r.after==d && r.at==request.time;
     }
     allow read: if member(team);
-    allow create: if member(team) && valid(request.resource.data) && request.resource.data.payload.status=='open' && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
+    allow create: if member(team) && !request.resource.data.get('deleted',false) && valid(request.resource.data) && request.resource.data.payload.status=='open' && request.resource.data.version==1 && request.resource.data.createdBy==request.auth.uid && request.resource.data.createdAt==request.time && audit(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==null;
-    allow update: if member(team) && resource.data.payload.status in ['open','ready'] && valid(request.resource.data)
+    allow update: if member(team) && !resource.data.get('deleted',false)
+     && (!request.resource.data.get('deleted',false) || (admin(team) && resource.data.payload.status=='open' && request.resource.data.payload==resource.data.payload
+      && (!exists(/databases/$(database)/documents/teams/$(team)/collectionTrolleys/$(id)) || getAfter(/databases/$(database)/documents/teams/$(team)/collectionTrolleys/$(id)).data.sessionId=='')))
+     && resource.data.payload.status in ['open','ready'] && valid(request.resource.data)
      && (request.resource.data.payload.status=='ready' ? request.resource.data.payload.readyBy==membership(team).code : true)
      && (request.resource.data.payload.status=='collected' ? resource.data.payload.status=='ready' || admin(team) : true)
      && (resource.data.payload.status=='ready' ?
@@ -130,7 +140,7 @@ service cloud.firestore {
     allow delete: if false;
     match /revisions/{revision} {
      allow read: if member(team);
-     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','update','collect']
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','update','collect','remove']
       && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)).data && request.resource.data.after.revisionId==revision;
      allow update, delete: if false;
     }
@@ -204,6 +214,7 @@ service cloud.firestore {
      return d.keys().hasOnly(['trolleyId','sessionId','changedInSession','version','updatedBy','updatedAt']) && d.trolleyId==id
       && id.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
       && exists(/databases/$(database)/documents/teams/$(team)/trolleys/$(id))
+      && (d.sessionId=='' || !getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)).data.get('deleted',false))
       && d.sessionId is string && (d.sessionId=='' || d.sessionId==d.changedInSession)
       && (!owner.get('deleted',false) || d.sessionId=='')
       && owner.updatedBy==request.auth.uid && owner.updatedAt==request.time

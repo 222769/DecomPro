@@ -326,3 +326,39 @@ test('renaming an open trolley preserves its reference and allows old-name recor
  assert.equal((await owner.load()).trolleys[0].reference,initialTrolley.reference);
  const audits=await getDocs(collection(context('tech'),'teams/college-it/equipment/equipment-1/revisions'));assert.equal(audits.size,3);
 });
+
+test('empty trolley deletion is administrator-only, audited, hidden and cannot be restored or reused',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ await owner.load();await assert.rejects(tech.deleteTrolley(initialTrolley.id,1),/administrator/);
+ await owner.deleteTrolley(initialTrolley.id,1);assert.equal((await owner.load()).trolleys.length,0);
+ const row=doc(context('admin'),`teams/college-it/trolleys/${initialTrolley.id}`),deleted=(await getDoc(row)).data();assert.equal(deleted.deleted,true);assert.equal(deleted.payload.reference,initialTrolley.reference);
+ const revisions=await getDocs(collection(row,'revisions'));assert.equal(revisions.docs.find(r=>r.id===deleted.revisionId).data().action,'remove');
+ await assertFails(deleteDoc(row));await assert.rejects(owner.writeTrolley(initialTrolley,2),/deleted/);await assert.rejects(tech.write(sample(),0),/unavailable/);
+ const replacement=await owner.allocateTrolley(initialTrolley.name,initialTrolley.department);assert.notEqual(replacement.id,initialTrolley.id);await owner.writeTrolley(replacement,0);assert.equal((await owner.load()).trolleys.length,1);
+ const after={...deleted,deleted:false,version:deleted.version+1,updatedAt:serverTimestamp(),revisionId:'forged-restore'},batch=writeBatch(row.firestore);batch.set(row,after);batch.set(doc(row,'revisions','forged-restore'),{actor:'admin',before:deleted,after,action:'update',at:serverTimestamp()});await assertFails(batch.commit());
+});
+test('trolley deletion rejects nonempty, assigned, stale and ready trolleys',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin);await owner.load();
+ await owner.write(sample(),0);await assert.rejects(owner.deleteTrolley(initialTrolley.id,2),/contains equipment/);await owner.write(sample(),1,{deleted:true});
+ const group={id:createTrolley('group').id,name:'Active group',createdAt:new Date().toISOString()};await owner.writeSession(group,[initialTrolley.id],0);await assert.rejects(owner.deleteTrolley(initialTrolley.id,3),/Detach/);await owner.writeSession(group,[],1);
+ await assert.rejects(owner.deleteTrolley(initialTrolley.id,1),/changed/);
+ await owner.writeTrolley({...initialTrolley,department:'Changed department'},3);await assert.rejects(owner.deleteTrolley(initialTrolley.id,3),/changed/);
+ await owner.write(sample('ready-item','READY-SERIAL'),0);
+ await owner.writeTrolley({...initialTrolley,status:'ready',readyAt:new Date().toISOString(),readyBy:'TA'},5);await assert.rejects(owner.deleteTrolley(initialTrolley.id,6),/Only open/);
+ const ready=(await owner.load()).trolleys.find(t=>t.id===initialTrolley.id);await owner.writeTrolley({...ready,status:'collected',collectedAt:new Date().toISOString(),collectedBy:'TA',company:'Collector'},6);await assert.rejects(owner.deleteTrolley(initialTrolley.id,7),/Only open/);
+});
+test('deletion races cannot accept new equipment or collection assignments on a deleted trolley',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);await owner.load();
+ const results=await Promise.allSettled([owner.deleteTrolley(initialTrolley.id,1),tech.write(sample(),0)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const snapshot=await owner.load();if(snapshot.trolleys.length)assert.equal(snapshot.items.length,1);else assert.equal(snapshot.items.length,0);
+ const fresh=createTrolley('Assignment race');await owner.writeTrolley(fresh,0);const group={id:createTrolley('group').id,name:'Race group',createdAt:new Date().toISOString()};
+ const raced=await Promise.allSettled([owner.deleteTrolley(fresh.id,1),tech.writeSession(group,[fresh.id],0)]);assert.equal(raced.filter(r=>r.status==='fulfilled').length,1);
+ const records=await owner.load(),groups=await owner.loadCollections();if(!records.trolleys.some(t=>t.id===fresh.id))assert.equal(groups.collectionTrolleys.some(t=>t.trolleyId===fresh.id),false);
+});
+
+test('allocating names never skips an existing normalised name to create a duplicate reference',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),fresh=await owner.allocateTrolley('Allocation cage','Helpdesk');await owner.writeTrolley(fresh,0);
+ await assert.rejects(owner.allocateTrolley(' ALLOCATION   CAGE ','Helpdesk'),/already uses/);
+ await owner.deleteTrolley(fresh.id,1);const replacement=await owner.allocateTrolley('Allocation cage','Helpdesk');await owner.writeTrolley(replacement,0);
+ assert.notEqual(replacement.id,fresh.id);await assert.rejects(owner.allocateTrolley('allocation cage','Helpdesk'),/already uses/);
+});

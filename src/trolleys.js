@@ -31,9 +31,9 @@ export function findTrolley(value,trolleys) {
 }
 
 export const trolleyNameKey=name=>name.trim().replace(/\s+/g,' ').toLowerCase();
-export async function createSharedTrolley(name,department=defaultDepartment,workspace='college-it') {
+export async function createSharedTrolley(name,department=defaultDepartment,workspace='college-it',generation=0) {
  // A shared name resolves to one ID across devices, without changing existing trolley references.
- const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`decompro.trolley/${workspace}/${trolleyNameKey(name)}`)));
+ const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`decompro.trolley/${workspace}/${trolleyNameKey(name)}${generation?`/generation/${generation}`:''}`)));
  const bytes=digest.slice(0,16);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
  const hex=[...bytes].map(b=>b.toString(16).padStart(2,'0')).join(''),id=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
  return {...createTrolley(name,department),id,reference:`TSU-${id.replaceAll('-','').toUpperCase()}`};
@@ -61,4 +61,19 @@ export function restoreLocalTrolleys(workspace) {
   else if(!trolleys.length&&!items.length&&defaults.trolley&&!workspace.collectionWorkspace){const trolley=createTrolley(defaults.trolley);trolleys.push(trolley);activeTrolleyId=trolley.id;defaults.trolley=trolley.name;}
  }
  return {...workspace,trolleys,items,defaults,activeTrolleyId};
+}
+
+export function reconcileTrolleySelection(workspace,trolleys) {
+ const ids=new Set(trolleys.map(t=>t.id)),collectionScans=structuredClone(workspace.collectionScans||{});
+ for(const scan of Object.values(collectionScans))if(scan.activeTrolleyId&&!ids.has(scan.activeTrolleyId)){scan.activeTrolleyId='';scan.defaults.trolley='';}
+ const removed=workspace.activeTrolleyId&&!ids.has(workspace.activeTrolleyId);
+ return {...workspace,trolleys,collectionScans,collectionTrolleys:(workspace.collectionTrolleys||[]).filter(row=>ids.has(row.trolleyId)),...(removed?{activeTrolleyId:'',defaults:{...workspace.defaults,trolley:''}}:{})};
+}
+export function removeTrolley(workspace,id) {
+ const trolley=workspace.trolleys.find(t=>t.id===id);
+ if(!trolley)throw Error('This trolley is no longer available.');
+ if(trolley.status!=='open')throw Error('Only open trolleys can be deleted. Reopen a ready trolley first; collected history is retained.');
+ if(workspace.items.some(item=>trolleyForItem(item,trolley)))throw Error('This trolley contains equipment. Move its items to another trolley before deleting it.');
+ if(workspace.collectionTrolleys?.some(row=>row.trolleyId===id&&row.sessionId))throw Error('Detach this trolley through Manage collection trolleys before deleting it.');
+ return reconcileTrolleySelection(workspace,workspace.trolleys.filter(t=>t.id!==id));
 }

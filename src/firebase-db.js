@@ -5,7 +5,7 @@ import {getFunctions,httpsCallable} from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
 import { createId } from './ids.js';
-import {validateTrolleys} from './trolleys.js';
+import {validateTrolleys,createSharedTrolley,removeTrolley,trolleyNameKey} from './trolleys.js';
 import {validateCorrections,correctionKey} from './reference-library.js';
 import {validateHandoverLink} from './handover-data.js';
 import {validateCollections,validateAssignments,assignCollection} from './collection-sessions.js';
@@ -48,7 +48,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const trolleyVersions=new Map(),correctionVersions=new Map();
  const sessionVersions=new Map(),sessions=collection(root,'collectionSessions'),sessionTrolleys=collection(root,'collectionTrolleys');
  const decodeCorrections=snapshot=>validateCorrections(snapshot.docs.map(row=>{correctionVersions.set(row.data().payload.serial,row.data().version);return row.data().payload;}));
- const decodeTrolleys=snapshot=>validateTrolleys(snapshot.docs.map(row=>{trolleyVersions.set(row.id,row.data().version);return row.data().payload;}));
+ const decodeTrolleys=snapshot=>validateTrolleys(snapshot.docs.filter(row=>row.data().deleted!==true).map(row=>{trolleyVersions.set(row.id,row.data().version);return row.data().payload;}));
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
@@ -82,6 +82,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     if(before?.deleted)throw Error('This collection has been deleted. Refresh collections.');
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this collection. Reopen it and review the latest trolley assignments.');
     const links=[];for(const id of ids)links.push(await tx.get(doc(sessionTrolleys,id)));
+    for(const id of trolleyIds){const cage=await tx.get(doc(trolleys,id));if(!cage.exists()||cage.data().deleted)throw Error('A selected trolley was deleted. Refresh the trolley assignments.');}
     for(const link of links)if(link.exists()&&link.data().sessionId&&link.data().sessionId!==session.id)throw Error('A trolley was assigned to another collection. Review the latest assignments.');
     const after={payload:session,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
     tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,trolleyIds,at:serverTimestamp()});
@@ -165,11 +166,35 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   },
   async readinessSnapshot(id) {
    const row=doc(trolleys,id),before=await getDocFromServer(row);
-   if(!before.exists())throw Error('This trolley is no longer available.');
+   if(!before.exists()||before.data().deleted)throw Error('This trolley is no longer available.');
    const snapshot=await getDocsFromServer(query(equipment,where('deleted','==',false))),after=await getDocFromServer(row);
    if(!after.exists()||after.data().version!==before.data().version)throw Error('The trolley inventory changed. Reopen the readiness checks and review the latest records.');
    trolleyVersions.set(id,after.data().version);
    return {trolley:validateTrolleys([after.data().payload])[0],items:decode(snapshot),version:after.data().version};
+  },
+  async allocateTrolley(name,department) {
+   for(let generation=0;generation<100;generation++) {
+    const candidate=await createSharedTrolley(name,department,`${db.app.options.projectId}/${teamId}`,generation),row=await getDocFromServer(doc(trolleys,candidate.id));
+    if(!row.exists())return candidate;
+    if(!row.data().deleted&&trolleyNameKey(row.data().payload.name)===trolleyNameKey(name))throw Error('A trolley already uses this name. Refresh trolley management.');
+   }
+   throw Error('Could not allocate a new trolley reference. Choose another name.');
+  },
+  async deleteTrolley(id,expectedVersion) {
+   if(member.role!=='admin')throw Error('Only a team administrator can delete a trolley.');
+   const [records,groups]=await Promise.all([client.load(),client.loadCollections()]);
+   removeTrolley({...records,...groups},id);
+   const row=doc(trolleys,id),revisionId=createId();
+   await runTransaction(db,async tx=>{
+    const snapshot=await tx.get(row),assignment=await tx.get(doc(sessionTrolleys,id)),before=snapshot.exists()?snapshot.data():null;
+    if(!before||before.deleted)throw Error('This trolley is no longer available.');
+    if(before.version!==expectedVersion)throw Error('This trolley or its inventory changed. Reopen deletion and review it again.');
+    if(before.payload.status!=='open')throw Error('Reopen a ready trolley before deletion. Collected history cannot be deleted.');
+    if(assignment.exists()&&assignment.data().sessionId)throw Error('Detach this trolley from its collection before deleting it.');
+    const after={...before,deleted:true,version:expectedVersion+1,updatedBy:uid,updatedAt:serverTimestamp(),revisionId};
+    tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:'remove',at:serverTimestamp()});
+   });
+   trolleyVersions.delete(id);
   },
   async writeTrolley(trolley,expectedVersion=0,{historicalImport=false}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical collection details.');
@@ -194,6 +219,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
    await runTransaction(db,async tx=>{
     const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this trolley. Reopen trolley management and review the latest details.');
+    if(before?.deleted)throw Error('This trolley was deleted. Create a new trolley reference.');
     if(before?.payload.status==='collected')throw Error('This trolley has already been collected. Its history is locked.');
     const payload={...trolley,...(trolley.status==='ready'?{readyBy:member.code}:{}),collectedBy:trolley.status==='collected'?(historicalImport?trolley.collectedBy:member.code):''};
     const after={payload,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
@@ -223,7 +249,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     const touched=[];
     for(const trolleyId of new Set([item.trolleyId,before?.payload.trolleyId].filter(Boolean))) {
      const trolley=await tx.get(doc(trolleys,trolleyId));
-     if(!trolley.exists()||trolley.data().payload.status!=='open')throw Error('This trolley is unavailable, ready or collected. Reopen a ready trolley before changing its equipment.');
+     if(!trolley.exists()||trolley.data().deleted||trolley.data().payload.status!=='open')throw Error('This trolley is unavailable, ready or collected. Reopen a ready trolley before changing its equipment.');
      if(trolleyId===item.trolleyId)item={...item,trolley:trolley.data().payload.name};
      touched.push(trolley);
     }
