@@ -23,3 +23,15 @@ test('historical rescan speaks matches, multiple choices and the selected model'
  const other=[...row];other[2]='Other model';await page.locator('#rescan-serial').fill('');await load(page,[row,other]);await lookup(page,'A0001');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toBe('Multiple records found. Please select the correct spreadsheet record.');
  const chosen=await page.locator('#historical-row-choice option').last().getAttribute('value');await page.locator('#historical-row-choice').selectOption(chosen);await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Example maker Other model');
 });
+
+test('Enter searches then confirms historical details and continues with the next scan',async({page})=>{
+ await setup(page);const before=await state(page);const second=[...row];second[5]='HISTORICAL-002';second[6]='0000456';second[7]='OTHER-ETCH';second[8]='A0002';await load(page,[row,second]);
+ await page.locator('#rescan-serial').fill('OLD-ETCH');await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#historical-model')).toHaveValue('Historical model');expect((await state(page)).items).toHaveLength(0);
+ await page.locator('#rescan-serial').dispatchEvent('keydown',{key:'Enter',repeat:true});expect((await state(page)).items).toHaveLength(0);
+ await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#rescan-message')).toContainText('Item added');expect((await state(page)).items).toHaveLength(1);await expect(page.locator('#rescan-serial')).toHaveValue('');await expect(page.locator('#rescan-serial')).toBeFocused();
+ await page.keyboard.insertText('A0002');await page.keyboard.press('Enter');await expect(page.locator('#historical-serial')).toHaveValue('HISTORICAL-002');await page.locator('#historical-model').fill('Reviewed model');await page.locator('#historical-model').press('Enter');await expect(page.locator('#rescan-message')).toContainText('Item added');const after=await state(page);expect(after.items).toHaveLength(2);expect(after.items[1].model).toBe('Reviewed model');expect(after.draft).toEqual(before.draft);
+});
+test('Enter cannot add an ambiguous historical match until the reviewer selects a record',async({page})=>{
+ await setup(page);const other=[...row];other[5]='HISTORICAL-OTHER';await load(page,[row,other]);await page.locator('#rescan-serial').fill('OLD-ETCH');await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#historical-row-choice')).toBeVisible();await page.locator('#rescan-serial').press('Enter');expect((await state(page)).items).toHaveLength(0);
+ const chosen=await page.locator('#historical-row-choice option').last().getAttribute('value');await page.locator('#historical-row-choice').selectOption(chosen);await expect(page.locator('#rescan-serial')).toBeFocused();await page.keyboard.press('Enter');await expect(page.locator('#rescan-message')).toContainText('Item added');expect((await state(page)).items[0].serial).toBe('HISTORICAL-OTHER');
+});

@@ -101,3 +101,9 @@ test('rescan speaks saved details after scanner Enter, repeats them and respects
 test('rescan speaks unsuccessful lookup instead of silently stopping',async({page})=>{
  await mockSpeech(page);await seed(page);await page.locator('#voice').click();await lookup(page,'NO-SUCH-ITEM');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Rescan stopped');
 });
+
+test('Enter reviews then moves the existing record without adding a duplicate and accepts the next scan',async({page})=>{
+ const {target}=await seed(page);await page.locator('#rescan-mode').check();await page.locator('#rescan-serial').fill('A0042');await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#confirm-rescan')).toBeVisible();expect((await stored(page)).trolleyMoves||[]).toHaveLength(0);
+ await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#rescan-message')).toContainText('Existing item moved');const after=await stored(page);expect(after.items).toHaveLength(1);expect(after.items[0].trolleyId).toBe(target.id);await expect(page.locator('#rescan-serial')).toHaveValue('');await expect(page.locator('#rescan-serial')).toBeFocused();
+ await page.keyboard.insertText('UNKNOWN');await page.keyboard.press('Enter');await expect(page.locator('#rescan-message')).toContainText('Rescan stopped');await page.keyboard.press('Enter');expect((await stored(page)).items).toHaveLength(1);
+});
