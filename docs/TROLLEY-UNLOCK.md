@@ -13,3 +13,9 @@ Previous collection metadata, actor and reason are retained in immutable Firebas
 After the GitHub Pages deployment, sign in as administrator and open Database → Copy latest Firestore rules. In Firebase project decompro-236e9 → Cloud Firestore → Rules, replace the editor contents and Publish. Existing permissions remain; only administrators gain the explicit audited collected-to-open transition. Unauthorised unlocks, unrelated payload changes and partial linked-group unlocks are rejected.
 
 Validation covers local cancellation and storage failures, preserved references/inventory/drafts, removal after reload, shared permission errors and retry, administrator/technician access, immutable reason history, stale versions and six-trolley atomic unlocking within Firestore access limits.
+
+## Change status from one control
+
+Every trolley card now has Change status, showing the current status with a selector for Open, Ready for collection and Collected. Open → Ready opens the readiness checks and requires physical confirmation. Ready → Collected opens the company/pickup confirmation. Ready → Open reopens for editing. Collected → Open uses the administrator unlock and reason flow, including linked-group handling. Collected → Ready requires unlocking to Open and checking readiness again. Open → Collected requires readiness first. Cancelling a choice does not update records.
+
+The control uses the existing status APIs, checks versions when reopening a shared trolley and leaves item identity and scan progress unchanged. It introduces no additional Firestore rule changes beyond the unlock rules above.

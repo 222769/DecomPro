@@ -611,7 +611,7 @@ async function openTrolleyUnlock(id){
 function openTrolleyManager() {
  readinessSession++;
  const dialog=document.querySelector('#trolley-manager');
- dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><button class="primary" id="prepare-handover">Prepare handover pack</button><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':t.status==='ready'?'Ready for collection':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Rename / edit trolley</button>${!sharedLocked||sharedClient?.role==='admin'?`<button class="text-button remove" data-delete-trolley="${escape(t.id)}">Delete trolley</button>`:''}<button class="primary" data-readiness="${escape(t.id)}">Readiness checks</button>`:t.status==='ready'?`<button class="secondary" data-readiness="${escape(t.id)}">Review checks</button><button class="text-button" data-reopen="${escape(t.id)}">Reopen trolley</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:(!sharedLocked||sharedClient?.role==='admin')?`<button class="secondary" data-unlock-trolley="${escape(t.id)}">Unlock trolley</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
+ dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><button class="primary" id="prepare-handover">Prepare handover pack</button><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':t.status==='ready'?'Ready for collection':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button><button class="secondary" data-status="${escape(t.id)}">Change status</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Rename / edit trolley</button>${!sharedLocked||sharedClient?.role==='admin'?`<button class="text-button remove" data-delete-trolley="${escape(t.id)}">Delete trolley</button>`:''}<button class="primary" data-readiness="${escape(t.id)}">Readiness checks</button>`:t.status==='ready'?`<button class="secondary" data-readiness="${escape(t.id)}">Review checks</button><button class="text-button" data-reopen="${escape(t.id)}">Reopen trolley</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:(!sharedLocked||sharedClient?.role==='admin')?`<button class="secondary" data-unlock-trolley="${escape(t.id)}">Unlock trolley</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
  dialog.showModal();
  document.querySelector('#prepare-handover').onclick=()=>{dialog.close();openHandoverPack();};
  document.querySelector('#close-trolley-manager').onclick=()=>dialog.close();
@@ -626,6 +626,7 @@ function openTrolleyManager() {
    const trolley=client?(client.allocateTrolley?await client.allocateTrolley(name,department):await createSharedTrolley(name,department,`${client.projectId||'decompro-236e9'}/${client.teamId||'college-it'}`)):createTrolley(name,department);if(client)await client.writeTrolley(trolley,0);commitTrolleyWorkspace({...state,trolleys:[...state.trolleys.filter(t=>t.id!==trolley.id),trolley]});dialog.close();openTrolleyManager();}
   catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
+ dialog.querySelectorAll('[data-status]').forEach(button=>button.onclick=()=>openTrolleyStatus(button.dataset.status));
  dialog.querySelectorAll('[data-unlock-trolley]').forEach(button=>button.onclick=()=>openTrolleyUnlock(button.dataset.unlockTrolley));
  dialog.querySelectorAll('[data-delete-trolley]').forEach(button=>button.onclick=()=>openTrolleyDeletion(button.dataset.deleteTrolley));
  dialog.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>viewTrolley(button.dataset.view));
@@ -651,16 +652,43 @@ function openTrolleyManager() {
  dialog.querySelectorAll('[data-reopen]').forEach(button=>button.onclick=async()=>{
   if(!writable())return;button.disabled=true;
   const client=sharedClient,trolley=state.trolleys.find(t=>t.id===button.dataset.reopen),version=client?.trolleyVersionFor(trolley.id)||0;
-  try{
-   if(trolley.status!=='ready')throw Error('Only ready trolleys can be reopened.');
-   const updated={...trolley,status:'open',readyAt:'',readyBy:''};
-   if(client)await client.writeTrolley(updated,version);
-   if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the trolley status.');
-   commitTrolleyWorkspace({...state,trolleys:state.trolleys.map(t=>t.id===updated.id?updated:t)});dialog.close();openTrolleyManager();
-   document.querySelector('#trolley-manager-error').textContent='Trolley reopened. Run readiness checks again after making changes.';
-  }catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+  try{await reopenReadyTrolley(trolley,version,client);dialog.close();openTrolleyManager();document.querySelector('#trolley-manager-error').textContent='Trolley reopened. Run readiness checks again after making changes.';}
+  catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  });
  dialog.querySelectorAll('[data-collect],[data-details]').forEach(button=>button.onclick=()=>openTrolleyDetails(button.dataset.collect||button.dataset.details,Boolean(button.dataset.collect)));
+}
+async function reopenReadyTrolley(trolley,version,client){
+ if(client!==sharedClient||(sharedLocked&&(!client||navigator.onLine===false))||localTabBlocked)throw Error('Reconnect before changing trolley status.');
+ if(!trolley||trolley.status!=='ready')throw Error('Only ready trolleys can be reopened.');
+ if(!client&&!sameRecord(state.trolleys.find(t=>t.id===trolley.id),trolley))throw Error('This trolley changed. Reopen trolley management.');
+ const updated={...trolley,status:'open',readyAt:'',readyBy:''};
+ if(client)await client.writeTrolley(updated,version);
+ if(client!==sharedClient)throw Error('Workspace changed. Reconnect to retrieve confirmed status.');
+ commitTrolleyWorkspace({...state,trolleys:state.trolleys.map(t=>t.id===updated.id?updated:t)});
+}
+function openTrolleyStatus(id){
+ const trolley=state.trolleys.find(t=>t.id===id),client=sharedClient,version=client?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');if(!trolley||!writable())return;
+ const canUnlock=!sharedLocked||client?.role==='admin';let busy=false;
+ dialog.innerHTML=`<form id="trolley-status-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>Change trolley status</h2><p>${escape(trolley.name)}</p><label for="trolley-status-select">Trolley status</label><select id="trolley-status-select"><option value="open" ${trolley.status==='open'?'selected':''} ${trolley.status==='collected'&&!canUnlock?'disabled':''}>Open — editable</option><option value="ready" ${trolley.status==='ready'?'selected':''} ${trolley.status==='collected'?'disabled':''}>Ready for collection</option><option value="collected" ${trolley.status==='collected'?'selected':''} ${trolley.status==='open'?'disabled':''}>Collected</option></select><p id="trolley-status-help" role="status"></p><p id="trolley-status-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley-status">Cancel</button><button class="primary" id="apply-trolley-status" disabled>Continue</button></div></form>`;
+ const select=dialog.querySelector('select'),button=dialog.querySelector('#apply-trolley-status'),cancel=dialog.querySelector('#cancel-trolley-status'),help=dialog.querySelector('#trolley-status-help'),output=dialog.querySelector('#trolley-status-error');
+ select.onchange=()=>{
+  output.textContent='';button.disabled=select.value===trolley.status;
+  help.textContent=select.value===trolley.status?trolley.status==='collected'&&!canUnlock?'A team administrator must unlock collected trolleys.':'Choose a different status.':select.value==='ready'?'Continue to readiness checks and confirm the physical inventory before marking this trolley ready.':select.value==='collected'?'Continue to record the collecting company. Collected equipment becomes locked.':trolley.status==='collected'?'Continue to administrator unlock. A reason and acknowledgement are required; linked handover trolleys unlock together.':'Reopen this trolley so its equipment can be edited, moved or removed. Readiness must be checked again afterward.';
+  button.textContent=select.value===trolley.status?'Continue':select.value==='ready'?'Review readiness':select.value==='collected'?'Record collection':trolley.status==='collected'?'Continue to unlock':'Set status to Open';
+ };
+ select.onchange();cancel.onclick=()=>{if(!busy){dialog.close();openTrolleyManager();}};dialog.oncancel=e=>{if(busy)e.preventDefault();};
+ dialog.querySelector('form').onsubmit=async e=>{
+  e.preventDefault();if(busy||select.value===trolley.status)return;
+  if(client!==sharedClient){output.textContent='Workspace changed. Reopen trolley management.';return;}
+  if(select.value==='ready'&&trolley.status==='open'){openReadiness(id);return;}
+  if(select.value==='collected'&&trolley.status==='ready'){openTrolleyDetails(id,true);return;}
+  if(select.value==='open'&&trolley.status==='collected'&&canUnlock){openTrolleyUnlock(id);return;}
+  if(select.value!=='open'||trolley.status!=='ready'){output.textContent='Choose a supported status change.';return;}
+  busy=true;button.disabled=true;cancel.disabled=true;select.disabled=true;
+  try{await reopenReadyTrolley(trolley,version,client);dialog.close();openTrolleyManager();document.querySelector('#trolley-manager-error').textContent='Status changed to Open. You can now edit or remove equipment.';}
+  catch(error){output.textContent=firebaseErrorMessage(error);}
+  finally{busy=false;if(dialog.isConnected){button.disabled=false;cancel.disabled=false;select.disabled=false;}}
+ };
 }
 function openTrolleyDeletion(id) {
  const trolley=state.trolleys.find(t=>t.id===id),client=sharedClient,version=client?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');
