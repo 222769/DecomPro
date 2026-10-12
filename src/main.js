@@ -98,6 +98,7 @@ function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return
 function prompt() { if(rescan.enabled){speak('Trolley rescan mode. Scan a saved serial number, check its details, then confirm its trolley placement.');return;}if(state.collectionPaused)return;speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
 function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
+ syncTrolleyNames();
  if(localTabBlocked){
   document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><h1>${navigator.locks?'Workspace open in another tab':'Local workspace needs a current browser'}</h1><p>${escape(localTabReason)}</p><button class="primary" id="retry-local-tab">Retry workspace</button></section></main>`;
   document.querySelector('#retry-local-tab').onclick=()=>location.reload();return;
@@ -333,18 +334,7 @@ function bind() {
   const button=e.target.closest('button');if(!button)return;
   if(button.dataset.moves)openMoveHistory(button.dataset.moves);
   if(button.dataset.edit) openEditor(button.dataset.edit);
-  if(button.dataset.delete && writable() && confirm('Remove this item from the collection register?')) {
-   const client=sharedClient;button.disabled=true;
-   try {
-    const item=state.items.find(i=>i.id===button.dataset.delete);if(!item)return;
-    if(state.trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before changing equipment.');
-    if(client)await client.write(item,client.versionFor(item.id),{deleted:true});
-    if(client!==sharedClient)throw Error('Workspace changed. Reconnect to confirm the removal.');
-    commitTrolleyWorkspace({...state,items:state.items.filter(i=>i.id!==item.id)});
-    notice='Equipment removed from the register.';render();
-   }
-   catch(error){notice=`Removal failed. ${error.message}`;render();}
-  }
+  if(button.dataset.delete)openItemRemoval(button.dataset.delete);
  };
  document.querySelector('#equipment-import').onclick=openEquipmentWorkbook;
  document.querySelector('#backup').onclick=downloadBackup;
@@ -524,6 +514,32 @@ function openTrolley() {
   catch(error){document.querySelector('#trolley-error').textContent=error.message;}
  };
 }
+function openItemRemoval(id) {
+ const original=state.items.find(item=>item.id===id);if(!original||!writable())return;
+ const client=sharedClient,version=client?.versionFor(id)||0,dialog=document.querySelector('#edit-dialog');
+ dialog.innerHTML=`<form id="remove-item-form"><h2>Remove equipment?</h2><p>Remove <strong>${escape(original.serial)}</strong> · ${escape(original.manufacturer)} · ${escape(original.model)} from ${escape(original.trolley)}?</p><p>The item will leave the register and future exports. Shared audit history is retained.</p><p id="remove-item-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-remove-item">Cancel</button><button class="primary">Remove item</button></div></form>`;
+ dialog.showModal();dialog.querySelector('#cancel-remove-item').onclick=()=>dialog.close();
+ dialog.querySelector('form').onsubmit=async event=>{
+  event.preventDefault();const button=event.target.querySelector('.primary'),cancel=dialog.querySelector('#cancel-remove-item'),output=dialog.querySelector('#remove-item-error');
+  if(button.disabled)return;button.disabled=true;cancel.disabled=true;output.textContent='Removing item…';
+  try {
+   if(client!==sharedClient||(sharedLocked&&(!client||connectionPhase!=='connected'||navigator.onLine===false)))throw Error('Reconnect to Firebase before removing equipment.');
+   let item=state.items.find(row=>row.id===id),trolleys=state.trolleys;
+   if(client){const snapshot=await client.load();if(client!==sharedClient)throw Error('Workspace changed. Reopen the register.');item=snapshot.items.find(row=>row.id===id);trolleys=snapshot.trolleys;if(client.versionFor(id)!==version)throw Error('This item changed. Cancel and refresh the register before removing it.');}
+   if(!item)throw Error('This item is no longer in the register. Refresh the register.');
+   if(!item.trolleyId){const matches=trolleys.filter(t=>t.name===item.trolley);if(matches.length!==1)throw Error('Choose the permanent trolley reference for this legacy item before removing it.');item={...item,trolleyId:matches[0].id,trolley:matches[0].name};}
+   if(trolleys.some(t=>t.status!=='open'&&trolleyForItem(item,t)))throw Error('Ready or collected trolley contents are locked. Reopen a ready trolley before removing equipment.');
+   if(client)await client.write(item,version,{deleted:true});
+   if(client!==sharedClient)throw Error('Workspace changed. Reconnect to confirm the removal.');
+   commitTrolleyWorkspace({...state,items:state.items.filter(row=>row.id!==id)});selectedEquipment.delete(id);dialog.close();notice='Equipment removed from the register.';render();
+  }catch(error){output.textContent=`Removal failed. ${firebaseErrorMessage(error)}`;button.disabled=false;cancel.disabled=false;}
+ };
+}
+function syncTrolleyNames() {
+ const names=new Map(state.trolleys.map(t=>[t.id,t.name]));
+ state.items=state.items.map(item=>names.has(item.trolleyId)?{...item,trolley:names.get(item.trolleyId)}:item);
+ for(const checkpoint of Object.values(state.collectionScans||{}))if(names.has(checkpoint.activeTrolleyId))checkpoint.defaults.trolley=names.get(checkpoint.activeTrolleyId);
+}
 function commitTrolleyWorkspace(next) {
  if(storageError&&!sharedClient)throw Error('Browser storage is unavailable. Back up your workspace before continuing.');
  if(!sharedClient)localStorage.setItem(key,JSON.stringify(next));
@@ -555,7 +571,7 @@ function viewTrolley(id) {
 function openTrolleyManager() {
  readinessSession++;
  const dialog=document.querySelector('#trolley-manager');
- dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><button class="primary" id="prepare-handover">Prepare handover pack</button><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':t.status==='ready'?'Ready for collection':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Edit department</button><button class="primary" data-readiness="${escape(t.id)}">Readiness checks</button>`:t.status==='ready'?`<button class="secondary" data-readiness="${escape(t.id)}">Review checks</button><button class="text-button" data-reopen="${escape(t.id)}">Reopen trolley</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
+ dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Manage trolleys</h2><p>Every trolley has a permanent reference. Labels identify the owner and link to this workspace's inventory.</p><button class="primary" id="prepare-handover">Prepare handover pack</button><form id="trolley-lookup-form" class="trolley-lookup"><label for="trolley-lookup">Scan trolley barcode</label><input id="trolley-lookup" autocomplete="off" placeholder="Scan a TSU trolley reference"><button class="secondary">View inventory</button></form><div class="trolley-manager-list">${state.trolleys.map(t=>`<article class="trolley-card" data-trolley-id="${escape(t.id)}"><div class="section-top"><h3>${escape(t.name)}</h3><span class="tag ${t.status==='collected'?'collected-tag':''}">${t.status==='collected'?'Collected':t.status==='ready'?'Ready for collection':'Open'}</span></div><div class="trolley-reference">${escape(t.reference)}</div><p>Property of TSU - ${escape(t.department)}<br>${state.items.filter(item=>trolleyForItem(item,t)).length} items${t.status==='collected'?` · ${escape(t.company)} · ${escape(new Date(t.collectedAt).toLocaleDateString('en-GB'))}`:''}</p><div class="trolley-actions"><button class="secondary" data-view="${escape(t.id)}">Inventory</button><button class="secondary" data-label="${escape(t.id)}">PDF label</button><button class="secondary" data-manifest="${escape(t.id)}">PDF manifest</button>${t.status==='open'?`<button class="secondary" data-use="${escape(t.id)}">Use trolley</button><button class="text-button" data-details="${escape(t.id)}">Rename / edit trolley</button><button class="primary" data-readiness="${escape(t.id)}">Readiness checks</button>`:t.status==='ready'?`<button class="secondary" data-readiness="${escape(t.id)}">Review checks</button><button class="text-button" data-reopen="${escape(t.id)}">Reopen trolley</button><button class="primary" data-collect="${escape(t.id)}">Mark collected</button>`:''}</div></article>`).join('')}</div><form id="create-trolley-form" class="settings-section"><h3>Add a trolley</h3><label for="new-trolley-name">New trolley name</label><input id="new-trolley-name" name="name" required maxlength="80" placeholder="e.g. Trolley 03"><label for="new-trolley-department">Owning department</label><input id="new-trolley-department" name="department" required maxlength="100" value="${escape(defaultDepartment)}"><button class="primary wide">Create trolley</button></form><p id="trolley-manager-error" role="alert"></p><button class="secondary wide" id="close-trolley-manager">Close</button>`;
  dialog.showModal();
  document.querySelector('#prepare-handover').onclick=()=>{dialog.close();openHandoverPack();};
  document.querySelector('#close-trolley-manager').onclick=()=>dialog.close();
@@ -665,19 +681,26 @@ async function openReadiness(id) {
 function openTrolleyDetails(id,collecting) {
  readinessSession++;
  const trolley=state.trolleys.find(t=>t.id===id),expectedVersion=sharedClient?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');
- dialog.innerHTML=`<form id="trolley-details-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>${collecting?'Mark trolley collected':'Edit trolley department'}</h2><p>${escape(trolley.name)} · ${state.items.filter(item=>trolleyForItem(item,trolley)).length} items</p>${collecting?'<p>Collection locks this trolley against new equipment and retains its inventory.</p><label for="collection-company">Decommission company</label><input id="collection-company" name="company" required maxlength="100" placeholder="Company collecting this trolley">':`<label for="edit-trolley-department">Owning department</label><input id="edit-trolley-department" name="department" required maxlength="100" value="${escape(trolley.department)}">`}<p id="trolley-manager-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley-details">Cancel</button><button class="primary">${collecting?'Confirm collection':'Save department'}</button></div></form>`;
+ dialog.innerHTML=`<form id="trolley-details-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>${collecting?'Mark trolley collected':'Edit trolley'}</h2><p>${escape(trolley.name)} · ${state.items.filter(item=>trolleyForItem(item,trolley)).length} items</p>${collecting?'<p>Collection locks this trolley against new equipment and retains its inventory.</p><label for="collection-company">Decommission company</label><input id="collection-company" name="company" required maxlength="100" placeholder="Company collecting this trolley">':`<label for="edit-trolley-name">Trolley name</label><input id="edit-trolley-name" name="name" required maxlength="80" value="${escape(trolley.name)}"><p>The permanent reference and barcode stay the same.</p><label for="edit-trolley-department">Owning department</label><input id="edit-trolley-department" name="department" required maxlength="100" value="${escape(trolley.department)}">`}<p id="trolley-manager-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-trolley-details">Cancel</button><button class="primary">${collecting?'Confirm collection':'Save trolley'}</button></div></form>`;
  document.querySelector('#cancel-trolley-details').onclick=()=>{dialog.close();openTrolleyManager();};
  document.querySelector('#trolley-details-form').onsubmit=async e=>{
   e.preventDefault();if(!writable())return;const button=e.target.querySelector('.primary');button.disabled=true;
   try{
-   const data=new FormData(e.target);
+   const client=sharedClient,data=new FormData(e.target);
+   const name=collecting?trolley.name:data.get('name').trim();
+   if(!name)throw Error('Enter a trolley name.');
+   if(!collecting&&trolley.status!=='open')throw Error('Reopen this trolley before renaming it.');
+   if(!collecting){const records=client?await client.load():state;if(client!==sharedClient)throw Error('Workspace changed. Reopen trolley management.');if(records.trolleys.some(row=>row.id!==id&&trolleyNameKey(row.name)===trolleyNameKey(name)))throw Error('A trolley already uses that name. Choose a distinct name.');if(name!==trolley.name&&records.items.some(item=>!item.trolleyId&&item.trolley===trolley.name)&&(client||records.trolleys.filter(row=>row.name===trolley.name).length>1))throw Error('Assign legacy equipment to this permanent trolley reference before renaming it.');}
    if(collecting&&(trolley.status!=='ready'||!checkReadiness(trolley,state.items,{shared:Boolean(sharedClient)}).canReady))throw Error('Run readiness checks and resolve all issues before collection.');
-   const updated=collecting?{...trolley,status:'collected',company:data.get('company').trim(),collectedAt:new Date().toISOString(),collectedBy:sharedClient?.profile.code||state.active}:{...trolley,department:data.get('department').trim()};
-   if(sharedClient)await sharedClient.writeTrolley(updated,expectedVersion);
+   const updated=collecting?{...trolley,status:'collected',company:data.get('company').trim(),collectedAt:new Date().toISOString(),collectedBy:sharedClient?.profile.code||state.active}:{...trolley,name,department:data.get('department').trim()};
+   if(client)await client.writeTrolley(updated,expectedVersion);
+   if(client!==sharedClient)throw Error('Workspace changed. Reconnect to confirm the trolley update.');
    const trolleys=state.trolleys.map(row=>row.id===id?updated:row),defaults={...state.defaults};
    let activeTrolleyId=state.activeTrolleyId;
    if(collecting&&(activeTrolleyId===trolley.id||(!activeTrolleyId&&defaults.trolley===trolley.name))){const next=trolleys.find(row=>row.status==='open');defaults.trolley=next?.name||'';activeTrolleyId=next?.id||'';}
-   commitTrolleyWorkspace({...state,trolleys,defaults,activeTrolleyId});dialog.close();notice=collecting?'Trolley marked collected. Its inventory and reference are retained.':'Trolley department updated.';render();
+   if(!collecting){if(activeTrolleyId===id||(!activeTrolleyId&&defaults.trolley===trolley.name))defaults.trolley=updated.name;}
+   const items=state.items.map(item=>!collecting&&trolleyForItem(item,trolley)?{...item,trolley:updated.name,trolleyId:id}:item);
+   commitTrolleyWorkspace({...state,trolleys,items,defaults,activeTrolleyId});syncTrolleyNames();persist();dialog.close();notice=collecting?'Trolley marked collected. Its inventory and reference are retained.':'Trolley details updated. Its permanent reference is unchanged.';render();
   }catch(error){document.querySelector('#trolley-manager-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
 }
@@ -973,6 +996,7 @@ async function openMoveHistory(id) {
  }catch(error){if(results.isConnected&&dialog.open)results.textContent=`History unavailable: ${firebaseErrorMessage(error)}`;}
 }
 function updateRegister() {
+ syncTrolleyNames();
  if(!document.querySelector('#inventory'))return;
  for(const id of selectedEquipment)if(!state.items.some(item=>item.id===id))selectedEquipment.delete(id);
  updateSessionSummary();
@@ -1146,12 +1170,13 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
   const records=await client.load();
   devicePreferences=saveDevicePreferences({...devicePreferences,remember});
   const workspaceId=`${config.projectId}/${teamId}/${client.uid}`,sameCollections=state.collectionWorkspace===workspaceId;
+  const currentTrolley=records.trolleys.find(t=>t.id===state.activeTrolleyId);if(currentTrolley)state.defaults.trolley=currentTrolley.name;
   const next=validateWorkspace({...state,...(!sameCollections?{collectionSessions:[],collectionTrolleys:[],collectionScans:{},activeCollectionId:'',collectionPaused:false,...(state.collectionWorkspace?{draft:{},step:0}:{})}:{}),collectionWorkspace:workspaceId,activeTrolleyId:records.trolleys.some(t=>t.id===state.activeTrolleyId)?state.activeTrolleyId:records.trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).length===1?records.trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).id:'',profiles:[client.profile],active:client.profile.code,trolleyMoves:[],items:records.items,trolleys:records.trolleys,referenceExamples:records.examples,referenceCorrections:records.corrections||[]});
   resetRescan();workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;releaseLocalTab?.();connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
-  client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();updateHistory();updateReferenceLibrary();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();updateReferenceLibrary();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){state.trolleys=trolleys;persist();updateRegister();updateHistory();}},phase=>{if(sharedClient===client){connectionPhase=phase;if(phase==='connected')lastConfirmedAt=new Date().toISOString();updateConnectionStatus();}},corrections=>{if(sharedClient===client){state.referenceCorrections=corrections;persist();updateReferenceLibrary();}});
+  client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();updateHistory();updateReferenceLibrary();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();updateReferenceLibrary();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){const old=state.trolleys.find(t=>t.id===state.activeTrolleyId),next=trolleys.find(t=>t.id===state.activeTrolleyId);if(old&&next&&state.defaults.trolley===old.name)state.defaults.trolley=next.name;state.trolleys=trolleys;syncTrolleyNames();persist();updateRegister();updateHistory();}},phase=>{if(sharedClient===client){connectionPhase=phase;if(phase==='connected')lastConfirmedAt=new Date().toISOString();updateConnectionStatus();}},corrections=>{if(sharedClient===client){state.referenceCorrections=corrections;persist();updateReferenceLibrary();}});
   refreshCollections(client);
  }catch(error){try{if(client.logout)await client.logout();else client.stop();}catch{client.stop();}throw error;}
 }

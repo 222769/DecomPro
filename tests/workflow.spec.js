@@ -100,7 +100,7 @@ test('export errors show the cause and reflect records removed while export was 
  let release,signal;const started=new Promise(resolve=>signal=resolve);
  await page.route('**/exceljs*',async route=>{signal();await new Promise(resolve=>release=resolve);await route.abort();});
  await page.getByRole('button',{name:'Export Excel',exact:true}).click();await started;
- page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item EXPORT-REMOVED-001',exact:true}).click();
+ page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item EXPORT-REMOVED-001',exact:true}).click();await page.getByRole('button',{name:'Remove item',exact:true}).click();
  release();
  await expect(page.getByRole('status')).toContainText('Excel component could not load');
  await expect(page.getByRole('status')).toContainText('There are no saved items in the current workspace');

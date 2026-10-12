@@ -20,6 +20,7 @@ service cloud.firestore {
      && (p.handover.trolleyIds.size()<5 || handoverPeer(team,p,4)) && (p.handover.trolleyIds.size()<6 || handoverPeer(team,p,5))));
   }
   function openTrolley(team,p) { return ('trolleyId' in p) && (p.trolleyId is string && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open' && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.name==p.trolley); }
+  function existingOpenTrolley(team,p) { return getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data.payload.status=='open'; }
   function inventoryTouch(team,p) {
    let before=get(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
    let after=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
@@ -83,7 +84,7 @@ service cloud.firestore {
     allow update: if member(team) && !resource.data.deleted && valid(request.resource.data)
      && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
      && request.resource.data.historicalImport==resource.data.historicalImport && request.resource.data.payload.technician==resource.data.payload.technician
-     && request.resource.data.version==resource.data.version+1 && (!('trolleyId' in resource.data.payload) || (openTrolley(team,resource.data.payload) && inventoryTouch(team,resource.data.payload))) && openTrolley(team,request.resource.data.payload) && inventoryTouch(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
+     && request.resource.data.version==resource.data.version+1 && (!('trolleyId' in resource.data.payload) || (existingOpenTrolley(team,resource.data.payload) && inventoryTouch(team,resource.data.payload))) && openTrolley(team,request.resource.data.payload) && inventoryTouch(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
     allow delete: if false;
     match /revisions/{revision} {
@@ -124,7 +125,7 @@ service cloud.firestore {
       (request.resource.data.payload.status=='open' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','readyAt','readyBy'])) ||
       (request.resource.data.payload.status=='collected' && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','collectedAt','collectedBy','company','handover'])) : true)
      && request.resource.data.version==resource.data.version+1 && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
-     && request.resource.data.payload.id==resource.data.payload.id && request.resource.data.payload.reference==resource.data.payload.reference && request.resource.data.payload.name==resource.data.payload.name && request.resource.data.payload.createdAt==resource.data.payload.createdAt
+     && request.resource.data.payload.id==resource.data.payload.id && request.resource.data.payload.reference==resource.data.payload.reference && request.resource.data.payload.createdAt==resource.data.payload.createdAt
      && audit(request.resource.data) && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
     allow delete: if false;
     match /revisions/{revision} {

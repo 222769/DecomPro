@@ -10,8 +10,8 @@ async function seed(page){
 test('failed equipment removal preserves visible inventory, stored records and unfinished scan',async({page})=>{
  await seed(page);const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
  await page.evaluate(()=>{Storage.prototype.setItem=()=>{throw new DOMException('Storage full','QuotaExceededError');};});
- page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item REPAIR-001',exact:true}).click();
- await expect(page.locator('.alert')).toContainText('Removal failed');
+ page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item REPAIR-001',exact:true}).click();await page.getByRole('button',{name:'Remove item',exact:true}).click();
+ await expect(page.locator('#remove-item-error')).toContainText('Removal failed');
  await expect(page.locator('#inventory tbody')).toContainText('REPAIR-001');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);
 });
 test('restoring a backup clears previous review and search filters so restored records are visible',async({page})=>{

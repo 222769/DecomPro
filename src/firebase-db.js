@@ -224,7 +224,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     for(const trolleyId of new Set([item.trolleyId,before?.payload.trolleyId].filter(Boolean))) {
      const trolley=await tx.get(doc(trolleys,trolleyId));
      if(!trolley.exists()||trolley.data().payload.status!=='open')throw Error('This trolley is unavailable, ready or collected. Reopen a ready trolley before changing its equipment.');
-     if(trolleyId===item.trolleyId&&trolley.data().payload.name!==item.trolley)throw Error('Trolley details changed. Select the trolley again before saving.');
+     if(trolleyId===item.trolleyId)item={...item,trolley:trolley.data().payload.name};
      touched.push(trolley);
     }
     for(const trolley of touched) {

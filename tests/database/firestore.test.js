@@ -311,3 +311,18 @@ test('two devices creating the same shared trolley name commit only one permanen
  const {createSharedTrolley}=await import('../../src/trolleys.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);const a=await createSharedTrolley('Trolley 1.1',undefined,'demo-decompro/college-it'),b=await createSharedTrolley('trolley 1.1',undefined,'demo-decompro/college-it');
  const results=await Promise.allSettled([owner.writeTrolley(a,0),tech.writeTrolley(b,0)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const rows=(await owner.load()).trolleys.filter(t=>t.id===a.id);assert.equal(rows.length,1);assert.equal(rows[0].reference,a.reference);
 });
+
+test('renaming an open trolley preserves its reference and allows old-name records to be edited and removed',async()=>{
+ const owner=createTeamStore(context('tech'),'tech','college-it',member);
+ await owner.write(sample(),0);
+ const version=owner.trolleyVersionFor(initialTrolley.id);
+ await owner.writeTrolley({...initialTrolley,name:'Renamed cage'},version);
+ await assert.rejects(owner.writeTrolley({...initialTrolley,name:'Stale rename'},version),/Another technician/);
+ await owner.write({...sample(),model:'Updated model'},1);
+ let stored=(await getDoc(doc(context('tech'),'teams/college-it/equipment/equipment-1'))).data();
+ assert.equal(stored.payload.trolley,'Renamed cage');assert.equal(stored.payload.trolleyId,initialTrolley.id);
+ await owner.write(stored.payload,2,{deleted:true});
+ assert.equal((await owner.load()).items.length,0);
+ assert.equal((await owner.load()).trolleys[0].reference,initialTrolley.reference);
+ const audits=await getDocs(collection(context('tech'),'teams/college-it/equipment/equipment-1/revisions'));assert.equal(audits.size,3);
+});
