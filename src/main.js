@@ -16,7 +16,7 @@ import {checkReadiness,readinessFields,validateReadinessNotes} from './readiness
 import { fields, duplicateSerial, normalizeAssetNumber, validAssetNumber } from './data';
 import './style.css';
 import './theme.css';
-import { cleanExamples, referenceRowsFromWorkbook } from './recognition';
+import { cleanExamples, referenceRowsFromWorkbook, normalizeSerial } from './recognition';
 import {buildImportPreview,importCounts} from './import-preview.js';
 import {snapshotEvidence,sourceKinds} from './recognition-evidence.js';
 import builtInReferences from './reference-catalogue.json';
@@ -68,7 +68,7 @@ let startsShared=false;try{startsShared=!testWorkspace&&localStorage.getItem('de
 if(!startsShared)await acquireLocalTab();
 window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
 let pendingScan=null;
-const rescan={enabled:false,busy:false,serial:'',item:null,version:0,message:'',request:0};
+const rescan={enabled:false,busy:false,serial:'',item:null,reference:null,version:0,message:'',request:0};
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 let state = { captureOrder:'serial-first', activeCollectionId:'',collectionPaused:false,collectionSessions:[],collectionTrolleys:[],collectionScans:{},collectionWorkspace:'',activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[], referenceCorrections:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
@@ -135,22 +135,25 @@ function render() {
  <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="description-review-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog><dialog id="local-import-dialog"></dialog><dialog id="equipment-import-dialog"></dialog><dialog id="collection-session-dialog"></dialog><dialog id="team-access-dialog"></dialog><dialog id="handover-dialog"></dialog><dialog id="bulk-move-dialog"></dialog><dialog id="move-history-dialog"></dialog><dialog id="admin-dialog" class="admin-dialog"></dialog>`;
  bind(); updateRegister(); updateHistory(); updateConnectionStatus(); updateOverviewLayout(); focus();
 }
-function resetRescan(){rescan.enabled=false;rescan.busy=false;rescan.serial='';rescan.item=null;rescan.message='';rescan.request++;}
+function resetRescan(){rescan.enabled=false;rescan.busy=false;rescan.serial='';rescan.item=null;rescan.reference=null;rescan.message='';rescan.request++;}
 function rescanDestination() {
  return state.trolleys.find(t=>t.id===state.activeTrolleyId)||(()=>{const matches=state.trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley));return matches.length===1?matches[0]:null;})();
 }
+function pausedNormalScan(){return state.step>0||Boolean(state.draft.serial)||Boolean(pendingScan?.collectionId===state.activeCollectionId&&pendingScan.value.trim());}
 function renderRescanStation() {
- const item=rescan.item,destination=rescanDestination(),source=item?state.trolleys.find(t=>t.id===item.trolleyId):null;
- return `<section id="station" class="card station"><div class="section-top"><span class="eyebrow">TROLLEY RESCAN</span><label class="rescan-toggle"><input id="rescan-mode" type="checkbox" checked ${rescan.busy?'disabled':''}> Trolley rescan mode</label><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><h2>Find it. Check it. Place it.</h2><p>Exact saved serial or asset numbers fill existing equipment details. Confirm placement to move that record without creating another item. Your normal scan stays paused.</p><div class="rescan-target"><strong>Target: ${escape(destination?.name||'Select a trolley')}</strong><span>${escape(destination?.reference||'Use Change trolley to choose the physical trolley.')}</span></div><form id="rescan-form"><label for="rescan-serial">Rescan serial or asset number</label><input id="rescan-serial" maxlength="1000" autocomplete="off" spellcheck="false" value="${escape(rescan.serial)}" ${rescan.busy?'disabled':''}><button class="primary" ${rescan.busy?'disabled':''}>${rescan.busy?'Checking…':'Find saved item'}</button></form><p id="rescan-message" role="status">${escape(rescan.message)}</p>${item?`<div class="captured">${[['serial','Serial number'],['model','Model number'],['manufacturer','Manufacturer'],['asset','Asset number'],['barcode','Barcode'],['etch','Security etch'],['technician','Originally recorded by'],['date','Disposal date']].map(([key,label])=>`<div><span>${label}</span><strong>${escape(item[key])}</strong></div>`).join('')}</div><p>Recorded trolley: <strong>${escape(source?.name||item.trolley)}</strong> · ${escape(source?.reference||'')}</p><button id="confirm-rescan" class="primary wide" ${rescan.busy||!destination?'disabled':''}>${rescan.busy?'Confirming…':'Confirm trolley placement'}</button>`:''}</section>`;
+ const reference=rescan.reference,item=rescan.item,destination=rescanDestination(),source=item?state.trolleys.find(t=>t.id===item.trolleyId):null;
+ return `<section id="station" class="card station"><div class="section-top"><span class="eyebrow">TROLLEY RESCAN</span><label class="rescan-toggle"><input id="rescan-mode" type="checkbox" checked ${rescan.busy?'disabled':''}> Trolley rescan mode</label><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><h2>Find it. Check it. Place it.</h2><p>Exact saved serial or asset numbers fill existing equipment details. Confirm placement to move that record without creating another item. Your normal scan stays paused.</p><div class="rescan-target"><strong>Target: ${escape(destination?.name||'Select a trolley')}</strong><span>${escape(destination?.reference||'Use Change trolley to choose the physical trolley.')}</span></div><form id="rescan-form"><label for="rescan-serial">Rescan serial or asset number</label><input id="rescan-serial" maxlength="1000" autocomplete="off" spellcheck="false" value="${escape(rescan.serial)}" ${rescan.busy?'disabled':''}><button class="primary" ${rescan.busy?'disabled':''}>${rescan.busy?'Checking…':'Find saved item'}</button></form><p id="rescan-message" role="status">${escape(rescan.message)}</p>${reference?`<div class="rescan-reference"><h3>Known recognition reference</h3><p><strong>${escape(reference.serial)}</strong><br>${escape(reference.manufacturer)} · ${escape(reference.model)}</p><p>This is recognition data, not a saved inventory item. Record it with normal scanning, or import its full equipment spreadsheet into the register. Asset number and barcode still need capturing.</p>${pausedNormalScan()?'<p>Your unfinished normal scan is kept. Finish or clear it before recording this reference.</p><button id="return-rescan-draft" class="secondary">Return to paused scan</button>':`<button id="record-rescan-reference" class="secondary" ${state.collectionPaused?'disabled':''}>Record this item</button>`}</div>`:''}${item?`<div class="captured">${[['serial','Serial number'],['model','Model number'],['manufacturer','Manufacturer'],['asset','Asset number'],['barcode','Barcode'],['etch','Security etch'],['technician','Originally recorded by'],['date','Disposal date']].map(([key,label])=>`<div><span>${label}</span><strong>${escape(item[key])}</strong></div>`).join('')}</div><p>Recorded trolley: <strong>${escape(source?.name||item.trolley)}</strong> · ${escape(source?.reference||'')}</p><button id="confirm-rescan" class="primary wide" ${rescan.busy||!destination?'disabled':''}>${rescan.busy?'Confirming…':'Confirm trolley placement'}</button>`:''}</section>`;
 }
 async function lookupRescan() {
  if(rescan.busy||!rescan.enabled||!writable())return;
- const request=++rescan.request,client=sharedClient,locked=sharedLocked;rescan.busy=true;rescan.item=null;rescan.message='Looking for this serial or asset number in the equipment register…';render();
+ const request=++rescan.request,client=sharedClient,locked=sharedLocked;rescan.busy=true;rescan.item=null;rescan.reference=null;rescan.message='Looking for this serial or asset number in the equipment register…';render();
  try{
   if(client){const records=await client.load();if(client!==sharedClient||locked!==sharedLocked)throw Error('Workspace changed. Sign in and rescan.');state.items=records.items;state.trolleys=records.trolleys;persist();}
   rescan.item=findRescanItem(state.items,rescan.serial);rescan.version=client?.versionFor(rescan.item.id)||0;
   rescan.message='Saved details found. Check the physical item and target trolley, then confirm placement.';
- }catch(error){if(request!==rescan.request)return;rescan.item=null;rescan.message=`Rescan stopped. ${firebaseErrorMessage(error)}`;}
+ }catch(error){if(request!==rescan.request)return;rescan.item=null;rescan.message=`Rescan stopped. ${firebaseErrorMessage(error)}`;
+  if(error.code==='rescan/not-found'){const reference=lookupSerial(rescan.serial);if(reference?.method==='exact'){rescan.reference={...reference,serial:normalizeSerial(rescan.serial)};rescan.message=`Rescan stopped. ${reference.manufacturer} ${reference.model} is known from recognition references, but this serial is not a saved item in the current register.`;}}
+ }
  finally{if(request===rescan.request){rescan.busy=false;render();const input=document.querySelector('#rescan-serial');input?.focus();input?.select();}}
 }
 async function confirmRescan() {
@@ -303,10 +306,15 @@ function writable() {
 }
 
 function bind() {
- document.querySelector('#rescan-mode')?.addEventListener('change',event=>{if(saving||rescan.busy)return;rescan.enabled=event.target.checked;rescan.item=null;rescan.serial='';rescan.message='';render();if(rescan.enabled){document.querySelector('#rescan-serial')?.focus();prompt();}});
- document.querySelector('#rescan-serial')?.addEventListener('input',event=>{rescan.serial=event.target.value;rescan.item=null;const button=document.querySelector('#confirm-rescan');if(button)button.disabled=true;});
+ document.querySelector('#rescan-mode')?.addEventListener('change',event=>{if(saving||rescan.busy)return;rescan.enabled=event.target.checked;rescan.item=null;rescan.reference=null;rescan.serial='';rescan.message='';render();if(rescan.enabled){document.querySelector('#rescan-serial')?.focus();prompt();}});
+ document.querySelector('#rescan-serial')?.addEventListener('input',event=>{rescan.serial=event.target.value;rescan.item=null;rescan.reference=null;document.querySelector('.rescan-reference')?.remove();const button=document.querySelector('#confirm-rescan');if(button)button.disabled=true;});
  document.querySelector('#rescan-form')?.addEventListener('submit',event=>{event.preventDefault();lookupRescan();});
  document.querySelector('#confirm-rescan')?.addEventListener('click',confirmRescan);
+ document.querySelector('#return-rescan-draft')?.addEventListener('click',()=>{resetRescan();render();prompt();});
+ document.querySelector('#record-rescan-reference')?.addEventListener('click',()=>{
+  if(!rescan.reference||rescan.busy||saving||pausedNormalScan()||state.collectionPaused||!writable())return;
+  const serial=rescan.reference.serial;resetRescan();state.step=0;pendingScan=null;render();capture(serial);
+ });
 
  document.querySelector('#database').onclick=openDatabase;
  document.querySelector('#prepare-history-handover').onclick=openHandoverPack;

@@ -306,3 +306,6 @@ html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-colo
 #inventory .register-sort:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
 
 #detach-delete-trolley[hidden]{display:none}
+
+.rescan-reference{margin:18px 0;padding:18px;border:1px solid #718caf;border-radius:12px;color:#e4efff}
+.rescan-reference h3{font-size:15px;margin:0 0 10px}.rescan-reference p{font-size:12px;line-height:1.7;overflow-wrap:anywhere}

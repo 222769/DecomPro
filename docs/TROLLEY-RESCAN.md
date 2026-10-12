@@ -25,3 +25,11 @@ Verification: full browser suite **150 passed**; focused rescan suite **13 passe
 Trolley rescan mode accepts an exact saved serial number or asset number (for example A0042). Matching ignores case and surrounding spaces; it does not guess missing digits or asset prefixes. An asset can identify an item whose serial is N/A. The preview retains all recorded identifiers and disposal attribution, and confirmation moves the existing record rather than creating a new item.
 
 N/A cannot identify an item. Duplicate assets, duplicate serials and an input matching one item's serial and another item's asset stop lookup for review. Confirmation checks identifier uniqueness again against the refreshed shared register before moving. Normal scanning and serial-pattern recognition remain separate. No new Firestore rules are required for asset rescan lookup.
+
+## Recognition-only references
+
+If an identifier is absent from the saved register but matches an exact recognition reference, the rescan view now shows that reference's model/manufacturer and explains that it is not a saved inventory item. For example, C17K352ZDNCR is Apple A1418 in the bundled Mac spreadsheet.
+
+Choose Record this item to switch to normal scanning with the serial/model/manufacturer prefilled, then capture the remaining barcode/security/asset fields and Save. This action does not automatically save a new item or invent asset/barcode values. If a normal scan is already unfinished, the reference view offers Return to paused scan instead, preserving that work.
+
+Saved register matches take priority and retain their original complete details for trolley placement. Duplicate identifier errors and connection failures do not fall back to references. Pattern guesses remain in normal scanning; reference-only results cannot be confirmed as an existing-item move.
