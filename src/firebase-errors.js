@@ -3,6 +3,8 @@ export function firebaseErrorMessage(error) {
   'auth/invalid-credential': 'The email or password was not accepted. Check your team account details and try again.',
   'auth/user-not-found': 'The email or password was not accepted. Check your team account details and try again.',
   'auth/wrong-password': 'The email or password was not accepted. Check your team account details and try again.',
+  'auth/user-token-expired': 'Your sign-in session expired. Sign in again with your team account email and password.',
+  'auth/invalid-user-token': 'Your sign-in session is no longer valid. Sign in again with your team account email and password.',
   'auth/invalid-email': 'Enter a valid email address for your team account.',
   'auth/operation-not-allowed': 'Email/password sign-in is not enabled. Ask your administrator to enable it in Firebase Authentication.',
   'auth/unauthorized-domain': 'This website is not authorized for sign-in. Ask your administrator to add this domain in Firebase Authentication settings.',

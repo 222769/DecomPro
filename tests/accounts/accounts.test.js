@@ -125,3 +125,21 @@ test('browser sign-in clears rejected authentication and invalidates an active w
   assert.ok(await revoked);
  }finally{await client?.logout();await deleteClient(web);}
 });
+
+test('real Firebase SDK accepts the same technician credentials after repeated sign-outs and rejects an incorrect password',async()=>{
+ const {initializeApp:clientApp,deleteApp:deleteClientApp}=await import('firebase/app');
+ const {getAuth:clientAuth,connectAuthEmulator}=await import('firebase/auth');
+ const {getFirestore:clientDb,connectFirestoreEmulator,terminate}=await import('firebase/firestore');
+ const {connectFirebase}=await import('../../src/firebase-db.js');
+ const config={projectId:'demo-decompro',apiKey:'demo-key',authDomain:'demo-decompro.firebaseapp.com',appId:'test-relogin'};
+ const client=clientApp(config,'decompro-demo-decompro'),login=clientAuth(client),store=clientDb(client);connectAuthEmulator(login,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(store,'127.0.0.1',8085);
+ try {
+  for(let i=0;i<3;i++) {
+   const connection=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!');
+   assert.equal(connection.uid,'tech');assert.equal(connection.profile.code,'TT');await connection.logout();assert.equal(login.currentUser,null);
+   const account=await auth.getUser('tech');assert.equal(account.disabled,false);assert.equal(account.email,'tech@example.invalid');
+  }
+  await assert.rejects(connectFirebase(config,'college-it','tech@example.invalid','Incorrect-test-password-42!'),error=>['auth/invalid-credential','auth/wrong-password'].includes(error.code));
+  const recovered=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!');assert.equal(recovered.uid,'tech');assert.equal(recovered.profile.code,'TT');await recovered.logout();
+ }finally{await terminate(store);await deleteClientApp(client);}
+});

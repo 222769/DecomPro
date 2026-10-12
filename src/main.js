@@ -70,7 +70,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 let state = { captureOrder:'serial-first', activeCollectionId:'',collectionPaused:false,collectionSessions:[],collectionTrolleys:[],collectionScans:{},collectionWorkspace:'',activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[], referenceCorrections:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
 let sharedClient = null;
-let devicePreferences=readDevicePreferences(),lockInProgress=false,workspaceManuallyLocked=false,lastActivity=Date.now(),dailyProgressExpanded=false,dashboardTrolleysExpanded=false;
+let devicePreferences=readDevicePreferences(),lockInProgress=false,lockCompletion=null,lockedAccountEmail='',workspaceManuallyLocked=false,lastActivity=Date.now(),dailyProgressExpanded=false,dashboardTrolleysExpanded=false;
 try{workspaceManuallyLocked=localStorage.getItem('decompro.workspaceLocked')==='true';lastActivity=Number(sessionStorage.getItem('decompro.lastActivity'))||Date.now();}catch{}
 let readinessSession=0;
 let dashboardCollectionId='',dashboardStatus='all';
@@ -1150,7 +1150,7 @@ function openDatabase() {
  let saved={};try{saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');}catch{}
  saved.config ||= defaultFirebaseConfig;
  const dialog=document.querySelector('#database-dialog');
- dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary wide" id="check-connection">Check connection</button><p id="connection-check-result" aria-live="polite">Checks equipment, trolley and reference access directly with Firebase.</p>${sharedClient.role==='admin'?'<button class="secondary" id="team-access">Team access checklist</button><button class="secondary" id="copy-firestore-rules">Copy latest Firestore rules</button><p id="firestore-rules-result" aria-live="polite"></p><textarea id="firestore-rules-text" rows="8" aria-label="Latest Firestore rules" readonly hidden></textarea>':''}<button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Preview your preserved local equipment, check duplicates and import historical records without overwriting team items.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><label class="toggle-label"><input id="remember-device" name="remember" type="checkbox" ${devicePreferences.remember?'checked':''}> Remember me on this trusted device</label><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
+ dialog.innerHTML=`<div class="eyebrow">TEAM WORKSPACE</div><h2>${sharedClient?'Connected to Firebase':'Connect your Firebase database'}</h2><p>Firestore shares records and reference examples across the team. Membership and identities are controlled by Firebase Authentication and security rules.</p>${sharedClient?`<div class="restore-summary"><strong>${escape(sharedClient.teamId)}</strong><span>${escape(sharedClient.email)} · ${escape(sharedClient.role)}</span></div><button class="secondary wide" id="check-connection">Check connection</button><p id="connection-check-result" aria-live="polite">Checks equipment, trolley and reference access directly with Firebase.</p>${sharedClient.role==='admin'?'<button class="secondary" id="team-access">Team access checklist</button><button class="secondary" id="copy-firestore-rules">Copy latest Firestore rules</button><p id="firestore-rules-result" aria-live="polite"></p><textarea id="firestore-rules-text" rows="8" aria-label="Latest Firestore rules" readonly hidden></textarea>':''}<button class="secondary" id="upload-local" ${sharedClient.role!=='admin'?'disabled':''}>Import local equipment (admin)</button><p>Preview your preserved local equipment, check duplicates and import historical records without overwriting team items.</p>`:''}<form id="database-form"><p>Sign in with the account your team administrator created. Your local register stays preserved when you connect.</p><details class="connection-settings"><summary>Connection settings</summary><label for="firebase-config">Firebase public web app config (JSON)</label><textarea id="firebase-config" name="config" rows="5" required spellcheck="false" placeholder='{"apiKey":"…","authDomain":"…","projectId":"…","appId":"…"}'>${escape(saved.config?JSON.stringify(saved.config,null,2):'')}</textarea><label for="team-id">Team ID</label><input id="team-id" name="teamId" value="${escape(saved.teamId||'college-it')}" required><p>These project details are prefilled. Your administrator can change them here if needed.</p></details><label for="firebase-email">Team account email</label><input id="firebase-email" name="email" type="email" autocomplete="username" value="${escape(lockedAccountEmail)}" required><label for="firebase-password">Password</label><input id="firebase-password" name="password" type="password" autocomplete="current-password" required><label class="toggle-label"><input id="remember-device" name="remember" type="checkbox" ${devicePreferences.remember?'checked':''}> Remember me on this trusted device</label><p>Your account identifies who disposed of each item. Connecting does not automatically upload your local records.</p><p id="database-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-database">Close</button><button class="primary">Sign in & connect</button></div></form>${sharedLocked?'<button class="text-button" id="disconnect-database">Sign out & return to local workspace</button>':''}`;
  dialog.addEventListener('close',()=>{const password=dialog.querySelector('#firebase-password');if(password)password.value='';},{once:true});
  dialog.showModal();
  document.querySelector('#copy-firestore-rules')?.addEventListener('click',async()=>{
@@ -1166,10 +1166,18 @@ function openDatabase() {
  document.querySelector('#check-connection')?.addEventListener('click',checkSharedConnection);
  document.querySelector('#upload-local')?.addEventListener('click',uploadLocal);
  document.querySelector('#team-access')?.addEventListener('click',openTeamAccess);
+ let signingIn=false;
  document.querySelector('#database-form').onsubmit=async e=>{
-  e.preventDefault();const button=e.target.querySelector('.primary');button.disabled=true;
-  try {const form=new FormData(e.target);await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'),{remember:form.has('remember')});}
-  catch(error){document.querySelector('#firebase-password').value='';document.querySelector('#database-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
+  e.preventDefault();if(signingIn)return;signingIn=true;
+  const form=new FormData(e.target),button=e.target.querySelector('.primary'),passwordInput=e.target.querySelector('#firebase-password'),output=e.target.querySelector('#database-error'),controls=[...e.target.querySelectorAll('input,textarea,button.primary')];
+  const disabled=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);output.textContent='';
+  try {
+   button.textContent=lockCompletion?'Finishing sign-out…':'Signing in…';
+   await waitForLockCompletion();
+   button.textContent='Signing in…';
+   await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'),{remember:form.has('remember')});
+  }catch(error){passwordInput.value='';output.textContent=firebaseErrorMessage(error);}
+  finally{signingIn=false;controls.forEach((control,index)=>control.disabled=disabled[index]);button.textContent='Sign in & connect';}
  };
 }
 async function openTeamAccess() {
@@ -1182,8 +1190,16 @@ async function openTeamAccess() {
   dialog.querySelector('#team-access-list').innerHTML=`<h3>Current team memberships</h3>${members.map(member=>`<p><strong>${escape(member.displayName)} · ${escape(member.code)}</strong><br>${escape(member.role)} · ${member.active?'Active':'Inactive'}</p>`).join('')||'<p>No members returned.</p>'}`;
  }catch(error){dialog.querySelector('#team-access-list').textContent=`Account check failed. ${firebaseErrorMessage(error)}`;}
 }
+async function waitForLockCompletion() {
+ const pending=lockCompletion;if(!pending)return;
+ await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(Error('Firebase sign-out is still pending. Refresh this page, then sign in again. Your saved records and unfinished scan are preserved.')),15000);
+  pending.then(()=>{clearTimeout(timer);resolve();},error=>{clearTimeout(timer);reject(error);});
+ });
+}
 async function activateDatabase(config,teamId,email,password,{remember=devicePreferences.remember}={}) {
  if(testWorkspace)throw Error('Firebase uploads are disabled in the test workspace.');
+ await waitForLockCompletion();
  const {connectFirebase}=await import('./firebase-db');
  const client=await connectFirebase(config,teamId,email,password,{remember});
  try {
@@ -1192,7 +1208,7 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
   const workspaceId=`${config.projectId}/${teamId}/${client.uid}`,sameCollections=state.collectionWorkspace===workspaceId;
   const currentTrolley=records.trolleys.find(t=>t.id===state.activeTrolleyId);if(currentTrolley)state.defaults.trolley=currentTrolley.name;
   const next=validateWorkspace({...(sameCollections?reconcileTrolleySelection(state,records.trolleys):state),...(!sameCollections?{collectionSessions:[],collectionTrolleys:[],collectionScans:{},activeCollectionId:'',collectionPaused:false,...(state.collectionWorkspace?{draft:{},step:0}:{})}:{}),collectionWorkspace:workspaceId,activeTrolleyId:records.trolleys.some(t=>t.id===state.activeTrolleyId)?state.activeTrolleyId:records.trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).length===1?records.trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).id:'',profiles:[client.profile],active:client.profile.code,trolleyMoves:[],items:records.items,trolleys:records.trolleys,referenceExamples:records.examples,referenceCorrections:records.corrections||[]});
-  resetRescan();workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
+  resetRescan();lockedAccountEmail='';workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;releaseLocalTab?.();connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
@@ -1341,12 +1357,16 @@ window.addEventListener('online',()=>{connectionPhase='syncing';updateConnection
 function recordActivity() {lastActivity=Date.now();try{sessionStorage.setItem('decompro.lastActivity',String(lastActivity));}catch{}}
 async function lockWorkspace(message='Workspace locked. Sign in to continue.') {
  if(!sharedLocked||lockInProgress)return;
- lockInProgress=true;workspaceManuallyLocked=true;try{localStorage.setItem('decompro.workspaceLocked','true');}catch{}
- const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){if(input.value.trim())state.draft[fields[state.step][0]]=input.value;else delete state.draft[fields[state.step][0]];}persist();
- resetRescan();const client=sharedClient;sharedClient=null;scanning=false;window.speechSynthesis?.cancel();notice=message;render();
- try {if(client?.logout)await client.logout();else {client?.stop();const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}}
- catch{notice='Workspace locked. Firebase sign-out could not be confirmed; sign in again before continuing.';render();}
- finally{lockInProgress=false;}
+ lockInProgress=true;let completeLock;lockCompletion=new Promise(resolve=>completeLock=resolve);
+ try {
+  workspaceManuallyLocked=true;try{localStorage.setItem('decompro.workspaceLocked','true');}catch{}
+  const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){if(input.value.trim())state.draft[fields[state.step][0]]=input.value;else delete state.draft[fields[state.step][0]];}persist();
+  resetRescan();const client=sharedClient;lockedAccountEmail=client?.email||lockedAccountEmail;sharedClient=null;scanning=false;window.speechSynthesis?.cancel();notice=message;render();
+  if(client?.logout)await client.logout();else {client?.stop();const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}
+ }catch{
+  notice='Workspace locked. Firebase sign-out could not be confirmed; sign in again before continuing.';
+  const messageNode=document.querySelector('.workspace-lock .session-note');if(messageNode)messageNode.textContent=notice;else render();
+ }finally{lockInProgress=false;lockCompletion=null;completeLock();}
 }
 function checkInactivity() {if(sharedLocked&&sharedClient&&idleExpired(lastActivity,Date.now(),devicePreferences.idleMinutes))lockWorkspace('Workspace locked after inactivity. Sign in to continue.');}
 for(const event of ['pointerdown','keydown','input'])document.addEventListener(event,()=>{if(sharedClient){checkInactivity();if(sharedClient)recordActivity();}},{capture:true});

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 async function mockTeam(page) {
- await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'application/javascript',body:`
+ await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`
  export async function connectFirebase(config,teamId,email,password,options){
   sessionStorage.setItem('test.signins',String(Number(sessionStorage.getItem('test.signins')||0)+1));window.lastTrustChoice=options?.remember;
   const saved=JSON.parse(localStorage.getItem('decompro.v1'))||{items:[],trolleys:[]};
@@ -81,4 +81,41 @@ test('Never disables inactivity locking across reload while manual locking still
  await page.reload();await expect(page.locator('.workspace-lock')).toBeVisible();
  expect(await page.evaluate(()=>sessionStorage.getItem('test.signins'))).toBe(signins);
  await signin(page);await expect(page.locator('#station')).toBeVisible();
+});
+
+async function delayedSignoutTeam(page){
+ await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`
+ export async function connectFirebase(config,teamId,email,password){
+  window.connectCalls=(window.connectCalls||0)+1;
+  if(window.logoutPending||password!=='test-only-password')throw Object.assign(Error('Credential rejected'),{code:'auth/invalid-credential'});
+  if(window.denyMembership){window.denyMembership=false;throw Object.assign(Error('Membership denied'),{code:'permission-denied'});}
+  const saved=JSON.parse(localStorage.getItem('decompro.v1'))||{items:[],trolleys:[]};
+  return {uid:'jawad-test',profile:{name:'Jawad test technician',code:'JA'},role:'technician',projectId:config.projectId,email:'tech@example.invalid',teamId,
+   async load(){return {items:saved.items,trolleys:saved.trolleys,examples:[],corrections:[]}},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},listen(a,b,c,d,phase){phase('connected')},stop(){},
+   async logout(){window.logoutPending=true;await new Promise((resolve,reject)=>{window.finishSignout=()=>{window.logoutPending=false;window.rejectSignout?reject(Error('Sign-out connection failed')):resolve()}})}
+  };
+ }
+ export async function disconnectFirebaseAuth(){}
+ `}));
+}
+for(const rejectSignout of [false,true])test(`timeout re-login waits for delayed sign-out (${rejectSignout?'failed':'successful'}) before checking the account`,async({page})=>{
+ await page.clock.install();await delayedSignoutTeam(page);await page.goto('/');await signin(page);
+ await page.locator('#scan').fill('TIMEOUT-UNFINISHED');await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();expect(await page.evaluate(()=>window.logoutPending)).toBe(true);
+ await page.getByRole('button',{name:'Sign in to DecomPro',exact:true}).click();await expect(page.getByLabel('Team account email')).toHaveValue('tech@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.getByRole('button',{name:'Finishing sign-out…',exact:true})).toBeDisabled();expect(await page.evaluate(()=>window.connectCalls)).toBe(1);
+ await page.evaluate(()=>document.querySelector('#database-form').requestSubmit());expect(await page.evaluate(()=>window.connectCalls)).toBe(1);
+ await page.evaluate(reject=>{window.rejectSignout=reject;window.finishSignout();},rejectSignout);
+ await expect(page.locator('#connection-status')).toContainText('Database connected');await expect(page.locator('#scan')).toHaveValue('TIMEOUT-UNFINISHED');await expect(page.locator('#profile')).toHaveValue('JA');expect(await page.evaluate(()=>window.connectCalls)).toBe(2);expect(await page.evaluate(()=>localStorage.getItem('decompro.workspaceLocked'))).toBeNull();
+});
+
+test('wrong password and membership errors after timeout remain distinct and allow retry without losing the scan',async({page})=>{
+ await page.clock.install();await delayedSignoutTeam(page);await page.goto('/');await signin(page);await page.locator('#scan').fill('KEEP-AFTER-TIMEOUT');await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();await page.evaluate(()=>window.finishSignout());
+ await page.getByRole('button',{name:'Sign in to DecomPro',exact:true}).click();await page.getByLabel('Password',{exact:true}).fill('incorrect-test-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#database-error')).toContainText('email or password was not accepted');await expect(page.getByLabel('Password',{exact:true})).toHaveValue('');await expect(page.getByLabel('Team account email')).toHaveValue('tech@example.invalid');
+ await page.evaluate(()=>window.denyMembership=true);await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#database-error')).toContainText('Team access was denied');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('KEEP-AFTER-TIMEOUT');
+ await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#connection-status')).toContainText('Database connected');await expect(page.locator('#scan')).toHaveValue('KEEP-AFTER-TIMEOUT');
+});
+
+test('a stalled sign-out gives recovery guidance without trying credentials against the pending session',async({page})=>{
+ await page.clock.install();await delayedSignoutTeam(page);await page.goto('/');await signin(page);await page.locator('#scan').fill('STALLED-SIGNOUT-DRAFT');await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();await page.getByRole('button',{name:'Sign in to DecomPro',exact:true}).click();await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.getByRole('button',{name:'Finishing sign-out…',exact:true})).toBeDisabled();
+ await page.clock.fastForward('00:16');await expect(page.locator('#database-error')).toContainText('Refresh this page');expect(await page.evaluate(()=>window.connectCalls)).toBe(1);await expect(page.getByLabel('Password',{exact:true})).toHaveValue('');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('STALLED-SIGNOUT-DRAFT');
+ await page.reload();await expect(page.locator('.workspace-lock')).toBeVisible();await signin(page);await expect(page.locator('#scan')).toHaveValue('STALLED-SIGNOUT-DRAFT');
 });
