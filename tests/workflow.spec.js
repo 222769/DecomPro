@@ -45,7 +45,7 @@ test('asset numbers require A and four digits, normalize case, and permit N/A sk
 test('built-in Summer reference recognises TG22681204 without import and keeps ambiguous patterns manual',async({page})=>{
  await page.goto('/');
  await expect(page.locator('#station')).not.toContainText('Serial recognition ready');
- await page.getByRole('button',{name:'Open settings'}).click();await expect(page.locator('#settings-dialog')).toContainText('Serial recognition ready');await expect(page.locator('#settings-dialog')).toContainText('321 built-in spreadsheet references');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.getByRole('button',{name:'Open settings'}).click();await expect(page.locator('#settings-dialog')).toContainText('Serial recognition ready');await expect(page.locator('#settings-dialog')).toContainText('1527 built-in spreadsheet references');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await scan(page,'tg22681204');
  await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  await expect(page.getByRole('status')).toContainText('Known serial: 10ET185A · Edgeio');
@@ -741,7 +741,7 @@ test('imported suffix families fill model and manufacturer for changing starts a
 
 test('spreadsheet analysis families recognise changing Toshiba middles and keep ambiguous assembler brands manual',async({page})=>{
  await page.goto('/');await scan(page,'I0X554880RSSKC902300JENB');
- await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Starts I; 24 characters');
+ await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('#model-candidate')).toContainText('L850');await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('0JENB');
  await page.reload();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Toshiba');
  page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item',exact:true}).click();await scan(page,'ST348722');
  await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveCount(0);

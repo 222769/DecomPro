@@ -69,7 +69,10 @@ export function recognizeSerial(value,examples) {
  // every matching fact so contradictory labels cannot be hidden by proximity.
  let suffixConflict=null;
  for(let length=Math.min(12,serial.length-3);length>=4;length--) {
-  const suffix=serial.slice(-length),family=facts.filter(f=>f.serial.length>=length+3&&f.serial.endsWith(suffix));
+  const suffix=serial.slice(-length);
+  // Short numeric endings such as -001 are counters shared by unrelated devices.
+  if(length===4&&!/[A-Z]/.test(suffix))continue;
+  const family=facts.filter(f=>f.serial.length>=length+3&&f.serial.endsWith(suffix));
   if(new Set(family.map(f=>f.serial)).size<3||new Set(family.map(f=>f.serial.slice(0,-length))).size<2)continue;
   const result={...describe(family,'pattern'),suffix,format:''};
   if(result.method!=='conflict')return result;
@@ -139,11 +142,13 @@ export async function referenceRowsFromWorkbook(buffer) {
    if(found['serial number']&&found.model&&found.manufacturer){columns=found;start=r+1;break;}
   }
   if(!columns)continue;usableSheets++;
-  for(let r=start;r<=sheet.rowCount;r++) {
-   const row=sheet.getRow(r),serial=row.getCell(columns['serial number']).text.trim(),model=row.getCell(columns.model).text.trim(),manufacturer=row.getCell(columns.manufacturer).text.trim();
-   if(!serial&&!model&&!manufacturer)continue;
-   rows.push({serial,model,manufacturer,source:`Excel · ${sheet.name}`,sheet:sheet.name,row:r});
-  }
+  // Iterate populated rows rather than allocating blank rows up to a formatting-only tail.
+  sheet.eachRow(row=>{
+   if(row.number<start)return;
+   const serial=row.getCell(columns['serial number']).text.trim(),model=row.getCell(columns.model).text.trim(),manufacturer=row.getCell(columns.manufacturer).text.trim();
+   if(!serial&&!model&&!manufacturer)return;
+   rows.push({serial,model,manufacturer,source:`Excel · ${sheet.name}`,sheet:sheet.name,row:row.number});
+  });
  }
  if(!usableSheets)throw Error('No sheet has Serial Number, Model and Manufacturer headings.');
  return rows;
