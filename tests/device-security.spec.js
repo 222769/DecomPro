@@ -1,3 +1,4 @@
+import {configureBatch} from './helpers/batch.js';
 import {test,expect} from '@playwright/test';
 
 async function mockTeam(page) {
@@ -51,7 +52,7 @@ test('locking one team tab also locks another open tab without clearing its scan
 });
 
 test('empty scan locks reconnect safely and legacy blank drafts recover without losing equipment or accepted serials',async({page})=>{
- await mockTeam(page);await page.goto('/');await page.locator('#voice').click();
+ await mockTeam(page);await page.goto('/');await page.locator('#voice').click();await configureBatch(page);
  await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.items=[{...state.defaults,id:'recovery-item',serial:'SAVED-EQUIPMENT',model:'Known model',manufacturer:'Dell',asset:'N/A',barcode:'N/A',etch:'N/A',technician:state.active,trolleyId:state.trolleys[0].id}];localStorage.setItem('decompro.v1',JSON.stringify(state));});
  await signin(page);await page.getByRole('button',{name:'Lock workspace',exact:true}).click();await expect(page.locator('.workspace-lock')).toBeVisible();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBeUndefined();await signin(page);await page.locator('#scan').fill('UNFINISHED-SERIAL');await page.locator('#scan').press('Enter');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Lock workspace',exact:true}).click();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBeUndefined();
@@ -132,7 +133,7 @@ async function cachedAuthTeam(page){
  }
  export async function disconnectFirebaseAuth(){window.cachedAuth=false;}
  `}));
- await page.goto('/');await page.locator('#station').waitFor({state:'attached'});await page.locator('#voice').click();
+ await page.goto('/');await page.locator('#station').waitFor({state:'attached'});await page.locator('#voice').click();await configureBatch(page);
  await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1')),trolley=state.trolleys[0];sessionStorage.setItem('test.remote',JSON.stringify({items:[{...state.defaults,id:'safe-record',trolleyId:trolley.id,trolley:trolley.name,serial:'SAFE-0001',model:'Known model',manufacturer:'Dell',asset:'A0001',barcode:'N/A',etch:'N/A',technician:'JA'}],trolleys:state.trolleys,examples:[],corrections:[]}));});
  await signin(page);await page.locator('#scan').fill('CACHED-SESSION-DRAFT');await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();
 }

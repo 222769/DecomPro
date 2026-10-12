@@ -1,3 +1,4 @@
+import {configureBatch} from './helpers/batch.js';
 import {test,expect} from '@playwright/test';
 import {createTrolley} from '../src/trolleys.js';
 import {defaultSettings} from '../src/workspace.js';
@@ -33,7 +34,7 @@ test('an equipment edit stays open while Firebase confirms it and only submits o
  await page.evaluate(()=>window.finishEdit());await expect(page.locator('#edit-dialog')).not.toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('P2419H');
 });
 
-async function readyToSave(page){await page.goto('/');await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');for(const value of ['SAVE-TEST-NEW','Manual model','N/A','N/A','A1234']){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}await expect(page.locator('#save')).toBeVisible();}
+async function readyToSave(page){await page.goto('/');await configureBatch(page);for(const value of ['SAVE-TEST-NEW','Manual model','N/A','N/A','A1234']){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}await expect(page.locator('#save')).toBeVisible();}
 test('save preparation errors appear beneath the button and allow a successful retry with the draft preserved',async({page})=>{
  await readyToSave(page);await page.evaluate(()=>{const original=window.FormData;window.restoreSaveForm=()=>window.FormData=original;window.FormData=class extends original{constructor(form){if(form?.id==='defaults')throw Error('Save preparation test failure');super(form);}};});
  await page.locator('#save').click();await expect(page.locator('#save-feedback')).toContainText('Save preparation test failure');await expect(page.locator('#save')).toBeEnabled();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('SAVE-TEST-NEW');

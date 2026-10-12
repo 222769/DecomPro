@@ -332,3 +332,5 @@ footer .app-version{display:block;margin-top:6px;font-size:11px;color:var(--mute
 #settings-dialog .app-version{font-size:12px;color:var(--muted)}
 #app-build-info p{line-height:1.9;overflow-wrap:anywhere}
 .workspace-lock .app-version{font-size:11px;margin-top:20px}
+.defaults .retain-defaults{display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.5;padding:12px;border:1px solid var(--border);border-radius:10px}
+.defaults .retain-defaults input{width:18px;height:18px;flex:0 0 18px;margin:0;padding:0}

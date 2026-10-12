@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
+import {createTrolley} from '../src/trolleys.js';
 async function scan(page,value){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
-async function seed(page,facts){await page.goto('/');await page.locator('#voice').click();await page.evaluate(facts=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.referenceExamples=facts;localStorage.setItem('decompro.v1',JSON.stringify(state));},facts);await page.reload();}
+async function seed(page,facts){await page.goto('/');await page.locator('#voice').click();await page.evaluate(({facts,trolley})=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.referenceExamples=facts;state.defaults={date:'2026-10-12',description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:trolley.name};state.trolleys=[trolley];state.activeTrolleyId=trolley.id;state.settings.keepBatchDefaults=true;localStorage.setItem('decompro.v1',JSON.stringify(state));},{facts,trolley:createTrolley('Trolley 01')});await page.reload();}
 const refs=[{serial:'QA-LAPTOP-001',model:'G15',manufacturer:'Lenovo',description:'Laptop',source:'Excel'},{serial:'QA-SCREEN-001',model:'QA Display',manufacturer:'Other maker',description:'Monitor',source:'Excel'}];
 test('recognition sets this item description, saves it, and restores batch type for the next scan',async({page})=>{
  await seed(page,refs);await scan(page,refs[0].serial);await expect(page.locator('#default-description')).toHaveValue('Laptop');await page.reload();await expect(page.locator('#default-description')).toHaveValue('Laptop');

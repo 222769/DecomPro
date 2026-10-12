@@ -1,9 +1,10 @@
+import {ensureTrolley} from './helpers/batch.js';
 import {test,expect} from '@playwright/test';
 import ExcelJS from 'exceljs';
 import {headers} from '../src/data.js';
 async function workbook(rows){const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Previous decom');sheet.addRow([...headers,'Asset Number']);rows.forEach(row=>sheet.addRow(row));return {name:'Previous decom.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())};}
 const equipment=(serial,asset='N/A')=>['16/02/2026','Monitor','Historical model','Example maker','Storage',serial,'000007','009090',asset,'EOL','OLD'];
-async function open(page,rows){await page.getByRole('button',{name:'Import equipment Excel'}).click();await expect(page.getByRole('heading',{name:'Import equipment into register'})).toBeVisible();await page.getByLabel('Equipment spreadsheet (.xlsx)').setInputFiles(await workbook(rows));await expect(page.locator('#equipment-import-message')).toContainText('equipment rows loaded');}
+async function open(page,rows){await ensureTrolley(page);await page.getByRole('button',{name:'Import equipment Excel'}).click();await expect(page.getByRole('heading',{name:'Import equipment into register'})).toBeVisible();await page.getByLabel('Equipment spreadsheet (.xlsx)').setInputFiles(await workbook(rows));await expect(page.locator('#equipment-import-message')).toContainText('equipment rows loaded');}
 test('register Excel importer appends historical records, preserves draft and references, exports and continues scanning',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/');await page.locator('#scan').fill('UNFINISHED-001');await page.locator('#scan').press('Enter');
  const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));

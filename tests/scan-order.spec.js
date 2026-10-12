@@ -1,7 +1,8 @@
+import {configureBatch} from './helpers/batch.js';
 import {test,expect} from '@playwright/test';
 
 test('saved items show their recording order with newest first and retain numbers through search and reload',async({page})=>{
- await page.goto('/#station');await page.getByLabel('Manufacturer',{exact:true}).fill('Manual maker');
+ await page.goto('/#station');await configureBatch(page);await page.getByLabel('Manufacturer',{exact:true}).fill('Manual maker');
  for(let i=1;i<=3;i++){
   for(const value of [`ORDER-${i}`,'N/A','N/A','N/A',`A000${i}`]){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
   await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(i);

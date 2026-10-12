@@ -1,3 +1,4 @@
+import {configureBatch} from './helpers/batch.js';
 import { test, expect } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { headers } from '../src/data.js';
@@ -10,10 +11,7 @@ async function readyTrolley(page,card=page) {
  await page.getByLabel('I checked these items and any recorded exceptions').check();
  await page.getByRole('button',{name:'Mark ready for collection',exact:true}).click();
 }
-async function defaults(page) {
- await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
- await page.getByRole('button',{name:'Apply batch defaults'}).click();
-}
+async function defaults(page) {await configureBatch(page);await page.getByRole('button',{name:'Apply batch defaults'}).click();}
 async function scan(page,value) {await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
 async function item(page,serial='00001234') {
  await scan(page,serial);
@@ -61,7 +59,7 @@ test('built-in Summer reference recognises TG22681204 without import and keeps a
 });
 
 test('10LL family fills Lenovo model for a new suffix and needs technician confirmation',async({page})=>{
- await page.goto('/');await scan(page,'10LLNEW123ABC');
+ await page.goto('/');await configureBatch(page);await scan(page,'10LLNEW123ABC');
  await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  await expect(page.getByRole('status')).toContainText('Pattern suggestion (prefix 10LL): TIO24D · Lenovo');
  await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Lenovo');
@@ -156,7 +154,7 @@ test('trolley management creates labels, barcode inventory views and retained co
 });
 
 test('save uses typed batch defaults without requiring a separate Apply click',async({page})=>{
- await page.goto('/');
+ await page.goto('/');await configureBatch(page);
  await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
  await item(page,'DIRECT-SAVE-001');
  await page.getByRole('button',{name:'Save item & start next'}).click();
@@ -166,7 +164,7 @@ test('save uses typed batch defaults without requiring a separate Apply click',a
 });
 
 test('missing batch defaults are explained beside Save and the draft is kept',async({page})=>{
- await page.goto('/');await item(page,'MISSING-DEFAULT-001');
+ await page.goto('/');await configureBatch(page);await page.locator('#default-manufacturer').fill('');await item(page,'MISSING-DEFAULT-001');
  await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('#save-feedback')).toContainText('Enter manufacturer before saving');
  await expect(page.getByLabel('Manufacturer',{exact:true})).toHaveAttribute('aria-invalid','true');await expect(page.locator('#save-feedback')).toBeFocused();
@@ -341,7 +339,7 @@ test('spreadsheet training recognises the first serial and keeps manufacturer pe
  const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Reference');sheet.addRow(['Serial Number','Model','Manufacturer']);
  for(const serial of ['REF101','REF102','REF103'])sheet.addRow([serial,'Learned model','Learned maker']);
  const buffer=await book.xlsx.writeBuffer();
- await page.goto('/');page.on('dialog',d=>d.accept());
+ await page.goto('/');await configureBatch(page);page.on('dialog',d=>d.accept());
  await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'training.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(buffer)});
  await approveImport(page);await expect(page.locator('.alert[role="status"]')).toContainText('Imported 3 reference examples');
  await expect(page.locator('#search-count')).toHaveText('Showing 0 of 0 items');
@@ -430,7 +428,7 @@ test('connection check reports server results and failures while retaining the s
 test('a new serial uses the specific prefix family and conflicting families offer reviewed choices',async({page})=>{
  const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('References');sheet.addRow(['Serial Number','Model','Manufacturer']);
  for(const serial of ['ZZQQPRO1001','ZZQQPRO1XYZ','ZZQQPRO1777'])sheet.addRow([serial,'Pro display','Example maker']);for(const serial of ['ZZQQLITE001','ZZQQLITEABC'])sheet.addRow([serial,'Lite display','Example maker']);
- await page.goto('/');page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'families.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await approveImport(page);await expect(page.locator('.alert[role="status"]')).toContainText('Imported 5 reference examples');
+ await page.goto('/');await configureBatch(page);page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'families.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await approveImport(page);await expect(page.locator('.alert[role="status"]')).toContainText('Imported 5 reference examples');
  await scan(page,'ZZQQPRO1999');await expect(page.getByRole('status')).toContainText('Pattern suggestion');await expect(page.getByRole('status')).toContainText('Pro display');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Clear current item'}).click();await scan(page,'ZZQQNEW9999');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('.model-candidates')).toContainText('Prefix ZZQQ');
  const option=page.locator('#model-candidate option').filter({hasText:'Lite display'});await page.locator('#model-candidate').selectOption(await option.getAttribute('value'));await page.getByRole('button',{name:'Use selected model'}).click();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');
@@ -457,7 +455,7 @@ test('shared technicians receive reviewed models but cannot change the reference
 });
 
 test('nearby Posiflex serial prefills from the spreadsheet and requires label confirmation before learning',async({page})=>{
- await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Serial family suggestion (prefix 001917BD3; reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
+ await page.goto('/');await configureBatch(page);await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Serial family suggestion (prefix 001917BD3; reference 001917BD323B): XTE30722 · posiflex');await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
  for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(0);
  await page.getByLabel('I checked the suggested model and manufacturer').check();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('001917BD324B');await expect(page.locator('tbody')).toContainText('XTE30722');await page.reload();await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial');
 });
@@ -466,7 +464,7 @@ test('manufacturer-only recognition keeps model entry open, survives refresh and
  page.on('dialog',dialog=>dialog.accept());
  await page.addInitScript(()=>{window.prompts=[];Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},speak(u){window.prompts.push(u.text)}}});});
  const book=new ExcelJS.Workbook(),sheet=book.addWorksheet('Previous decom');sheet.addRow(['Serial Number','Model','Manufacturer']);sheet.addRow(['BRND1001','Display 24','Example maker']);sheet.addRow(['BRND1002','Display 27','Example maker']);
- await page.goto('/');await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'brands.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await approveImport(page);await expect(page.locator('.alert[role="status"]')).toContainText('Imported 2 reference examples');
+ await page.goto('/');await configureBatch(page);await page.getByRole('button',{name:'Open settings'}).click();await page.locator('#reference-file').setInputFiles({name:'brands.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(await book.xlsx.writeBuffer())});await approveImport(page);await expect(page.locator('.alert[role="status"]')).toContainText('Imported 2 reference examples');
  await scan(page,'BRND1999');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');await expect(page.locator('#scan')).toHaveValue('');await expect(page.getByRole('status')).toContainText('Manufacturer suggestion: Example maker');await expect(page.getByRole('status')).toContainText('2 distinct supporting examples');await expect(page.locator('.model-candidates')).toContainText('Prefix BRND');expect(await page.evaluate(()=>window.prompts.at(-1))).toBe('Suggested manufacturer, Example maker. Model is uncertain. Next, model number.');
  await page.reload();await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('Example maker');
  await scan(page,'Label-verified display');await page.getByLabel('Manufacturer for this item').fill('Verified maker');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');
@@ -503,7 +501,7 @@ test('shared preview rechecks Firebase evidence before importing and requires re
 });
 
 test('scan evidence persists and a reviewed correction preserves other scans and teaches the corrected serial',async({page})=>{
- await page.goto('/');await scan(page,'001917BD324B');await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Built-in Excel');await expect(page.locator('.recognition-evidence')).toContainText('1 distinct serial');await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');await scan(page,'BARCODE-KEEP');const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await page.reload();await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');
+ await page.goto('/');await configureBatch(page);await scan(page,'001917BD324B');await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Built-in Excel');await expect(page.locator('.recognition-evidence')).toContainText('1 distinct serial');await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');await scan(page,'BARCODE-KEEP');const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await page.reload();await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');
  await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByLabel('Checked model',{exact:true}).fill('Verified terminal model');await page.getByLabel('Checked manufacturer',{exact:true}).fill('Verified maker');await page.getByLabel('Reason for correction').fill('Read actual equipment label');await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.getByRole('heading',{name:'Correct this suggestion'})).toBeVisible();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await page.getByLabel('I checked these corrected details').check();await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.locator('.recognition-evidence')).toContainText('Corrected after a label check');const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(saved.draft.barcode).toBe('BARCODE-KEEP');expect(saved.draft.model).toBe('Verified terminal model');expect(saved.referenceCorrections[0].serial).toBe('001917BD324B');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backupPath=await (await download).path();const backup=JSON.parse(await readFile(backupPath,'utf8'));expect(backup.state.draft.recognitionEvidence.referenceSerials).toEqual(['001917BD323B']);await page.getByRole('button',{name:'Clear current item'}).click();await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();await expect(page.locator('.recognition-evidence')).toContainText('Corrected after a label check');
  for(let i=0;i<2;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('Verified terminal model');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial: Verified terminal model · Verified maker');await expect(page.locator('.recognition-evidence')).toContainText('Reviewed correction');
@@ -514,7 +512,7 @@ test('ordinary shared technician corrects the current item without writing admin
 });
 
 test('evidence distinguishes manufacturer-only uncertainty and manual edits require another check',async({page})=>{
- await page.goto('/');await scan(page,'TG22681024');await expect(page.locator('.recognition-evidence')).toContainText('Manufacturer inferred; model uncertain.');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByLabel('Checked model',{exact:true}).fill('Checked display');await page.getByLabel('Checked manufacturer',{exact:true}).fill('Edgeio');await page.getByLabel('Save a reviewed reference for future scans').uncheck();await page.getByLabel('I checked these corrected details').check();await page.getByRole('button',{name:'Apply checked correction'}).click();await page.getByRole('button',{name:'Previous field'}).click();await scan(page,'Edited again');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');await expect(page.locator('.recognition-evidence')).toContainText('Edited details need a fresh label check');
+ await page.goto('/');await configureBatch(page);await scan(page,'TG22681024');await expect(page.locator('.recognition-evidence')).toContainText('Manufacturer inferred; model uncertain.');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByLabel('Checked model',{exact:true}).fill('Checked display');await page.getByLabel('Checked manufacturer',{exact:true}).fill('Edgeio');await page.getByLabel('Save a reviewed reference for future scans').uncheck();await page.getByLabel('I checked these corrected details').check();await page.getByRole('button',{name:'Apply checked correction'}).click();await page.getByRole('button',{name:'Previous field'}).click();await scan(page,'Edited again');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('tick the confirmation');await expect(page.locator('.recognition-evidence')).toContainText('Edited details need a fresh label check');
 });
 
 test('shared administrator correction failures preserve the scan and retry with the reviewed version',async({page})=>{
@@ -574,7 +572,7 @@ test('readiness reviews missing details and guesses, requires duplicate fixes, p
 });
 
 test('empty trolley cannot be ready and failed local review writes leave the inventory unchanged',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();await expect(page.locator('.readiness-summary')).toContainText('Add equipment');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await page.getByRole('button',{name:'Back to trolleys'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
+ await page.goto('/');await configureBatch(page);await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();await expect(page.locator('.readiness-summary')).toContainText('Add equipment');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await page.getByRole('button',{name:'Back to trolleys'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
  await defaults(page);await item(page,'REVIEW-FAIL');await page.getByRole('button',{name:'Save item & start next'}).click();await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.items[0].model='N/A';localStorage.setItem('decompro.v1',JSON.stringify(state));});await page.reload();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.getByRole('button',{name:'Readiness checks',exact:true}).click();const original=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByLabel('Why is model unavailable?').fill('Checked; label missing');
  await page.evaluate(()=>{const original=Storage.prototype.setItem;window.restoreReviewStorage=()=>Storage.prototype.setItem=original;Storage.prototype.setItem=function(key,value){if(key==='decompro.v1')throw new DOMException('Storage full','QuotaExceededError');return original.call(this,key,value);};});
  await page.getByRole('button',{name:'Save review notes'}).click();await expect(page.locator('.review-error')).toContainText('Storage full');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(original);await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await page.evaluate(()=>window.restoreReviewStorage());
@@ -600,7 +598,7 @@ test('shared readiness preserves failed review notes, rejects stale approval and
 });
 
 test('new Posiflex suffixes infer from built-in Excel, retain evidence and require checking before becoming learned exact matches',async({page})=>{
- await page.goto('/');
+ await page.goto('/');await configureBatch(page);
  for(const serial of ['001917BD365B','001917BD354B']) {
   await scan(page,serial);await expect(page.getByRole('heading',{name:'Barcode',exact:true})).toBeVisible();await expect(page.getByLabel('Manufacturer for this item')).toHaveValue('posiflex');
   await expect(page.getByRole('status')).toContainText('Serial family suggestion (prefix 001917BD3; reference 001917BD323B): XTE30722 · posiflex');

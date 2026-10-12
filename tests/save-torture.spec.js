@@ -1,6 +1,7 @@
+import {configureBatch} from './helpers/batch.js';
 import {test,expect} from '@playwright/test';
 async function scan(page,value){await page.locator('#scan').fill(value);await page.locator('#scan').press('Enter');}
-async function complete(page,serial='QA-PENDING-001'){await page.goto('/');await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');for(const value of [serial,'Model One','0000123','N/A','A0001'])await scan(page,value);}
+async function complete(page,serial='QA-PENDING-001'){await page.goto('/');await configureBatch(page);for(const value of [serial,'Model One','0000123','N/A','A0001'])await scan(page,value);}
 async function slowDatabase(page){const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'application/javascript',body:`export async function connectFirebase(){return {uid:'stress',profile:{name:'Jawad',code:'JA'},role:'technician',email:'qa@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,phase){phase('connected')},async load(){return {items:[],trolleys:${JSON.stringify(state.trolleys)},examples:[],corrections:[]}},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},async write(item){window.qaWrites=(window.qaWrites||0)+1;window.qaSent=item;await new Promise((resolve,reject)=>{window.qaResolve=resolve;window.qaReject=()=>reject(Error('QA connection interrupted'))})},async logout(){}}}` }));await page.getByRole('button',{name:'Shared database',exact:true}).click();await page.getByLabel('Team account email').fill('qa@example.invalid');await page.getByLabel('Password',{exact:true}).fill('qa-only');await page.getByRole('button',{name:'Sign in & connect'}).click();}
 
 test('editing a field during a pending save cannot discard the newer scan values',async({page})=>{
@@ -17,7 +18,7 @@ test('oversized serial input is rejected before it can corrupt the persisted dra
 });
 
 test('back and forth corrections, leading zeroes, text symbols, repeated clicks and N/A serials preserve exact records',async({page})=>{
- await page.goto('/');await page.getByLabel('Manufacturer',{exact:true}).fill('Dell');
+ await page.goto('/');await configureBatch(page);
  const expected=[];
  for(let i=0;i<6;i++){
   const serial=i<4?`QA-STRESS-${i}`:'N/A',model=`Model <>& ${i}`,barcode=`00000${i}`,asset=`A000${i}`;

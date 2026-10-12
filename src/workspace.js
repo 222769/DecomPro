@@ -16,7 +16,8 @@ export const defaultFields = [
   ['reason', 'Reason for disposal', 'text'],
   ['trolley', 'Caged trolley', 'text'],
 ];
-export const defaultSettings = { speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: true };
+export const blankBatchDefaults = (trolley='') => Object.fromEntries(defaultFields.map(([key])=>[key,key==='trolley'?trolley:'']));
+export const defaultSettings = { keepBatchDefaults:false, speechRate: .92, speechVolume: 1, skipWindow: 700, reuseModel: false, batchModel: '', voiceURI: '', serialFirst: true };
 const text = (value, allowEmpty = false) => typeof value === 'string' && (allowEmpty || value.trim().length > 0);
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -52,7 +53,7 @@ export function validateWorkspace(value) {
     if (!text(value.defaults[key], true)) throw Error('The backup has invalid batch defaults.');
     defaults[key] = value.defaults[key];
   }
-  if (!validDate(defaults.date)) throw Error('The backup has an invalid disposal date.');
+  if (defaults.date!==''&&!validDate(defaults.date)) throw Error('The backup has an invalid disposal date.');
   const ids = new Set();
   const items = value.items.map(item => {
     if (!item || !text(item.id) || ids.has(item.id) || !text(item.technician) || !validDate(item.date)) throw Error('The backup has invalid or repeated item IDs or dates.');
@@ -91,6 +92,7 @@ export function validateWorkspace(value) {
         !Number.isFinite(input.speechVolume) || input.speechVolume < 0 || input.speechVolume > 1 ||
         !Number.isInteger(input.skipWindow) || input.skipWindow < 300 || input.skipWindow > 1500 ||
         (input.serialFirst !== undefined && typeof input.serialFirst !== 'boolean') ||
+        (input.keepBatchDefaults !== undefined && typeof input.keepBatchDefaults !== 'boolean') ||
         (input.voiceURI !== undefined && !text(input.voiceURI, true)) ||
         typeof input.reuseModel !== 'boolean' || !text(input.batchModel, true) || (input.reuseModel && !input.batchModel.trim())) {
       throw Error('The workspace has invalid scanner or voice settings.');
