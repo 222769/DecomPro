@@ -229,9 +229,10 @@ service cloud.firestore {
    }
    match /references/{reference} {
     allow read: if member(team);
-    allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','source','importedBy','importedAt'])
+    allow create, update: if member(team) && request.resource.data.keys().hasOnly(['serial','model','manufacturer','description','source','importedBy','importedAt'])
      && boundedText(request.resource.data.serial) && boundedText(request.resource.data.model)
      && boundedText(request.resource.data.manufacturer) && request.resource.data.source is string && request.resource.data.source.size()<=1000
+     && request.resource.data.get('description','') is string && request.resource.data.get('description','').size()<=1000
      && request.resource.data.importedBy==request.auth.uid && request.resource.data.importedAt==request.time;
     allow delete: if admin(team);
    }

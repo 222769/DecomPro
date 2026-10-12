@@ -1,18 +1,20 @@
+import { normalizeEquipmentDescription } from './equipment-types.js';
 const meaningful = value => typeof value === 'string' && value.trim() && !/^(n\/?a|unknown|none|-|not known)$/i.test(value.trim());
 export const normalizeSerial = value => String(value ?? '').trim().toUpperCase();
 const labelKey = fact => `${fact.model.trim().toLowerCase()}\u0000${fact.manufacturer.trim().toLowerCase()}`;
 const shape = serial => serial.replace(/[A-Z]/g,'A').replace(/[0-9]/g,'9');
 export function cleanExamples(examples) {
- const unique=new Map();
+ const unique=new Map(),descriptions=new Map();
  for(const row of examples) {
   if(row.recognitionNeedsReview===true&&row.recognitionConfirmed!==true)continue;
   if(!meaningful(row.serial)||!meaningful(row.model)||!meaningful(row.manufacturer))continue;
   const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:typeof row.source==='string'?row.source:'Confirmed record'};
   const key=`${fact.serial}\u0000${labelKey(fact)}`,previous=unique.get(key);
+  const types=descriptions.get(key)||new Set();const type=normalizeEquipmentDescription(row.description);if(type)types.add(type);descriptions.set(key,types);
   if(previous)fact.source=[...new Set([...previous.source.split(' | '),...fact.source.split(' | ')])].join(' | ');
   unique.set(key,fact);
  }
- return [...unique.values()];
+ return [...unique].map(([key,fact])=>descriptions.get(key).size===1?{...fact,description:[...descriptions.get(key)][0]}:fact);
 }
 export function recognizeSerial(value,examples) {
  const serial=normalizeSerial(value);if(!meaningful(serial))return null;
@@ -138,7 +140,7 @@ export async function referenceRowsFromWorkbook(buffer) {
  for(const sheet of workbook.worksheets) {
   let columns=null,start=0;
   for(let r=1;r<=Math.min(30,sheet.rowCount);r++) {
-   const found={};sheet.getRow(r).eachCell((cell,c)=>{const label=cell.text.trim().toLowerCase().replace(/\s+/g,' ');if(['serial number','model','manufacturer'].includes(label))found[label]=c;});
+   const found={};sheet.getRow(r).eachCell((cell,c)=>{const label=cell.text.trim().toLowerCase().replace(/\s+/g,' ');if(['serial number','model','manufacturer'].includes(label))found[label]=c;if(['description','equipment description','equipment type'].includes(label))found.description=c;});
    if(found['serial number']&&found.model&&found.manufacturer){columns=found;start=r+1;break;}
   }
   if(!columns)continue;usableSheets++;
@@ -147,7 +149,7 @@ export async function referenceRowsFromWorkbook(buffer) {
    if(row.number<start)return;
    const serial=row.getCell(columns['serial number']).text.trim(),model=row.getCell(columns.model).text.trim(),manufacturer=row.getCell(columns.manufacturer).text.trim();
    if(!serial&&!model&&!manufacturer)return;
-   rows.push({serial,model,manufacturer,source:`Excel · ${sheet.name}`,sheet:sheet.name,row:row.number});
+   rows.push({serial,model,manufacturer,...(columns.description?{description:row.getCell(columns.description).text.trim()}:{}),source:`Excel · ${sheet.name}`,sheet:sheet.name,row:row.number});
   });
  }
  if(!usableSheets)throw Error('No sheet has Serial Number, Model and Manufacturer headings.');

@@ -5,7 +5,7 @@ export function buildImportPreview(rows,existing,corrections=[]) {
  const known=cleanExamples([...existing,...corrections.filter(c=>c.mode==='corrected')]),knownKeys=new Set(known.map(factKey)),bySerial=new Map(),incoming=new Map(),seen=new Set();
  for(const f of known){const facts=bySerial.get(f.serial)||[];facts.push(f);bySerial.set(f.serial,facts);}
  const prepared=rows.map((row,id)=>{
-  const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:row.source};
+  const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:row.source,...(row.description?{description:row.description}:{})};
   const missing=['serial','model','manufacturer'].filter(key=>!valid(fact[key]));
   const key=factKey(fact);if(!missing.length){const labels=incoming.get(fact.serial)||new Set();labels.add(key);incoming.set(fact.serial,labels);}
   return {id,fact,sheet:row.sheet,row:row.row,missing,key};

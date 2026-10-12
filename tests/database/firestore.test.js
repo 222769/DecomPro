@@ -99,8 +99,10 @@ test('trolley moves preserve disposal attribution, expose immutable actor histor
 test('serial index escaping is collision-free and spreadsheet examples are idempotent',async()=>{
  const client=createTeamStore(context('tech'),'tech','college-it',member);
  await client.write(sample('with-slash','AB/C~D'));await client.write(sample('literal-escape','AB~sC~D'));
- const facts=[{serial:'0001',model:'Test model',manufacturer:'Test maker',source:'Excel'}];await client.importExamples(facts);await client.importExamples(facts);
- assert.equal((await client.load()).examples.length,1);
+ const facts=[{serial:'0001',model:'Test model',manufacturer:'Test maker',description:'Laptop',source:'Excel'}];await client.importExamples(facts);await client.importExamples(facts);
+ const loaded=(await client.load()).examples;assert.equal(loaded.length,1);assert.equal(loaded[0].description,'Laptop');
+ await assertFails(setDoc(doc(context('tech'),'teams/college-it/references/invalid-type'),{...facts[0],description:42,importedBy:'tech',importedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(context('tech'),'teams/college-it/references/oversized-type'),{...facts[0],description:'x'.repeat(1001),importedBy:'tech',importedAt:serverTimestamp()}));
 });
 
 test('trolley references, inventory and collection history commit together and reject later equipment changes',async()=>{

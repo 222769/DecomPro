@@ -1,3 +1,4 @@
+import { suggestEquipmentDescription } from './equipment-types.js';
 import {findRescanItem} from './trolley-rescan.js';
 import {createTestWorkspace} from './test-workspace.js';
 import {readDevicePreferences,saveDevicePreferences,idleExpired} from './device-preferences.js';
@@ -121,9 +122,10 @@ function render() {
  ${state.settings.reuseModel?`<div class="batch-model-chip">Batch model <strong>${escape(state.settings.batchModel)}</strong></div>`:''}<div class="scan-icon">${icon(current?'barcode':'check')}</div><div class="scan-label">${current?`FIELD ${state.step+1} OF ${fields.length}`:'READY TO RECORD'}</div><h2>${current?escape(current[1]):'Review this equipment'}</h2><p>${current?'Scan the label or type its value, then press Enter.':'Check the values below, then save this item to the collection register.'}</p>
  ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" ${state.collectionPaused?'disabled':''} autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(pendingScan?.step===state.step&&pendingScan.collectionId===state.activeCollectionId?pendingScan.value:state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
  ${recognitionEvidenceCard()}
+ ${state.draft.description!==undefined?`<p class="note">Equipment description: <strong>${escape(state.draft.description)}</strong>. Check or edit it in the defaults panel.</p>`:''}
  ${modelCandidates.length?`<div class="model-candidates"><strong>Choose a matching model</strong><p>${modelMatch.suffix?`Serial ending ${escape(modelMatch.suffix)}${modelMatch.format?` · format ${escape(modelMatch.format)}`:''}`:modelMatch.prefix?`Prefix ${escape(modelMatch.prefix)}`:'This serial'} has ${modelCandidates.length>1?'conflicting reference models':'reference models'} to check. Confirm the equipment label before choosing.</p><label for="model-candidate">Reference model and manufacturer</label><select id="model-candidate"><option value="">Choose a suggestion…</option>${modelCandidates.map((candidate,index)=>`<option value="${index}">${escape(candidate.model)} · ${escape(candidate.manufacturer)} (${candidate.support} example${candidate.support===1?'':'s'})</option>`).join('')}</select><button type="button" class="secondary" id="use-model-candidate">Use selected model</button><p>You can also scan or type the model above.</p></div>`:''}
  ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>`}
- <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" maxlength="1000" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
+ <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(k==='description'?state.draft.description??state.defaults[k]:state.defaults[k])}" maxlength="1000" required>`).join('')}${state.draft.description!==undefined?'<p class="note">Recognised equipment description applies to this item. Check it before saving; your batch default stays unchanged.</p>':''}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="register-filters"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="collection-filter-field"><label for="collection-register-filter">Collection inventory</label><select id="collection-register-filter"></select></div></div><div class="backup-actions"><button class="secondary" id="equipment-import">Import equipment Excel</button><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="bulk-move-tools"></div><div id="review-filter"></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th class="selection-cell"><input type="checkbox" id="select-visible" aria-label="Select visible equipment"></th><th class="scan-order-cell" scope="col" title="Order recorded in this workspace">No.</th><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. The collection filter applies when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-review" class="card collection-review" aria-label="Collection review" hidden></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><button class="secondary" id="prepare-history-handover">Prepare handover pack</button><div id="handover-history"></div><div id="history-results"></div></section>
@@ -173,6 +175,13 @@ async function confirmRescan() {
  }catch(error){if(request!==rescan.request)return;rescan.message=`${confirmed?'Move confirmed; check the register before retrying.':'Placement not confirmed.'} ${firebaseErrorMessage(error)}`;}
  finally{if(request===rescan.request){rescan.busy=false;render();document.querySelector('#rescan-serial')?.focus();}}
 }
+function updateEquipmentDescription(draft=state.draft,candidates=null) {
+ if(draft.descriptionEdited)return;
+ const excluded=new Set((state.referenceCorrections||[]).map(f=>f.serial.toUpperCase()));
+ const facts=baseReferenceFacts().filter(f=>!excluded.has(String(f.serial).toUpperCase()));
+ const types=(candidates||[{model:draft.model,manufacturer:draft.manufacturer??state.defaults.manufacturer}]).map(f=>suggestEquipmentDescription(f.model,f.manufacturer,facts));
+ if(types.length&&types.every(type=>type&&type===types[0]))draft.description=types[0];else delete draft.description;
+}
 function capture(value) {
  if(state.collectionPaused){notice='This collection session is paused. Resume it before scanning.';render();return;}
  value=value.trim();if(!value||state.step>=fields.length)return;
@@ -189,11 +198,12 @@ function capture(value) {
  }
  if(state.step===0) {
   pendingScan=null;
+  if(state.draft.serial!==value){delete state.draft.description;delete state.draft.descriptionEdited;}
   const match=value.toUpperCase()==='N/A'?null:lookupSerial(value);
   delete state.draft.recognitionEvidence;delete state.draft.recognitionCorrected;
   if(match)state.draft.recognitionEvidence=snapshotEvidence(match);
   if(match&&match.method!=='conflict') {
-   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method!=='exact',recognitionConfirmed:false};state.step=2;
+   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method!=='exact',recognitionConfirmed:false};updateEquipmentDescription();state.step=2;
    notice=`${match.method==='exact'?'Known serial':match.method==='similar'?`Serial family suggestion (prefix ${match.prefix}; reference ${match.referenceSerials.join(', ')})`:`Pattern suggestion (${match.suffix?'ending '+match.suffix:'prefix '+match.prefix})`}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. ${match.method==='similar'?'Check the scanned serial and physical model label before saving.':'Verify before saving.'}`;
    lastEmpty=0;persist();render();speak(`Suggested model, ${match.model}. Manufacturer, ${match.manufacturer}. Next, barcode.`);return;
   }
@@ -203,17 +213,17 @@ function capture(value) {
   delete state.draft.recognitionNeedsReview;delete state.draft.recognitionConfirmed;
   state.draft.serial=value;
   if(match?.method==='conflict'&&match.manufacturer) {
-   state.draft.manufacturer=match.manufacturer;state.draft.recognitionNeedsReview=true;state.draft.recognitionConfirmed=false;state.step=1;
+   state.draft.manufacturer=match.manufacturer;state.draft.recognitionNeedsReview=true;state.draft.recognitionConfirmed=false;updateEquipmentDescription(state.draft,match.candidates);state.step=1;
    notice=`Manufacturer suggestion: ${match.manufacturer}. ${match.suffix?`Serial ending ${match.suffix}${match.format?` · format ${match.format}`:''}`:match.prefix?`Prefix ${match.prefix}`:'This exact serial'} has ${match.support} distinct supporting example${match.support===1?'':'s'} with the same manufacturer. The model is not confirmed by this match. Scan or type the model, or choose a checked suggestion. Verify before saving.`;
    lastEmpty=0;persist();render();speak(`Suggested manufacturer, ${match.manufacturer}. Model is uncertain. Next, model number.`);return;
   }
   if(!state.draft.model&&state.settings.reuseModel&&match?.method!=='conflict')state.draft.model=state.settings.batchModel;
-  state.step=state.draft.model?2:1;
+  updateEquipmentDescription();state.step=state.draft.model?2:1;
   notice=match?.method==='conflict'?'Several reference models match this serial or prefix. Choose a checked suggestion below, or enter the model and manufacturer manually.':state.draft.model?'Serial captured. No reliable match; using the batch model. Check the manufacturer.':'Serial captured. No reliable match yet; enter the model and manufacturer manually.';
   lastEmpty=0;persist();render();speak(state.step===1?'Serial captured. Next, model number.':'Serial captured. Next, barcode.');return;
  }
  if(state.step===1&&state.draft.recognitionNeedsReview)state.draft.recognitionConfirmed=false;
- pendingScan=null;state.draft[fields[state.step][0]]=value;state.step++;
+ pendingScan=null;state.draft[fields[state.step][0]]=value;if(state.step===1)updateEquipmentDescription();state.step++;
  lastEmpty=0;notice='';persist();render();prompt();
 }
 
@@ -236,6 +246,7 @@ async function saveItem() {
  const profile=state.profiles.find(p=>p.code===state.active);
  if(!profile){saveFeedback('Choose a technician first.');return;}
  const batch=Object.fromEntries([...new FormData(document.querySelector('#defaults'))].map(([k,v])=>[k,v.trim()]));
+ const nextBatch={...batch,description:state.draft.description!==undefined?state.defaults.description:batch.description};
  const manufacturer=(state.draft.manufacturer??batch.manufacturer).trim();
  const missing=defaultFields.find(([key])=>!(key==='manufacturer'?manufacturer:batch[key]));
  if(missing){saveFeedback(`Enter ${missing[1].toLowerCase()} before saving.`,missing[0]);return;}
@@ -264,7 +275,7 @@ async function saveItem() {
   const changedDraft=state.activeCollectionId!==savedCollectionId||JSON.stringify(state.draft)!==draftText||state.step!==fields.length;
   const collectionScans={...state.collectionScans},checkpoint=collectionScans[savedCollectionId||'unassigned'];
   if(checkpoint?.step===fields.length&&JSON.stringify(checkpoint.draft)===draftText)collectionScans[savedCollectionId||'unassigned']={...checkpoint,draft:savedNextDraft,step:0};
-  const next={...state,collectionScans,defaults:JSON.stringify(state.defaults)===defaultsText?batch:state.defaults,items:[...state.items.filter(i=>i.id!==item.id),item],draft:changedDraft?state.draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:changedDraft?state.step:0};
+  const next={...state,collectionScans,defaults:JSON.stringify(state.defaults)===defaultsText?nextBatch:state.defaults,items:[...state.items.filter(i=>i.id!==item.id),item],draft:changedDraft?state.draft:state.settings.reuseModel?{model:state.settings.batchModel}:{},step:changedDraft?state.step:0};
   if(!client){localStorage.setItem(key,JSON.stringify(next));confirmed=true;}
   state=next;if(client)persist();
   notice=client?'Item saved to Firebase. It is available to your team on other devices. Place it in the caged trolley.':'Item saved in this browser. Back up after your session, or connect to Firebase to share it. Place it in the caged trolley.';if(changedDraft)notice+=' Your newer scan changes are kept. Review the saved record before saving again.';render();
@@ -315,7 +326,7 @@ function bind() {
   const match=lookupSerial(state.draft.serial);const candidate=match?.candidates?.[Number(selected)];if(!candidate)return;
   state.draft.manufacturer=candidate.manufacturer;state.draft.recognitionNeedsReview=true;state.draft.recognitionConfirmed=false;capture(candidate.model);
  });
- document.querySelector('#recognized-maker')?.addEventListener('input',e=>{state.draft.manufacturer=e.target.value;if(state.draft.recognitionNeedsReview){state.draft.recognitionConfirmed=false;const check=document.querySelector('#confirm-recognition');if(check)check.checked=false;if(state.draft.recognitionCorrected){const certainty=document.querySelector('#recognition-certainty');if(certainty)certainty.textContent='Edited details need a fresh label check.';}}persist();});
+ document.querySelector('#recognized-maker')?.addEventListener('input',e=>{state.draft.manufacturer=e.target.value;updateEquipmentDescription();const description=document.querySelector('#default-description');if(description)description.value=state.draft.description??state.defaults.description;if(state.draft.recognitionNeedsReview){state.draft.recognitionConfirmed=false;const check=document.querySelector('#confirm-recognition');if(check)check.checked=false;if(state.draft.recognitionCorrected){const certainty=document.querySelector('#recognition-certainty');if(certainty)certainty.textContent='Edited details need a fresh label check.';}}persist();});
  document.querySelector('#confirm-recognition')?.addEventListener('change',e=>{state.draft.recognitionConfirmed=e.target.checked;persist();});
  document.querySelector('#back')?.addEventListener('click',()=>{if(state.step>0){pendingScan=null;state.step--;lastEmpty=0;persist();render();prompt();}});
  document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{pendingScan=null;state.step=Number(b.dataset.step);lastEmpty=0;persist();render();prompt();});
@@ -324,9 +335,9 @@ function bind() {
   if(!defaultFields.some(([key])=>key===e.target.name))return;
   if(e.target.name==='date'&&!validDate(e.target.value))return;
   if(e.target.name==='trolley'&&state.trolleys.find(t=>t.id===state.activeTrolleyId)?.name!==e.target.value)state.activeTrolleyId='';
-  state.defaults[e.target.name]=e.target.value;persist();
+  if(e.target.name==='description'&&state.draft.description!==undefined){state.draft.description=e.target.value;state.draft.descriptionEdited=true;}else state.defaults[e.target.name]=e.target.value;if(e.target.name==='manufacturer'){updateEquipmentDescription();document.querySelector('#default-description').value=state.draft.description??state.defaults.description;}persist();
  });
- document.querySelector('#defaults').onsubmit=e=>{e.preventDefault();state.defaults=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,v.trim()]));notice='Batch defaults applied.';persist();render();};
+ document.querySelector('#defaults').onsubmit=e=>{e.preventDefault();const batch=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,v.trim()]));if(state.draft.description!==undefined)batch.description=state.defaults.description;state.defaults=batch;notice='Batch defaults applied.';persist();render();};
  document.querySelector('#register-search').oninput=e=>{search=e.target.value;updateRegister();};
  document.querySelector('#inventory tbody').onclick=async e=>{
   const button=e.target.closest('button');if(!button)return;
@@ -766,6 +777,7 @@ function openScanCorrection() {
    if(saveReference&&client)await client.writeCorrection(correction,version);
    if(client!==sharedClient||state.draft.serial!==serial)throw Error('The connection or current item changed. Reconnect before applying this correction.');
    const draft={...state.draft,model:correction.model,manufacturer:correction.manufacturer,recognitionNeedsReview:true,recognitionConfirmed:true,recognitionCorrected:true};
+   updateEquipmentDescription(draft);
    const next={...state,draft,step:Math.max(2,state.step),referenceCorrections:saveReference?[...(state.referenceCorrections||[]).filter(row=>row.serial!==correction.serial),correction]:state.referenceCorrections};
    if(!client){if(storageError)throw Error('Browser storage is paused. Back up the workspace before correcting.');localStorage.setItem(key,JSON.stringify(next));}
    state=next;if(client)persist();dialog.close();notice=saveReference?'Checked correction applied and saved to the reference library.':'Checked correction applied to this item. Save the equipment to teach future scans.';render();prompt();

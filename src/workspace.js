@@ -67,12 +67,13 @@ export function validateWorkspace(value) {
       if (value.draft[key].trim()) draft[key] = value.draft[key];
     }
   }
+  if(value.draft.description!==undefined){if(!text(value.draft.description,true))throw Error('Invalid equipment description.');draft.description=value.draft.description;}
   if (value.draft.manufacturer !== undefined) {
     if (!text(value.draft.manufacturer, true)) throw Error('Invalid recognized manufacturer.');
     draft.manufacturer = value.draft.manufacturer;
   }
   if(value.draft.recognitionEvidence!==undefined)draft.recognitionEvidence=validateEvidence(value.draft.recognitionEvidence);
-  for (const key of ['recognitionNeedsReview','recognitionConfirmed','recognitionCorrected']) {
+  for (const key of ['recognitionNeedsReview','recognitionConfirmed','recognitionCorrected','descriptionEdited']) {
     if (value.draft[key] !== undefined) {
       if (typeof value.draft[key] !== 'boolean') throw Error('Invalid recognition review state.');
       draft[key] = value.draft[key];

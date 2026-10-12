@@ -3,7 +3,7 @@ import {recognizeSerial,referenceRowsFromWorkbook} from '../../src/recognition.j
 const facts=JSON.parse(await readFile(new URL('../../src/reference-catalogue.json',import.meta.url)));
 
 test('expanded catalogue includes all six reviewed sources and only recognition facts',()=>{
- assert.equal(facts.length,1527);for(const fact of facts)assert.deepEqual(Object.keys(fact).sort(),['manufacturer','model','serial','source']);
+ assert.equal(facts.length,1527);for(const fact of facts)assert.deepEqual(Object.keys(fact).filter(k=>k!=='description').sort(),['manufacturer','model','serial','source']);
  for(const source of ['February-26','May-25','June-25','July-25','May-26','Summer-Macs'])assert.ok(facts.some(f=>f.source.includes(source)),source);
  const may=recognizeSerial('483474-004',facts),june=recognizeSerial('ST390580',facts);assert.equal(may.manufacturer,'Stone');assert.equal(may.model,'213');assert.equal(june.manufacturer,'Zoostorm');assert.equal(june.model,'9870');
 });
