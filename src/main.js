@@ -238,12 +238,12 @@ function capture(value) {
   if(match?.method==='conflict'&&match.manufacturer) {
    state.draft.manufacturer=match.manufacturer;state.draft.recognitionNeedsReview=true;state.draft.recognitionConfirmed=false;updateEquipmentDescription(state.draft,match.candidates);state.step=1;
    notice=`Manufacturer suggestion: ${match.manufacturer}. ${match.suffix?`Serial ending ${match.suffix}${match.format?` · format ${match.format}`:''}`:match.prefix?`Prefix ${match.prefix}`:'This exact serial'} has ${match.support} distinct supporting example${match.support===1?'':'s'} with the same manufacturer. The model is not confirmed by this match. Scan or type the model, or choose a checked suggestion. Verify before saving.`;
-   lastEmpty=0;persist();render();speak(`Suggested manufacturer, ${match.manufacturer}. Model is uncertain. Next, model number.`);return;
+   lastEmpty=0;persist();render();speak(`Suggested manufacturer, ${match.manufacturer}. Multiple models found. Please select the correct model type.`);return;
   }
   if(!state.draft.model&&state.settings.reuseModel&&match?.method!=='conflict')state.draft.model=state.settings.batchModel;
   updateEquipmentDescription();state.step=state.draft.model?2:1;
   notice=match?.method==='conflict'?'Several reference models match this serial or prefix. Choose a checked suggestion below, or enter the model and manufacturer manually.':state.draft.model?'Serial captured. No reliable match; using the batch model. Check the manufacturer.':'Serial captured. No reliable match yet; enter the model and manufacturer manually.';
-  lastEmpty=0;persist();render();speak(state.step===1?'Serial captured. Next, model number.':'Serial captured. Next, barcode.');return;
+  lastEmpty=0;persist();render();speak(match?.method==='conflict'?'Multiple models found. Please select the correct model type.':state.step===1?'Serial captured. Next, model number.':'Serial captured. Next, barcode.');return;
  }
  if(state.step===1&&state.draft.recognitionNeedsReview)state.draft.recognitionConfirmed=false;
  pendingScan=null;state.draft[fields[state.step][0]]=value;if(state.step===1)updateEquipmentDescription();state.step++;
