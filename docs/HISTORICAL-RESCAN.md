@@ -1,0 +1,17 @@
+# Rescan equipment from previous decom spreadsheets
+
+Trolley rescan can find complete equipment records in previous Excel files even when that work happened before DecomPro. This is separate from serial-recognition training and the bulk equipment importer.
+
+1. Sign in to the intended workspace and choose the physical target trolley through Change trolley.
+2. Enable Trolley rescan and choose Load previous decom Excel. Load the original .xlsx file, such as Decom May 26 - Collected. Loading the same file name replaces its previous lookup rows; other loaded files remain.
+3. Scan or type a serial, asset number, barcode or security etch. Saved register items take priority. Otherwise exact matches in loaded historical files bring up the full source record. Multiple source matches require choosing a spreadsheet row. Pattern recognition does not invent historical identifiers.
+4. Review and edit the copied equipment details. View original spreadsheet information shows all eleven original supplier fields, the file name, worksheet and row. The new item uses the chosen current disposal date and the currently signed-in technician; original date and disposal initials remain in the source preview and lookup data.
+5. Tick the physical-check confirmation and select Add to current trolley. Only this item is added. It uses the normal version-checked Firebase create path when connected, or the local register when working locally. Existing equipment, recognition training and paused normal scans remain unchanged.
+
+The full lookup library stays private in this browser's workspace and is included in workspace JSON backups. It is not bundled into the public website, not uploaded as recognition data and not a shared Firebase archive. On another device, load the source workbook or restore an appropriate workspace backup. Confirmed equipment is shared through the normal Firebase register. Sign-in to a different workspace identity clears the active lookup library; preserved local workspace data can still be recovered through the existing local-workspace switch.
+
+Only the equipment fields used by DecomPro are retained; unused financial columns are ignored. Historical asset formats and leading zeros are preserved. Missing equipment fields appear as N/A for review; the new disposal date must be valid. Files are limited to 10 MB and 5,000 rows per import, with up to 20,000 lookup rows in a workspace. If more than 100 historical rows share a scanned identifier, use a more specific identifier.
+
+Before confirming, DecomPro refreshes the shared register, checks for duplicate scanned identifiers, serials and assets, and checks that the target trolley is open and in the active collection. Server transactions enforce serial uniqueness and trolley status. A failed save keeps the preview for retry; a repeated scan after a confirmed save retrieves the existing register item rather than creating another. No new Firestore rules or Blaze plan are required.
+
+The supplied May 2026 workbook was checked locally: ST348759 was found uniquely with its model/manufacturer and original asset, barcode, security etch, date and disposal initials. None of those full spreadsheet rows are committed to the public repository.

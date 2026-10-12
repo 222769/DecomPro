@@ -1,3 +1,4 @@
+import {validateHistoricalEquipment} from './historical-equipment.js';
 import {retentionSettings} from './batch-retention.js';
 import {validateUnlockHistory} from './trolley-unlock.js';
 import {validateReadinessNotes} from './readiness.js';
@@ -55,6 +56,7 @@ export function validateWorkspace(value) {
     defaults[key] = value.defaults[key];
   }
   if (defaults.date!==''&&!validDate(defaults.date)) throw Error('The backup has an invalid disposal date.');
+  const historicalEquipment=validateHistoricalEquipment(value.historicalEquipment===undefined?[]:value.historicalEquipment);
   const ids = new Set();
   const items = value.items.map(item => {
     if (!item || !text(item.id) || ids.has(item.id) || !text(item.technician) || !validDate(item.date)) throw Error('The backup has invalid or repeated item IDs or dates.');
@@ -126,7 +128,7 @@ export function validateWorkspace(value) {
     collectionScans[id]={draft:checked.draft,step:checked.step,defaults:checked.defaults,activeTrolleyId:checked.activeTrolleyId};
    }
   }
-  return { ...(value.trolleyUnlocks===undefined?{}:{trolleyUnlocks:validateUnlockHistory(value.trolleyUnlocks)}), captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  return { ...(value.trolleyUnlocks===undefined?{}:{trolleyUnlocks:validateUnlockHistory(value.trolleyUnlocks)}), captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), historicalEquipment, referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);
