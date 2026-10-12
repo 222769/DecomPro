@@ -5,12 +5,12 @@ async function seed(page,{status='open',duplicates=false}={}){
  const state={captureOrder:'serial-first',activeTrolleyId:target.id,trolleys:[source,target],profiles:[{name:'Ali',code:'MA'}],active:'MA',defaults:{date:'2026-10-12',description:'Desktop',manufacturer:'Batch maker',source:'New location',reason:'Different reason',trolley:target.name},items:duplicates?[item,{...item,id:'ambiguous-record'}]:[item],draft:{},step:0,voice:false,settings:defaultSettings,referenceExamples:[],referenceCorrections:[]};
  await page.addInitScript(state=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify(state));},state);await page.goto('/#station');await expect(page.locator('#station')).toBeVisible();return {source,target,item,state};
 }
-async function lookup(page,serial='existing-0001'){await page.locator('#rescan-mode').check();await page.getByLabel('Rescan serial number',{exact:true}).fill(serial);await page.getByRole('button',{name:'Find saved item',exact:true}).click();}
+async function lookup(page,serial='existing-0001'){await page.locator('#rescan-mode').check();await page.getByLabel('Rescan serial or asset number',{exact:true}).fill(serial);await page.getByRole('button',{name:'Find saved item',exact:true}).click();}
 const stored=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
 
 test('rescan auto-fills exact saved fields and moves the same item with original attribution and move history',async({page})=>{
  const {item,target}=await seed(page);await lookup(page);for(const value of [item.model,item.manufacturer,item.asset,item.barcode,item.etch])await expect(page.locator('#station .captured')).toContainText(value);await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('Existing item moved');const state=await stored(page);expect(state.items).toEqual([{...item,trolley:target.name,trolleyId:target.id}]);expect(state.trolleyMoves).toHaveLength(1);expect(state.trolleyMoves[0].actor.code).toBe('MA');
- await page.getByLabel('Rescan serial number',{exact:true}).fill(item.serial);await page.getByRole('button',{name:'Find saved item',exact:true}).click();await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('Already recorded');expect((await stored(page)).items).toHaveLength(1);expect((await stored(page)).trolleyMoves).toHaveLength(1);await page.reload();await expect(page.locator('#rescan-mode')).not.toBeChecked();
+ await page.getByLabel('Rescan serial or asset number',{exact:true}).fill(item.serial);await page.getByRole('button',{name:'Find saved item',exact:true}).click();await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('Already recorded');expect((await stored(page)).items).toHaveLength(1);expect((await stored(page)).trolleyMoves).toHaveLength(1);await page.reload();await expect(page.locator('#rescan-mode')).not.toBeChecked();
 });
 
 test('normal scanning does not fill asset/barcode and switching modes preserves its captured and typed progress',async({page})=>{
@@ -54,4 +54,14 @@ test('failed shared move keeps its preview for retry and offline confirmation ne
 
 test('scanner input stays focused and replaces an unsuccessful serial without a mouse click',async({page})=>{
  await seed(page);await lookup(page,'UNKNOWN-SERIAL');await expect(page.locator('#rescan-message')).toContainText('Rescan stopped');await expect(page.locator('#rescan-serial')).toBeFocused();await page.keyboard.insertText('EXISTING-0001');await page.keyboard.press('Enter');await expect(page.locator('#rescan-message')).toContainText('Saved details found');await expect(page.locator('#rescan-serial')).toHaveValue('EXISTING-0001');await expect(page.locator('#station .captured')).toContainText('0000123000');
+});
+test('rescan by asset prefills the original serial and all details and moves that same record',async({page})=>{
+ const {item,target}=await seed(page);await lookup(page,' a0042 ');for(const value of [item.serial,item.model,item.manufacturer,item.barcode,item.asset])await expect(page.locator('#station .captured')).toContainText(value);await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('Existing item moved');expect((await stored(page)).items).toEqual([{...item,trolley:target.name,trolleyId:target.id}]);
+});
+test('asset rescan rejects duplicate assets and clears any confirmation preview',async({page})=>{
+ await seed(page,{duplicates:true});await lookup(page,'A0042');await expect(page.locator('#rescan-message')).toContainText('More than one');await expect(page.locator('#confirm-rescan')).toHaveCount(0);expect((await stored(page)).items).toHaveLength(2);
+});
+test('shared asset rescan rechecks identifier uniqueness when confirming a move',async({page})=>{
+ const {item,target}=await connectRescanTeam(page);await lookup(page,'A0042');await page.evaluate(()=>window.remote.items.push({...window.remote.items[0],id:'new-conflict',serial:'ANOTHER-SERIAL'}));await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('More than one');expect(await page.evaluate(()=>window.moveWrites.length)).toBe(0);
+ await page.evaluate(()=>window.remote.items=window.remote.items.filter(row=>row.id!=='new-conflict'));await page.getByRole('button',{name:'Find saved item',exact:true}).click();await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('Existing item moved');expect(await page.evaluate(()=>window.moveWrites[0].item)).toEqual({...item,trolley:target.name,trolleyId:target.id});
 });
