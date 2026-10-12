@@ -143,3 +143,20 @@ test('real Firebase SDK accepts the same technician credentials after repeated s
   const recovered=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!');assert.equal(recovered.uid,'tech');assert.equal(recovered.profile.code,'TT');await recovered.logout();
  }finally{await terminate(store);await deleteClientApp(client);}
 });
+
+test('locked-workspace reconnect clears a cached Firebase identity without switching workspace and preserves remembered resume',async()=>{
+ const {initializeApp:clientApp,deleteApp:deleteClientApp}=await import('firebase/app');
+ const {getAuth:clientAuth,connectAuthEmulator,onAuthStateChanged}=await import('firebase/auth');
+ const {getFirestore:clientDb,connectFirestoreEmulator,terminate}=await import('firebase/firestore');
+ const {connectFirebase}=await import('../../src/firebase-db.js');
+ const config={projectId:'demo-decompro',apiKey:'demo-key',authDomain:'demo-decompro.firebaseapp.com',appId:'test-clean-relogin'};
+ const client=clientApp(config,'decompro-demo-decompro'),login=clientAuth(client),store=clientDb(client);connectAuthEmulator(login,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(store,'127.0.0.1',8085);let stop;
+ try {
+  await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!');assert.equal(login.currentUser.uid,'tech');
+  const events=[];stop=onAuthStateChanged(login,user=>events.push(user?.uid||null));await new Promise(resolve=>setTimeout(resolve,0));
+  await assert.rejects(connectFirebase(config,'college-it','tech@example.invalid','Incorrect-test-password-42!',{freshSession:true}),error=>['auth/invalid-credential','auth/wrong-password'].includes(error.code));assert.equal(login.currentUser,null);
+  const recovered=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!',{freshSession:true});assert.equal(recovered.uid,'tech');assert.equal(recovered.profile.code,'TT');
+  events.length=0;const fresh=await connectFirebase(config,'college-it','tech@example.invalid','Technician-test-password-42!',{freshSession:true});assert.equal(fresh.uid,'tech');assert.equal(events.includes(null),true);
+  events.length=0;const resumed=await connectFirebase(config,'college-it');assert.equal(resumed.uid,'tech');assert.equal(events.includes(null),false);await resumed.logout();assert.equal((await auth.getUser('tech')).disabled,false);
+ }finally{stop?.();await terminate(store);await deleteClientApp(client);}
+});

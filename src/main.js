@@ -1176,7 +1176,7 @@ function openDatabase() {
    await waitForLockCompletion();
    button.textContent='Signing in…';
    await activateDatabase(JSON.parse(form.get('config')),form.get('teamId').trim(),form.get('email').trim(),form.get('password'),{remember:form.has('remember')});
-  }catch(error){passwordInput.value='';output.textContent=firebaseErrorMessage(error);}
+  }catch(error){passwordInput.value='';if(output.isConnected)output.textContent=firebaseErrorMessage(error);else if(sharedLocked&&!sharedClient){lockedAccountEmail=String(form.get('email')||'').trim();openDatabase();document.querySelector('#database-error').textContent=firebaseErrorMessage(error);}}
   finally{signingIn=false;controls.forEach((control,index)=>control.disabled=disabled[index]);button.textContent='Sign in & connect';}
  };
 }
@@ -1201,8 +1201,11 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
  if(testWorkspace)throw Error('Firebase uploads are disabled in the test workspace.');
  await waitForLockCompletion();
  const {connectFirebase}=await import('./firebase-db');
- const client=await connectFirebase(config,teamId,email,password,{remember});
+ const previousClient=sharedClient;
+ if(email&&previousClient){const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){if(input.value.trim())state.draft[fields[state.step][0]]=input.value;else delete state.draft[fields[state.step][0]];}persist();previousClient.stop();}
+ let client;
  try {
+  client=await connectFirebase(config,teamId,email,password,{remember,freshSession:sharedLocked&&!previousClient});
   const records=await client.load();
   devicePreferences=saveDevicePreferences({...devicePreferences,remember});
   const workspaceId=`${config.projectId}/${teamId}/${client.uid}`,sameCollections=state.collectionWorkspace===workspaceId;
@@ -1214,7 +1217,10 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;releaseLocalTab?.();connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
   client.listen(items=>{if(sharedClient!==client)return;state.items=items;persist();updateRegister();updateHistory();updateReferenceLibrary();document.querySelector('.stats .stat-content strong').innerHTML=`${items.length}<small> items recorded</small>`;document.querySelector('a[href="#inventory"] span').textContent=items.length;},examples=>{if(sharedClient===client){state.referenceExamples=examples;persist();updateReferenceLibrary();}},error=>{if(sharedClient===client){client.stop();sharedClient=null;notice=`Shared connection failed. Changes are locked until reconnection. ${error.message}`;render();}},trolleys=>{if(sharedClient===client){const old=state.trolleys.find(t=>t.id===state.activeTrolleyId),next=trolleys.find(t=>t.id===state.activeTrolleyId);if(old&&next&&state.defaults.trolley===old.name)state.defaults.trolley=next.name;state=reconcileTrolleySelection(state,trolleys);syncTrolleyNames();persist();updateRegister();updateHistory();}},phase=>{if(sharedClient===client){connectionPhase=phase;if(phase==='connected')lastConfirmedAt=new Date().toISOString();updateConnectionStatus();}},corrections=>{if(sharedClient===client){state.referenceCorrections=corrections;persist();updateReferenceLibrary();}});
   refreshCollections(client);
- }catch(error){try{if(client.logout)await client.logout();else client.stop();}catch{client.stop();}throw error;}
+ }catch(error){try{if(client?.logout)await client.logout();else client?.stop();}catch{client?.stop();}
+  if(email&&previousClient&&sharedClient===previousClient){sharedClient=null;sharedLocked=true;workspaceManuallyLocked=true;try{localStorage.setItem('decompro.workspaceLocked','true');}catch{}lockedAccountEmail=previousClient.email||'';notice=firebaseErrorMessage(error);render();}
+  throw error;
+ }
 }
 async function disconnectDatabase() {
  if(!confirm('Return to your preserved local workspace? Shared records remain in Firebase.'))return;

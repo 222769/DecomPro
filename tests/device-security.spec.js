@@ -119,3 +119,35 @@ test('a stalled sign-out gives recovery guidance without trying credentials agai
  await page.clock.fastForward('00:16');await expect(page.locator('#database-error')).toContainText('Refresh this page');expect(await page.evaluate(()=>window.connectCalls)).toBe(1);await expect(page.getByLabel('Password',{exact:true})).toHaveValue('');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('STALLED-SIGNOUT-DRAFT');
  await page.reload();await expect(page.locator('.workspace-lock')).toBeVisible();await signin(page);await expect(page.locator('#scan')).toHaveValue('STALLED-SIGNOUT-DRAFT');
 });
+
+async function cachedAuthTeam(page){
+ await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`
+ export async function connectFirebase(config,teamId,email,password,options={}){
+  if(options.freshSession&&!window.ignoreFreshReset){window.authResets=(window.authResets||0)+1;window.cachedAuth=false;}
+  if((email&&window.cachedAuth)||password!=='test-only-password')throw Object.assign(Error('Cached credentials were rejected'),{code:'auth/invalid-credential'});
+  window.cachedAuth=true;
+  return {uid:'jawad-cached',profile:{name:'Jawad test technician',code:'JA'},role:'technician',projectId:config.projectId,email:'tech@example.invalid',teamId,
+   async load(){return JSON.parse(sessionStorage.getItem('test.remote'))},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},listen(a,b,c,d,phase){phase('connected')},stop(){},async logout(){throw Error('Previous sign-out left cached authentication');}
+  };
+ }
+ export async function disconnectFirebaseAuth(){window.cachedAuth=false;}
+ `}));
+ await page.goto('/');await page.locator('#station').waitFor({state:'attached'});await page.locator('#voice').click();
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1')),trolley=state.trolleys[0];sessionStorage.setItem('test.remote',JSON.stringify({items:[{...state.defaults,id:'safe-record',trolleyId:trolley.id,trolley:trolley.name,serial:'SAFE-0001',model:'Known model',manufacturer:'Dell',asset:'A0001',barcode:'N/A',etch:'N/A',technician:'JA'}],trolleys:state.trolleys,examples:[],corrections:[]}));});
+ await signin(page);await page.locator('#scan').fill('CACHED-SESSION-DRAFT');await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();
+}
+
+test('timeout login resets cached authentication directly and retains the shared register without a local-mode switch',async({page})=>{
+ await page.clock.install();await cachedAuthTeam(page);const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));await signin(page);
+ const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(after.items).toEqual(before.items);expect(after.trolleys).toEqual(before.trolleys);expect(await page.evaluate(()=>window.authResets)).toBe(1);await expect(page.locator('#scan')).toHaveValue('CACHED-SESSION-DRAFT');await expect(page.locator('#profile')).toHaveValue('JA');expect(await page.evaluate(()=>localStorage.getItem('decompro.mode'))).toBe('shared');
+});
+
+test('the reported cached-credential error can recover through local mode while retaining the shared records',async({page})=>{
+ await page.clock.install();await cachedAuthTeam(page);await page.evaluate(()=>window.ignoreFreshReset=true);await page.getByRole('button',{name:'Sign in to DecomPro',exact:true}).click();await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#database-error')).toContainText('email or password was not accepted');
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Sign out & return to local workspace',exact:true}).click();await expect(page.locator('#station')).toBeVisible();await signin(page);await expect(page.locator('#inventory tbody')).toContainText('SAFE-0001');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).trolleys.length)).toBe(1);
+});
+
+test('failed reauthentication of a connected account hides its records, keeps the typed scan and allows correction',async({page})=>{
+ await delayedSignoutTeam(page);await page.goto('/');await signin(page);await page.locator('#scan').fill('CONNECTED-REAUTH-DRAFT');await page.getByRole('button',{name:'Shared database',exact:true}).click();await page.getByLabel('Team account email').fill('tech@example.invalid');await page.getByLabel('Password',{exact:true}).fill('incorrect-test-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('.workspace-lock')).toBeVisible();await expect(page.locator('#database-error')).toContainText('email or password was not accepted');expect(await page.evaluate(()=>localStorage.getItem('decompro.workspaceLocked'))).toBe('true');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('CONNECTED-REAUTH-DRAFT');
+ await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.locator('#connection-status')).toContainText('Database connected');await expect(page.locator('#scan')).toHaveValue('CONNECTED-REAUTH-DRAFT');
+});

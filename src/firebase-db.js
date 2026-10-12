@@ -26,11 +26,14 @@ async function hash(value) {
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
  return [...new Uint8Array(bytes)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
 }
-export async function connectFirebase(config,teamId,email,password,{remember=false}={}) {
+export async function connectFirebase(config,teamId,email,password,{remember=false,freshSession=false}={}) {
  config=validateFirebaseConfig(config);
  if(!/^[A-Za-z0-9_-]{1,80}$/.test(teamId))throw Error('Use a team ID containing only letters, numbers, underscores or hyphens.');
  const name=`decompro-${config.projectId}`;
  const app=getApps().find(app=>app.name===name)||initializeApp(config,name),auth=getAuth(app),db=getFirestore(app);
+ // Locked-workspace sign-in uses the same clean auth state as returning to local mode.
+ // Resume without credentials keeps the explicitly remembered Firebase session.
+ if(email&&freshSession)await signOut(auth);
  if(typeof window!=='undefined')await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);
  if(email)await signInWithEmailAndPassword(auth,email,password);
  else await new Promise(resolve=>{const unsubscribe=onAuthStateChanged(auth,()=>{unsubscribe();resolve();});});
