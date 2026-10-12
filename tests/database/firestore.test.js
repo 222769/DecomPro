@@ -306,3 +306,8 @@ test('deleting a twelve-trolley collection is atomic and stays within Firestore 
  const {createCollection}=await import('../../src/collection-sessions.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin);const ids=[initialTrolley.id];for(let n=1;n<12;n++){const t=createTrolley(`Delete trolley ${n}`);await owner.writeTrolley(t);ids.push(t.id);}
  const session=createCollection('Delete twelve');await owner.writeSession(session,ids);await owner.deleteSession(session.id,1);const groups=await owner.loadCollections();assert.equal(groups.collectionSessions.length,0);assert.equal(groups.collectionTrolleys.length,0);assert.equal((await owner.load()).trolleys.length,12);
 });
+
+test('two devices creating the same shared trolley name commit only one permanent reference',async()=>{
+ const {createSharedTrolley}=await import('../../src/trolleys.js');const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);const a=await createSharedTrolley('Trolley 1.1',undefined,'demo-decompro/college-it'),b=await createSharedTrolley('trolley 1.1',undefined,'demo-decompro/college-it');
+ const results=await Promise.allSettled([owner.writeTrolley(a,0),tech.writeTrolley(b,0)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const rows=(await owner.load()).trolleys.filter(t=>t.id===a.id);assert.equal(rows.length,1);assert.equal(rows[0].reference,a.reference);
+});

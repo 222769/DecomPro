@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { headers } from '../src/data.js';
+import {createTrolley} from '../src/trolleys.js';
 import {readFile} from 'node:fs/promises';
 async function approveImport(page) {await expect(page.getByRole('heading',{name:'Spreadsheet import preview'})).toBeVisible();await page.getByRole('button',{name:'Import selected references'}).click();}
 async function readyTrolley(page,card=page) {
@@ -638,8 +639,9 @@ test('local import previews duplicates, preserves originals and safely retries a
 });
 
 test('a shared save shows pending confirmation and retains the scan until Firebase accepts it',async({page})=>{
+ const trolley=createTrolley('Trolley 01');
  await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`
- export async function connectFirebase(){return {profile:{name:'Jawad',code:'JA'},role:'technician',email:'jawad@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,connection){connection('connected');},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async writeTrolley(){},async write(){await new Promise(resolve=>window.confirmTeamSave=resolve);}};}
+ export async function connectFirebase(){return {profile:{name:'Jawad',code:'JA'},role:'technician',email:'jawad@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,connection){connection('connected');},async load(){return {items:[],trolleys:[${JSON.stringify(trolley)}],examples:[],corrections:[]};},async writeTrolley(){},async write(){await new Promise(resolve=>window.confirmTeamSave=resolve);}};}
  `}));
  await page.goto('/');await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('jawad@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
  await defaults(page);await item(page,'CONFIRMEDTEAM001');await page.getByRole('button',{name:'Save item & start next'}).click();

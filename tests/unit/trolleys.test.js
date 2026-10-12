@@ -20,3 +20,7 @@ test('collection details must be complete and legacy long trolley names remain v
  assert.equal(validateTrolleys([collected])[0].status,'collected');
  assert.throws(()=>validateTrolleys([{...collected,status:'open'}]),/status/);
 });
+
+test('shared trolley creation uses one case-and-spacing-normalized permanent reference per workspace name',async()=>{
+ const {createSharedTrolley}=await import('../../src/trolleys.js');const a=await createSharedTrolley('Trolley 1.1',undefined,'project/team'),b=await createSharedTrolley('  trolley   1.1  ',undefined,'project/team'),c=await createSharedTrolley('Trolley 1.1',undefined,'project/other');assert.equal(a.id,b.id);assert.equal(a.reference,b.reference);assert.notEqual(a.id,c.id);assert.equal(validateTrolleys([a]).length,1);
+});

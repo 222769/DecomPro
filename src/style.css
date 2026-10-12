@@ -295,3 +295,5 @@ html[data-theme="dark"] .compact-connection .connection-chip { background:#16223
 html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-color:#8d733d; color:#f0d99c; }
 
 .scan-order-cell{width:48px;text-align:center;font-variant-numeric:tabular-nums;font-weight:650}
+
+.trolley-list button{flex-wrap:wrap;gap:6px}.trolley-list span{overflow-wrap:anywhere}#save-feedback .secondary{display:block;margin-top:12px}
