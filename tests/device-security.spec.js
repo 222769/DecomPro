@@ -61,3 +61,24 @@ test('empty scan locks reconnect safely and legacy blank drafts recover without 
  await page.reload();await signin(page);await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();await expect(page.locator('#inventory tbody')).toContainText('SAVED-EQUIPMENT');
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(restored.draft.serial).toBe('UNFINISHED-SERIAL');expect(restored.draft.model).toBeUndefined();expect(restored.items).toHaveLength(1);
 });
+
+test('Never disables inactivity locking across reload while manual locking still requires sign-in',async({page})=>{
+ await page.clock.install();await mockTeam(page);await page.goto('/');await signin(page);
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();
+ await page.getByLabel('Lock after inactivity').selectOption({label:'Never'});
+ await page.getByRole('button',{name:'Save settings',exact:true}).click();
+ await page.clock.fastForward('24:00:00');await expect(page.locator('#station')).toBeVisible();
+ await expect(page.locator('.workspace-lock')).toHaveCount(0);
+ expect(await page.evaluate(()=>sessionStorage.getItem('test.signouts'))).toBeNull();
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.devicePreferences')).remember)).toBe(false);
+ await page.reload();await expect(page.locator('#connection-status')).toContainText('Database connected');
+ await page.getByRole('button',{name:'Open settings',exact:true}).click();
+ await expect(page.getByLabel('Lock after inactivity')).toHaveValue('0');
+ await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.getByRole('button',{name:'Lock workspace',exact:true}).click();
+ await expect(page.locator('.workspace-lock')).toBeVisible();
+ const signins=await page.evaluate(()=>sessionStorage.getItem('test.signins'));
+ await page.reload();await expect(page.locator('.workspace-lock')).toBeVisible();
+ expect(await page.evaluate(()=>sessionStorage.getItem('test.signins'))).toBe(signins);
+ await signin(page);await expect(page.locator('#station')).toBeVisible();
+});
