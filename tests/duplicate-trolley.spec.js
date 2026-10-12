@@ -15,14 +15,18 @@ test('Jawad can choose a permanent reference when names repeat and save without 
 });
 
 test('save refreshes a stale shared trolley cache and uses the canonical name',async({page})=>{
- const {a}=await team(page,{duplicate:false,stale:true});await page.locator('#default-trolley').fill('trolley 1.1');await complete(page);await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>window.savedItem?.trolleyId)).toBe(a.id);expect(await page.evaluate(()=>window.savedItem.trolley)).toBe('Trolley 1.1');expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);
+ const {a}=await team(page,{duplicate:false,stale:true});await expect(page.locator('#default-trolley')).toHaveAttribute('readonly','');await complete(page);await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>window.savedItem?.trolleyId)).toBe(a.id);expect(await page.evaluate(()=>window.savedItem.trolley)).toBe('Trolley 1.1');expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);
 });
 
-test('an unknown shared trolley name cannot silently create a trolley while saving',async({page})=>{
- await team(page,{duplicate:false});await page.locator('#default-trolley').fill('UNKNOWN TROLLEY');await complete(page);await page.locator('#save').click();await expect(page.locator('#save-feedback')).toContainText('will not create another team trolley automatically');expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);expect(await page.evaluate(()=>window.savedItem)).toBeUndefined();
+test('a stale or programmatically changed read-only trolley input cannot override the selected shared reference',async({page})=>{
+ const {a}=await team(page,{duplicate:false});await page.locator('#default-trolley').evaluate(input=>{input.value='UNKNOWN TROLLEY';input.dispatchEvent(new Event('input',{bubbles:true}));});await complete(page);await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>window.savedItem?.trolleyId)).toBe(a.id);expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);expect(await page.evaluate(()=>window.savedItem.trolley)).toBe(a.name);
 });
 
 test('choosing the existing reference survives a real timeout and Jawad can finish his captured item',async({page})=>{
  await page.clock.install();const {b}=await team(page);await page.getByRole('button',{name:'Change trolley',exact:true}).click();await page.locator('#trolley-reference-choice').selectOption(b.id);await page.getByRole('button',{name:'Use trolley',exact:true}).click();await complete(page);await page.clock.fastForward('05:01');await expect(page.locator('.workspace-lock')).toBeVisible();
  await page.locator('#unlock-workspace').click();await page.getByLabel('Team account email').fill('jawad@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#connection-status')).toContainText('Database connected');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).activeTrolleyId)).toBe(b.id);await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>window.savedItem?.trolleyId)).toBe(b.id);expect(await page.evaluate(()=>window.fixture.trolleys.length)).toBe(2);expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);
+});
+
+test('read-only caged trolley follows its selected permanent reference when another technician renames it',async({page})=>{
+ const {a}=await team(page,{duplicate:false});await page.evaluate(()=>window.fixture.trolleys[0].name='Renamed by Jawad');await complete(page);await page.locator('#save').click();await expect.poll(()=>page.evaluate(()=>window.savedItem?.trolleyId)).toBe(a.id);expect(await page.evaluate(()=>window.savedItem.trolley)).toBe('Renamed by Jawad');await expect(page.locator('#default-trolley')).toHaveValue('Renamed by Jawad');expect(await page.evaluate(()=>window.trolleyCreates)).toBe(0);
 });

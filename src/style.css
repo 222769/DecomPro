@@ -309,3 +309,21 @@ html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-colo
 
 .rescan-reference{margin:18px 0;padding:18px;border:1px solid #718caf;border-radius:12px;color:#e4efff}
 .rescan-reference h3{font-size:15px;margin:0 0 10px}.rescan-reference p{font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+
+.register-scope-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+#inventory .register-scope-filters select{max-width:none;margin-bottom:0;min-width:0}
+@media(max-width:700px){.register-scope-filters{grid-template-columns:1fr}}
+
+#default-trolley[readonly]{background:#edf0f5;color:var(--muted);border-color:var(--border);cursor:default}
+html[data-theme="dark"] #default-trolley[readonly]{background:#182438;color:#a5b3c8}
+#delete-selected{color:#a63b45;border-color:#e6c3c7;background:#fff5f5}
+html[data-theme="dark"] #delete-selected{color:#f0a3ab;border-color:#6a3942;background:#35232d}
+
+.rescan-toggle{position:relative;display:inline-flex;margin:0;border:1px solid #60799e;border-radius:999px;background:#263952;box-shadow:0 2px 6px #0002;color:#dce8ff;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
+.rescan-toggle input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:1}
+.rescan-button-content{display:flex;align-items:center;gap:9px;padding:10px 14px;pointer-events:none;font-size:12px;font-weight:600;white-space:nowrap}
+.rescan-button-content svg{width:17px;height:17px;color:#a9c4ff}.rescan-button-content strong{font-size:10px;padding:3px 7px;border-radius:999px;background:#ffffff12;color:#b8c9e2}
+.rescan-toggle:hover{background:#30486b;border-color:#9cbbf9}.rescan-toggle:focus-within{outline:2px solid #b2caff;outline-offset:3px}
+.rescan-toggle.is-active{background:#365fed;border-color:#779bff;box-shadow:0 3px 14px #365fed35;color:#fff}.rescan-toggle.is-active strong{background:#ffffff24;color:#fff}.rescan-toggle.is-active svg{color:#fff}
+.rescan-toggle:has(input:disabled){opacity:.5;cursor:default}
+#station>.section-top{flex-wrap:wrap;gap:12px}

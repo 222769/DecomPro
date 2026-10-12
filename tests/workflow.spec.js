@@ -149,7 +149,7 @@ test('trolley management creates labels, barcode inventory views and retained co
  await page.reload();await expect(page.locator('#trolley-inventory-banner')).toContainText('Collected by Collection test company');
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(restored.trolleys.find(t=>t.id===trolley.id).status).toBe('collected');expect(restored.items).toHaveLength(2);
- await page.getByLabel('Caged trolley').fill('Helpdesk collection 02');
+ await page.evaluate(id=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.activeTrolleyId=id;state.defaults.trolley='Helpdesk collection 02';localStorage.setItem('decompro.v1',JSON.stringify(state));},trolley.id);await page.reload();await expect(page.getByLabel('Caged trolley')).toHaveAttribute('readonly','');
  await scan(page,'Test model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();
  await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('#save-feedback')).toContainText('collected');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(2);
