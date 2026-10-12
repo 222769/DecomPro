@@ -21,3 +21,9 @@ https://console.firebase.google.com/project/decompro-236e9/firestore/databases/-
 The application code push does not publish Firebase rules automatically. Existing trolley documents without the new deletion field remain compatible.
 
 Verification: 167 browser tests, 29 Firestore emulator tests, 62 unit tests and 10 production-build scenarios passed. Production build succeeded. Live Firebase rules were not deployed from this environment.
+
+## Detach directly from the delete dialog
+
+If the trolley belongs to a collection, a Detach from collection button appears below the deletion message. It also appears if a newly created shared assignment is discovered during deletion. Choose it to remove this trolley's assignment only, then click Delete trolley to retry the separately confirmed deletion. The collection, other trolley assignments, equipment and unfinished scan remain intact. Detaching does not automatically delete the trolley.
+
+Shared detachment reads the latest collection and saves through the existing version-checked, audited collection update. A failed detach retains the assignment and offers retry. Active/checkpoint trolley selection is cleared when it points at the detached trolley in that collection, preserving its captured progress. No additional Firestore rules are required.

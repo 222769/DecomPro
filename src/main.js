@@ -705,8 +705,31 @@ function openTrolleyDeletion(id) {
  const trolley=state.trolleys.find(t=>t.id===id),client=sharedClient,version=client?.trolleyVersionFor(id)||0,dialog=document.querySelector('#trolley-manager');
  if(!trolley||!writable())return;
  if(sharedLocked&&client?.role!=='admin'){notice='Only a team administrator can delete a trolley.';render();return;}
- dialog.innerHTML=`<form id="delete-trolley-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>Delete ${escape(trolley.name)}?</h2><p>Only an empty, open trolley detached from its collection can be deleted. Move equipment to another trolley first. Shared audit history is retained.</p><label for="delete-trolley-text">Type DELETE to confirm</label><input id="delete-trolley-text" autocomplete="off" spellcheck="false"><label class="toggle-label"><input id="delete-trolley-ack" type="checkbox"> I understand this removes this trolley from the workspace.</label><p id="delete-trolley-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel-delete-trolley">Cancel</button><button class="primary" id="confirm-delete-trolley" disabled>Delete trolley</button></div></form>`;
+ dialog.innerHTML=`<form id="delete-trolley-form"><div class="eyebrow">${escape(trolley.reference)}</div><h2>Delete ${escape(trolley.name)}?</h2><p>Only an empty, open trolley detached from its collection can be deleted. Move equipment to another trolley first. Shared audit history is retained.</p><label for="delete-trolley-text">Type DELETE to confirm</label><input id="delete-trolley-text" autocomplete="off" spellcheck="false"><label class="toggle-label"><input id="delete-trolley-ack" type="checkbox"> I understand this removes this trolley from the workspace.</label><p id="delete-trolley-error" role="alert"></p><button type="button" class="secondary" id="detach-delete-trolley" hidden>Detach from collection</button><div class="dialog-actions"><button type="button" class="secondary" id="cancel-delete-trolley">Cancel</button><button class="primary" id="confirm-delete-trolley" disabled>Delete trolley</button></div></form>`;
  const form=dialog.querySelector('form'),text=dialog.querySelector('#delete-trolley-text'),ack=dialog.querySelector('#delete-trolley-ack'),button=dialog.querySelector('#confirm-delete-trolley'),cancel=dialog.querySelector('#cancel-delete-trolley'),output=dialog.querySelector('#delete-trolley-error');let busy=false;
+ const detach=dialog.querySelector('#detach-delete-trolley');detach.hidden=!state.collectionTrolleys.some(row=>row.trolleyId===id&&row.sessionId);
+ detach.onclick=async()=>{
+  if(busy)return;busy=true;button.disabled=true;cancel.disabled=true;detach.disabled=true;output.textContent='Checking the collection assignment…';
+  try{
+   if(saving||rescan.busy)throw Error('Wait for the pending equipment save or move to finish before detaching a trolley.');
+   if(client!==sharedClient||(sharedLocked&&(!client||navigator.onLine===false)))throw Error('Reconnect and reopen this trolley before detaching it.');
+   const groups=client?await client.loadCollections():state;
+   if(client!==sharedClient)throw Error('Workspace changed. Reconnect to check assignments.');
+   const links=groups.collectionTrolleys.filter(row=>row.trolleyId===id&&row.sessionId);
+   if(links.length>1)throw Error('This trolley has conflicting collection assignments. Review Manage collection trolleys.');
+   const owner=links[0]?.sessionId,session=groups.collectionSessions.find(row=>row.id===owner);
+   if(owner&&!session)throw Error('The collection is unavailable. Refresh collections before detaching.');
+   const remaining=groups.collectionTrolleys.filter(row=>row.sessionId===owner&&row.trolleyId!==id).map(row=>row.trolleyId);
+   const updated=owner?(client?await client.writeSession(session,remaining,client.sessionVersionFor(owner)):assignCollection(groups.collectionSessions,groups.collectionTrolleys,session,remaining,state.trolleys)):groups;
+   if(client!==sharedClient)throw Error('Workspace changed after detaching. Reconnect to retrieve confirmed assignments.');
+   const collectionScans=structuredClone(state.collectionScans||{}),checkpoint=collectionScans[owner];
+   if(checkpoint?.activeTrolleyId===id){checkpoint.activeTrolleyId='';checkpoint.defaults.trolley='';}
+   const clearActive=owner&&state.activeCollectionId===owner&&state.activeTrolleyId===id;
+   commitTrolleyWorkspace({...state,collectionSessions:updated.collectionSessions,collectionTrolleys:updated.collectionTrolleys,collectionScans,...(clearActive?{activeTrolleyId:'',defaults:{...state.defaults,trolley:''}}:{})});
+   updateCollections();detach.hidden=true;output.textContent=owner?`Detached from ${session.name}. The trolley and equipment are unchanged. Click Delete trolley to retry deletion.`:'This trolley is already detached. Click Delete trolley to retry deletion.';
+  }catch(error){output.textContent=`Trolley not detached. ${firebaseErrorMessage(error)}`;}
+  finally{busy=false;button.disabled=!valid();cancel.disabled=false;detach.disabled=false;}
+ };
  const valid=()=>text.value==='DELETE'&&ack.checked;
  form.oninput=()=>{button.disabled=busy||!valid();};cancel.onclick=()=>{dialog.close();openTrolleyManager();};dialog.oncancel=event=>{if(busy)event.preventDefault();};
  form.onsubmit=async event=>{
@@ -719,7 +742,7 @@ function openTrolleyDeletion(id) {
    // A live snapshot may already have removed the confirmed trolley.
    const next=reconcileTrolleySelection(state,state.trolleys.filter(row=>row.id!==id));commitTrolleyWorkspace(next);
    if(trolleyViewId===id){trolleyViewId='';location.hash='inventory';}resetRescan();dialog.close();notice=`Deleted ${trolley.name}. Equipment and shared audit history are preserved.`;render();openTrolleyManager();
-  }catch(error){output.textContent=`Trolley not deleted. ${error.code==='permission-denied'?'An administrator must publish the latest Firestore rules from Database before shared trolley deletion is available. ':''}${firebaseErrorMessage(error)}`;busy=false;button.disabled=!valid();cancel.disabled=false;}
+  }catch(error){output.textContent=`Trolley not deleted. ${error.code==='permission-denied'?'An administrator must publish the latest Firestore rules from Database before shared trolley deletion is available. ':''}${firebaseErrorMessage(error)}`;busy=false;button.disabled=!valid();cancel.disabled=false;if(/Detach this trolley/.test(error.message))detach.hidden=false;}
  };
 }
 async function openReadiness(id) {

@@ -304,3 +304,5 @@ html[data-theme="dark"] .test-workspace-banner { background:#392f1b; border-colo
 #inventory th[aria-sort="ascending"] .register-sort span,#inventory th[aria-sort="descending"] .register-sort span{opacity:1}
 #inventory .register-sort:hover{color:var(--blue)}
 #inventory .register-sort:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:3px}
+
+#detach-delete-trolley[hidden]{display:none}
