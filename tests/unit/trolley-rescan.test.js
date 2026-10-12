@@ -6,3 +6,13 @@ test('rescan finds an exact asset, including an item without a serial, without c
 test('duplicate assets and serial-versus-asset collisions cannot choose the wrong record',()=>{
  const row={id:'one',serial:'SERIAL1',asset:'A0042'};assert.throws(()=>findRescanItem([row,{...row,id:'two',serial:'SERIAL2'}],'A0042'),/More than one/);assert.throws(()=>findRescanItem([row,{id:'two',serial:'A0042',asset:'A9999'}],'A0042'),/More than one/);assert.equal(findRescanItem([{...row,serial:'A0042'}],'A0042').id,'one');
 });
+test('barcode and security etch identify the original item, preserving leading zeros and punctuation',()=>{
+ const row={id:'one',serial:'N/A',asset:'N/A',barcode:'0000123000',etch:'TSU-ETCH/0042'};
+ for(const value of [' 0000123000 ',' tsu-etch/0042 '])assert.deepEqual(findRescanItem([row],value),row);
+ for(const value of ['123000','UNKNOWN','none','-','N/A'])assert.throws(()=>findRescanItem([row],value));
+});
+test('shared or cross-field identifiers reject ambiguous records, while matches within one record count once',()=>{
+ const row={id:'one',serial:'S1',asset:'A0042',barcode:'BC42',etch:'ETCH42'};
+ for(const other of [{...row,id:'two',serial:'S2'},{id:'two',serial:'BC42'},{id:'two',asset:'ETCH42'}])assert.throws(()=>findRescanItem([row,other],other.asset==='ETCH42'?'ETCH42':'BC42'),/More than one/);
+ assert.equal(findRescanItem([{...row,serial:'SAME',barcode:'SAME',etch:'SAME',asset:'SAME'}],'SAME').id,'one');
+});
