@@ -82,3 +82,10 @@ for(const identifier of ['0000123000','ORIGINAL-ETCH'])test(`rescan identifier $
 test('shared barcode rescan blocks a new cross-field collision discovered at confirmation',async({page})=>{
  await connectRescanTeam(page);await lookup(page,'0000123000');await page.evaluate(()=>window.remote.items.push({...window.remote.items[0],id:'cross-field-collision',serial:'0000123000',barcode:'DIFFERENT',asset:'A9999',etch:'OTHER'}));await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('More than one');expect(await page.evaluate(()=>window.moveWrites.length)).toBe(0);
 });
+
+test('A0803 identifies and moves its saved register record without duplicating it',async({page})=>{
+ const {item,target}=await seed(page);await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.items[0].asset='A0803';localStorage.setItem('decompro.v1',JSON.stringify(state));});await page.reload();await lookup(page,'A0803');await expect(page.locator('#station .captured')).toContainText('A0803');await expect(page.locator('#station .captured')).toContainText(item.serial);await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();expect((await stored(page)).items).toEqual([{...item,asset:'A0803',trolley:target.name,trolleyId:target.id}]);
+});
+test('an asset absent from inventory explains the separate equipment import without creating a record',async({page})=>{
+ await seed(page);const before=await stored(page);await lookup(page,'A0803');await expect(page.locator('#rescan-message')).toContainText('No saved item matches A0803');await expect(page.locator('#rescan-message')).toContainText('Collection register → Import equipment Excel');await expect(page.locator('#confirm-rescan')).toHaveCount(0);expect((await stored(page)).items).toEqual(before.items);
+});

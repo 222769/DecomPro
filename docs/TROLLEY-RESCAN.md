@@ -36,3 +36,5 @@ Saved register matches take priority and retain their original complete details 
 
 
 Barcode and security-etch lookups retain the original serial, asset, model/manufacturer and disposal attribution. Leading zeros and punctuation are preserved; only case and surrounding spaces are ignored. A value matching multiple fields on one item counts as one result. A value matching different items, including different identifier fields, stops for review. N/A and unknown placeholder values cannot identify an item. All four identifiers use the same refreshed-register confirmation checks and audited move path, with no additional Firebase rules required.
+
+Asset numbers present only in training spreadsheets are not part of the public recognition catalogue. For example, A0803 appears in the July 2025 workbook but must be imported through Collection register → Import equipment Excel before asset rescan can find it. Import reference spreadsheet remains a separate training action. Missing inventory lookup now names the scanned identifier and explains the correct importer.
