@@ -19,6 +19,15 @@ service cloud.firestore {
      && (p.handover.trolleyIds.size()<3 || handoverPeer(team,p,2)) && (p.handover.trolleyIds.size()<4 || handoverPeer(team,p,3))
      && (p.handover.trolleyIds.size()<5 || handoverPeer(team,p,4)) && (p.handover.trolleyIds.size()<6 || handoverPeer(team,p,5))));
   }
+  function unlockedPeer(team,p,index) {
+   let after=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.handover.trolleyIds[index])).data;
+   return after.payload.status=='open' && !after.get('deleted',false) && after.updatedBy==request.auth.uid && after.updatedAt==request.time;
+  }
+  function unlockGroup(team,p) {
+   return !('handover' in p) || (p.id!=p.handover.id ? unlockedPeer(team,p,0) :
+    (p.handover.trolleyIds.size()<2 || unlockedPeer(team,p,1)) && (p.handover.trolleyIds.size()<3 || unlockedPeer(team,p,2))
+    && (p.handover.trolleyIds.size()<4 || unlockedPeer(team,p,3)) && (p.handover.trolleyIds.size()<5 || unlockedPeer(team,p,4)) && (p.handover.trolleyIds.size()<6 || unlockedPeer(team,p,5)));
+  }
   function openTrolley(team,p) {
    let trolley=getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(p.trolleyId)).data;
    return ('trolleyId' in p) && p.trolleyId is string && !trolley.get('deleted',false) && trolley.payload.status=='open' && trolley.payload.name==p.trolley;
@@ -128,7 +137,11 @@ service cloud.firestore {
     allow update: if member(team) && !resource.data.get('deleted',false)
      && (!request.resource.data.get('deleted',false) || (admin(team) && resource.data.payload.status=='open' && request.resource.data.payload==resource.data.payload
       && (!exists(/databases/$(database)/documents/teams/$(team)/collectionTrolleys/$(id)) || getAfter(/databases/$(database)/documents/teams/$(team)/collectionTrolleys/$(id)).data.sessionId=='')))
-     && resource.data.payload.status in ['open','ready'] && valid(request.resource.data)
+     && (resource.data.payload.status in ['open','ready'] ||
+      (admin(team) && resource.data.payload.status=='collected' && request.resource.data.payload.status=='open'
+       && request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['status','readyAt','readyBy','collectedAt','collectedBy','company','handover'])
+       && getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)/revisions/$(request.resource.data.revisionId)).data.action=='unlock'
+       && unlockGroup(team,resource.data.payload))) && valid(request.resource.data)
      && (request.resource.data.payload.status=='ready' ? request.resource.data.payload.readyBy==membership(team).code : true)
      && (request.resource.data.payload.status=='collected' ? resource.data.payload.status=='ready' || admin(team) : true)
      && (resource.data.payload.status=='ready' ?
@@ -140,7 +153,9 @@ service cloud.firestore {
     allow delete: if false;
     match /revisions/{revision} {
      allow read: if member(team);
-     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','update','collect','remove']
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at','reason']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','update','collect','remove','unlock']
+      && (request.resource.data.action=='unlock' || !('reason' in request.resource.data))
+      && (request.resource.data.action!='unlock' || (admin(team) && boundedText(request.resource.data.reason) && request.resource.data.reason.size()<=500 && request.resource.data.before.payload.status in ['ready','collected'] && request.resource.data.after.payload.status=='open'))
       && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/trolleys/$(id)).data && request.resource.data.after.revisionId==revision;
      allow update, delete: if false;
     }

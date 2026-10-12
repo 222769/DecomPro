@@ -1,3 +1,4 @@
+import {trolleyUnlockPlan,unlockReason} from './trolley-unlock.js';
 import {checkReadiness,validateReadinessNotes} from './readiness.js';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
@@ -198,6 +199,25 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:'remove',at:serverTimestamp()});
    });
    trolleyVersions.delete(id);
+  },
+  async unlockTrolleys(id,expectedVersions,reason) {
+   if(member.role!=='admin')throw Error('Only a team administrator can unlock collected trolleys.');
+   reason=unlockReason(reason);
+   const ids=Object.keys(expectedVersions);if(!ids.includes(id)||!ids.length||ids.length>6)throw Error('Refresh the trolley unlock preview.');
+   let result;
+   await runTransaction(db,async tx=>{
+    const snapshots=[];for(const key of ids)snapshots.push(await tx.get(doc(trolleys,key)));
+    const records=snapshots.map(snapshot=>{if(!snapshot.exists()||snapshot.data().deleted||snapshot.data().version!==expectedVersions[snapshot.id])throw Error('A trolley changed. Refresh the unlock preview before retrying.');return snapshot.data().payload;});
+    const plan=trolleyUnlockPlan(records,id);if(plan.before.length!==ids.length)throw Error('Unlock every trolley in this linked handover together.');
+    for(const payload of plan.after){
+     const snapshot=snapshots.find(row=>row.id===payload.id),before=snapshot.data(),revisionId=createId();
+     const after={...before,payload,version:before.version+1,updatedBy:uid,updatedAt:serverTimestamp(),revisionId};
+     tx.set(snapshot.ref,after);tx.set(doc(snapshot.ref,'revisions',revisionId),{actor:uid,before,after,action:'unlock',reason,at:serverTimestamp()});
+    }
+    result=plan.after;
+   });
+   for(const trolley of result)trolleyVersions.set(trolley.id,expectedVersions[trolley.id]+1);
+   return result;
   },
   async writeTrolley(trolley,expectedVersion=0,{historicalImport=false}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical collection details.');

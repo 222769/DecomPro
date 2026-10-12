@@ -1,3 +1,4 @@
+import {validateUnlockHistory} from './trolley-unlock.js';
 import {validateReadinessNotes} from './readiness.js';
 import {validateEvidence} from './recognition-evidence.js';
 import { fields } from './data';
@@ -121,7 +122,7 @@ export function validateWorkspace(value) {
     collectionScans[id]={draft:checked.draft,step:checked.step,defaults:checked.defaults,activeTrolleyId:checked.activeTrolleyId};
    }
   }
-  return { captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  return { ...(value.trolleyUnlocks===undefined?{}:{trolleyUnlocks:validateUnlockHistory(value.trolleyUnlocks)}), captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

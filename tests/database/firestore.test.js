@@ -364,3 +364,27 @@ test('allocating names never skips an existing normalised name to create a dupli
  await owner.deleteTrolley(fresh.id,1);const replacement=await owner.allocateTrolley('Allocation cage','Helpdesk');await owner.writeTrolley(replacement,0);
  assert.notEqual(replacement.id,fresh.id);await assert.rejects(owner.allocateTrolley('allocation cage','Helpdesk'),/already uses/);
 });
+
+test('administrator unlock reverses collected status with immutable reason history and restores item removal',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member),item=sample();await tech.write(item);
+ await env.withSecurityRulesDisabled(async c=>{const ref=doc(c.firestore(),`teams/college-it/trolleys/${initialTrolley.id}`),row=(await getDoc(ref)).data();await setDoc(ref,{...row,payload:{...row.payload,status:'collected',company:'Collector',collectedAt:new Date().toISOString(),collectedBy:'TT'}});});
+ await owner.load();await tech.load();const versions={[initialTrolley.id]:owner.trolleyVersionFor(initialTrolley.id)};
+ const rowRef=doc(context('admin'),`teams/college-it/trolleys/${initialTrolley.id}`),original=(await getDoc(rowRef)).data();
+ for(const [uid,changedName] of [['tech',false],['admin',true]]){
+  const db=context(uid),ref=doc(db,`teams/college-it/trolleys/${initialTrolley.id}`),revisionId='forged-'+uid,payload={...initialTrolley,readyAt:'',readyBy:'',...(changedName?{name:'Changed during unlock'}:{})},after={...original,payload,version:original.version+1,updatedBy:uid,updatedAt:serverTimestamp(),revisionId};
+  const batch=writeBatch(db);batch.set(ref,after);batch.set(doc(ref,'revisions',revisionId),{actor:uid,before:original,after,action:'unlock',reason:'Forged unlock',at:serverTimestamp()});await assertFails(batch.commit());
+ }
+ await assert.rejects(tech.unlockTrolleys(initialTrolley.id,versions,'Wrong status'),/administrator/);await assert.rejects(owner.unlockTrolleys(initialTrolley.id,versions,' '),/reason/);
+ const unlocked=await owner.unlockTrolleys(initialTrolley.id,versions,'Pickup status entered by mistake');assert.equal(unlocked[0].status,'open');
+ const audits=await getDocs(collection(context('admin'),`teams/college-it/trolleys/${initialTrolley.id}/revisions`)),unlock=audits.docs.map(d=>d.data()).find(r=>r.action==='unlock');assert.equal(unlock.before.payload.company,'Collector');assert.equal(unlock.reason,'Pickup status entered by mistake');assert.equal(unlock.actor,'admin');
+ await assert.rejects(owner.unlockTrolleys(initialTrolley.id,versions,'Repeat'),/changed/);
+ await tech.load();await tech.write(item,tech.versionFor(item.id),{deleted:true});assert.equal((await tech.load()).items.length,0);
+});
+test('six linked collected trolleys unlock atomically within rules access limits and reject partial direct writes',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),trolleys=[initialTrolley,...Array.from({length:5},(_,i)=>createTrolley(`Linked ${i}`))],link={id:initialTrolley.id,trolleyIds:trolleys.map(t=>t.id)};
+ await env.withSecurityRulesDisabled(async c=>{for(const t of trolleys)await setDoc(doc(c.firestore(),`teams/college-it/trolleys/${t.id}`),{payload:{...t,status:'collected',handover:link,company:'Collector',collectedAt:new Date().toISOString(),collectedBy:'TA'},version:1,createdBy:'admin',updatedBy:'admin',createdAt:new Date(),updatedAt:new Date(),revisionId:'seed'});});
+ await owner.load();const versions=Object.fromEntries(trolleys.map(t=>[t.id,owner.trolleyVersionFor(t.id)]));
+ const db=context('admin'),ref=doc(db,`teams/college-it/trolleys/${initialTrolley.id}`),before=(await getDoc(ref)).data(),payload={...initialTrolley,readyAt:'',readyBy:''},after={...before,payload,version:2,updatedBy:'admin',updatedAt:serverTimestamp(),revisionId:'partial'};
+ const batch=writeBatch(db);batch.set(ref,after);batch.set(doc(ref,'revisions','partial'),{actor:'admin',before,after,action:'unlock',reason:'Partial group',at:serverTimestamp()});await assertFails(batch.commit());
+ const unlocked=await owner.unlockTrolleys(trolleys[3].id,versions,'Correct linked pickup');assert.equal(unlocked.length,6);assert.ok((await owner.load()).trolleys.every(t=>t.status==='open'&&!t.handover));
+});
