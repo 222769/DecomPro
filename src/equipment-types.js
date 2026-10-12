@@ -19,3 +19,17 @@ export function suggestEquipmentDescription(model,manufacturer,facts=[]) {
  const types=new Set((references.length?references:matching).map(f=>normalizeEquipmentDescription(f.description)).filter(Boolean));
  return types.size===1?[...types][0]:null;
 }
+
+// Repairs use the saved model/maker; they never replace equipment identity with a serial guess.
+export function equipmentDescriptionPlan(items,trolleys,facts=[]) {
+ const changes=[],skipped={locked:0,unknown:0,unchanged:0};
+ for(const item of items){
+  const type=suggestEquipmentDescription(item.model,item.manufacturer,facts);
+  if(!type){skipped.unknown++;continue;}
+  if(normalizeEquipmentDescription(item.description)===type){skipped.unchanged++;continue;}
+  const matches=item.trolleyId?trolleys.filter(t=>t.id===item.trolleyId):trolleys.filter(t=>t.name===item.trolley);
+  if(matches.length!==1||matches[0].status!=='open'){skipped.locked++;continue;}
+  changes.push({before:structuredClone(item),after:{...structuredClone(item),description:type},selected:/^monitor$/i.test(item.description.trim())});
+ }
+ return {changes,skipped};
+}

@@ -1,4 +1,4 @@
-import { suggestEquipmentDescription } from './equipment-types.js';
+import { suggestEquipmentDescription, equipmentDescriptionPlan } from './equipment-types.js';
 import {findRescanItem} from './trolley-rescan.js';
 import {createTestWorkspace} from './test-workspace.js';
 import {readDevicePreferences,saveDevicePreferences,idleExpired} from './device-preferences.js';
@@ -129,7 +129,7 @@ function render() {
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="register-filters"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="collection-filter-field"><label for="collection-register-filter">Collection inventory</label><select id="collection-register-filter"></select></div></div><div class="backup-actions"><button class="secondary" id="equipment-import">Import equipment Excel</button><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="bulk-move-tools"></div><div id="review-filter"></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th class="selection-cell"><input type="checkbox" id="select-visible" aria-label="Select visible equipment"></th><th class="scan-order-cell" scope="col" title="Order recorded in this workspace">No.</th><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. The collection filter applies when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-review" class="card collection-review" aria-label="Collection review" hidden></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><button class="secondary" id="prepare-history-handover">Prepare handover pack</button><div id="handover-history"></div><div id="history-results"></div></section>
- <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog><dialog id="local-import-dialog"></dialog><dialog id="equipment-import-dialog"></dialog><dialog id="collection-session-dialog"></dialog><dialog id="team-access-dialog"></dialog><dialog id="handover-dialog"></dialog><dialog id="bulk-move-dialog"></dialog><dialog id="move-history-dialog"></dialog><dialog id="admin-dialog" class="admin-dialog"></dialog>`;
+ <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="description-review-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog><dialog id="local-import-dialog"></dialog><dialog id="equipment-import-dialog"></dialog><dialog id="collection-session-dialog"></dialog><dialog id="team-access-dialog"></dialog><dialog id="handover-dialog"></dialog><dialog id="bulk-move-dialog"></dialog><dialog id="move-history-dialog"></dialog><dialog id="admin-dialog" class="admin-dialog"></dialog>`;
  bind(); updateRegister(); updateHistory(); updateConnectionStatus(); updateOverviewLayout(); focus();
 }
 function resetRescan(){rescan.enabled=false;rescan.busy=false;rescan.serial='';rescan.item=null;rescan.message='';rescan.request++;}
@@ -821,6 +821,68 @@ function openReferenceEditor(serial) {
   }catch(error){document.querySelector('#reference-edit-error').textContent=firebaseErrorMessage(error);button.disabled=false;}
  };
 }
+async function openDescriptionReview() {
+ const dialog=document.querySelector('#description-review-dialog'),client=sharedClient,workspaceKey=key;
+ if(sharedLocked&&(!client||client.role!=='admin')){notice='Sign in as a team administrator to review shared equipment descriptions.';render();return;}
+ let busy=false,rows=[],versions=new Map();
+ const validContext=()=>client===sharedClient&&workspaceKey===key&&(!sharedLocked||Boolean(client));
+ dialog.innerHTML=`<div class="eyebrow">EXISTING EQUIPMENT</div><h2>Review saved equipment descriptions</h2><p>Check each proposed change against the equipment. Only the description changes; serial, model, manufacturer, asset, barcode, trolley and disposal details stay as recorded.</p><p>Ready or collected trolleys remain locked. Reopen a ready trolley to correct its items.</p><div id="description-preview"></div><p id="description-review-result" role="status"></p><div class="dialog-actions"><button class="secondary" id="close-description-review">Close</button><button class="secondary" id="refresh-description-review">Refresh suggestions</button><button class="primary" id="apply-description-review" disabled>Update selected descriptions</button></div>`;
+ dialog.showModal();dialog.oncancel=e=>{if(busy)e.preventDefault();};
+ const output=dialog.querySelector('#description-review-result'),button=dialog.querySelector('#apply-description-review'),close=dialog.querySelector('#close-description-review'),refresh=dialog.querySelector('#refresh-description-review');
+ const controls=disabled=>{button.disabled=disabled||!dialog.querySelector('[data-description-id]:checked');close.disabled=disabled;refresh.disabled=disabled;dialog.querySelectorAll('[data-description-id]').forEach(input=>input.disabled=disabled);};
+ close.onclick=()=>{if(!busy){dialog.close();render();}};
+ async function preview(){
+  if(busy)return;busy=true;controls(true);output.textContent='Checking saved equipment…';
+  try{
+   if(!validContext())throw Error('Workspace changed. Close this review and reconnect.');
+   const records=client?await client.load():state;
+   if(!validContext())throw Error('Workspace changed. Close this review and reconnect.');
+   const exclusions=new Set((records.corrections||state.referenceCorrections||[]).filter(row=>row.mode!=='original').map(row=>row.serial.toUpperCase()));
+   const facts=[...builtInReferences,...(records.examples||state.referenceExamples),...records.items.map(row=>({...row,source:'Saved equipment'}))].filter(row=>!exclusions.has(String(row.serial).toUpperCase()));
+   const plan=equipmentDescriptionPlan(records.items,records.trolleys,facts);rows=plan.changes;versions=new Map(rows.map(row=>[row.before.id,client?.versionFor(row.before.id)||0]));
+   dialog.querySelector('#description-preview').innerHTML=rows.map(row=>`<label class="review-check"><input type="checkbox" data-description-id="${escape(row.before.id)}" ${row.selected?'checked':''}><span><strong>${escape(row.before.serial)}</strong> · ${escape(row.before.model)} · ${escape(row.before.manufacturer)}<br>${escape(row.before.description)} → <strong>${escape(row.after.description)}</strong><br><small>${escape(row.before.trolley)}</small></span></label>`).join('')||'<p>No supported description changes found.</p>';
+   output.textContent=`${rows.length} suggested changes. Skipped: ${plan.skipped.locked} locked or unassigned, ${plan.skipped.unknown} uncertain, ${plan.skipped.unchanged} already correct. Old Monitor defaults are selected; review other descriptions individually.`;
+   dialog.querySelectorAll('[data-description-id]').forEach(input=>input.onchange=()=>controls(false));
+  }catch(error){rows=[];dialog.querySelector('#description-preview').textContent='';output.textContent=firebaseErrorMessage(error);}
+  finally{busy=false;controls(false);}
+ }
+ refresh.onclick=preview;
+ button.onclick=async()=>{
+  if(busy)return;
+  const ids=new Set([...dialog.querySelectorAll('[data-description-id]:checked')].map(input=>input.dataset.descriptionId)),selected=rows.filter(row=>ids.has(row.before.id));if(!selected.length)return;
+  busy=true;controls(true);let saved=0;const failures=[];
+  try{
+   if(!validContext()||localTabBlocked||(!client&&storageError)||(client&&navigator.onLine===false))throw Error('Saving is unavailable. Reconnect or back up your local workspace before continuing.');
+   const records=client?await client.load():state;
+   if(!validContext())throw Error('Workspace changed. Close this review and reconnect.');
+   for(const row of selected){
+    if(!sameRecord(records.items.find(item=>item.id===row.before.id),row.before)||(client&&client.versionFor(row.before.id)!==versions.get(row.before.id)))throw Error('Equipment changed after this preview. Refresh suggestions and review it again.');
+    const trolley=records.trolleys.filter(t=>row.before.trolleyId?t.id===row.before.trolleyId:t.name===row.before.trolley);
+    if(trolley.length!==1||trolley[0].status!=='open')throw Error('A trolley is now locked or unavailable. Refresh suggestions before updating.');
+    if(client&&!row.before.trolleyId)throw Error('Assign legacy equipment to its permanent trolley reference before updating.');
+   }
+   if(!client){
+    const updates=new Map(selected.map(row=>[row.before.id,row.after]));commitTrolleyWorkspace({...state,items:state.items.map(item=>updates.get(item.id)||item)});saved=selected.length;
+   }else for(const row of selected){
+    if(!validContext()||navigator.onLine===false){failures.push('Connection changed. Reconnect to retrieve confirmed records.');break;}
+    output.textContent=`Updating ${saved+1} of ${selected.length} descriptions…`;
+    try{
+     await client.write(row.after,versions.get(row.before.id));saved++;
+     if(!validContext()){failures.push('Workspace changed after a confirmed save. Reconnect to retrieve it.');break;}
+     state.items=state.items.map(item=>item.id===row.before.id?row.after:item);persist();
+     dialog.querySelectorAll('[data-description-id]').forEach(input=>{if(input.dataset.descriptionId===row.before.id){input.checked=false;input.closest('label').textContent=`${row.before.serial}: description updated to ${row.after.description}.`;}});
+    }catch(error){failures.push(`${row.before.serial}: ${firebaseErrorMessage(error)}`);}
+   }
+   if(validContext()){
+    updateRegister();updateHistory();
+    if(!failures.length){dialog.querySelector('#description-preview').textContent='';output.textContent=`${saved} equipment descriptions updated. All other item details and your unfinished scan were preserved. Refresh suggestions to check remaining items.`;}
+    else output.textContent=`${saved} descriptions confirmed. ${failures.join(' ')} Refresh suggestions before retrying remaining items.`;
+   }
+  }catch(error){output.textContent=`Descriptions not updated. ${firebaseErrorMessage(error)}`;}
+  finally{busy=false;controls(false);button.disabled=true;}
+ };
+ await preview();
+}
 function openSettings() {
  const settings=state.settings;
  const dialog=document.querySelector('#settings-dialog');
@@ -831,6 +893,7 @@ function openSettings() {
  document.querySelector('#appearance-theme').onchange=e=>previewTheme(e.target.value);
  refreshVoiceChoices(settings.voiceURI);
  document.querySelector('#speech-voice').onchange=updateVoiceInfo;
+ const repair=document.createElement('button');repair.type='button';repair.className='secondary';repair.id='review-equipment-descriptions';repair.textContent='Review saved equipment descriptions';repair.disabled=sharedLocked&&sharedClient?.role!=='admin';document.querySelector('#manage-references').after(repair);repair.onclick=()=>{dialog.close();openDescriptionReview();};
  document.querySelector('#manage-references').onclick=()=>{dialog.close();openReferenceLibrary();};
  document.querySelector('#import-excel').onclick=()=>document.querySelector('#reference-file').click();
  document.querySelector('#reference-file').onchange=importReference;

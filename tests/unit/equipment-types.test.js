@@ -21,3 +21,13 @@ test('bundled facts provide different hardware categories without changing seria
  for(const type of ['Laptop','Monitor','Desktop','Printer','Tablet','Switch'])assert.ok(facts.some(f=>f.description===type),type);
  for(const fact of facts.filter(f=>f.description==='Laptop').slice(0,20))assert.equal(suggest(fact.model,fact.manufacturer,facts),'Laptop');
 });
+
+test('existing-record repair plans change only descriptions and preserve ambiguous and locked inventory',async()=>{
+ const {equipmentDescriptionPlan}=await import('../../src/equipment-types.js');
+ const trolley={id:'t1',name:'Cage',status:'open'},item={id:'i1',trolleyId:'t1',trolley:'Cage',serial:'OLD1',model:'G15',manufacturer:'Lenovo',description:'Monitor',asset:'A1234',barcode:'B1',technician:'JA',date:'2026-10-12'};
+ const plan=equipmentDescriptionPlan([item,{...item,id:'i2',model:'Unknown'},{...item,id:'i3',description:'Laptop'}],[trolley]);
+ assert.equal(plan.changes.length,1);assert.deepEqual(plan.changes[0].after,{...item,description:'Laptop'});assert.equal(plan.changes[0].selected,true);assert.equal(item.description,'Monitor');assert.deepEqual(plan.skipped,{locked:0,unknown:1,unchanged:1});
+ for(const status of ['ready','collected'])assert.equal(equipmentDescriptionPlan([item],[{...trolley,status}]).changes.length,0);
+ assert.equal(equipmentDescriptionPlan([{...item,trolleyId:undefined}],[trolley,{...trolley,id:'t2'}]).changes.length,0);
+ assert.equal(equipmentDescriptionPlan([{...item,description:'Custom laptop kit'}],[trolley]).changes[0].selected,false);
+});
