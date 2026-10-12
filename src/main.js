@@ -1,3 +1,4 @@
+import {findRescanItem} from './trolley-rescan.js';
 import {createTestWorkspace} from './test-workspace.js';
 import {readDevicePreferences,saveDevicePreferences,idleExpired} from './device-preferences.js';
 import {collectionDashboard,dashboardStatuses} from './collection-dashboard.js';
@@ -64,6 +65,7 @@ let startsShared=false;try{startsShared=!testWorkspace&&localStorage.getItem('de
 if(!startsShared)await acquireLocalTab();
 window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
 let pendingScan=null;
+const rescan={enabled:false,busy:false,serial:'',item:null,version:0,message:'',request:0};
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 let state = { captureOrder:'serial-first', activeCollectionId:'',collectionPaused:false,collectionSessions:[],collectionTrolleys:[],collectionScans:{},collectionWorkspace:'',activeTrolleyId:'', trolleys:[], profiles:[{name:'Jawad',code:'JA'}], active:'JA', defaults:{date:today(),description:'Monitor',manufacturer:'',source:'Storage',reason:'EOL',trolley:'Trolley 01'}, items:[], draft:{}, step:0, voice:true, settings:{...defaultSettings}, referenceExamples:[], referenceCorrections:[] };
 let storageError = '', notice = '', scanning = false, lastEmpty = 0;
@@ -93,7 +95,7 @@ function readTrolleyHash(){return location.hash.match(/^#trolley\/([A-Za-z0-9-]+
 const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function persist() { if(localTabBlocked)return false; if(storageError) return false; try { localStorage.setItem(key,JSON.stringify(state)); return true; } catch { storageError='Browser storage is unavailable or full. Export your records now; changes may be lost on refresh.'; render(); return false; } }
 function speak(text) { if(!state.voice || !('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=utteranceFor(text,state.settings); speechSynthesis.speak(u); }
-function prompt() { if(state.collectionPaused)return;speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
+function prompt() { if(rescan.enabled){speak('Trolley rescan mode. Scan a saved serial number, check its details, then confirm its trolley placement.');return;}if(state.collectionPaused)return;speak(state.step<fields.length ? `Next, ${fields[state.step][1]}` : 'Review equipment. Press Enter to save and place it in the trolley.'); }
 function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
  if(localTabBlocked){
@@ -116,18 +118,61 @@ function render() {
  <section id="collection-dashboard" class="card collection-dashboard" aria-label="Collection dashboard"></section>
  <section id="collections" class="card named-collections" aria-label="Collection sessions"></section>
  <section id="session-summary" class="card session-summary" aria-label="Session summary"></section>
- <div class="station-layout"><section id="station" class="card station"><div class="section-top"><span class="eyebrow"><span class="station-dot"></span> SCAN STATION</span><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><div class="steps">${fields.map((f,i)=>`<button class="step ${i===state.step?'current':''} ${i<state.step?'complete':''}" data-step="${i}" ${i>state.step?'disabled':''}><span>${i<state.step?icon('check'):i+1}</span>${escape(f[1].replace(' number',''))}</button>`).join('')}</div>
+ <div class="station-layout">${rescan.enabled?renderRescanStation():`<section id="station" class="card station"><div class="section-top"><span class="eyebrow"><span class="station-dot"></span> SCAN STATION</span><label class="rescan-toggle"><input id="rescan-mode" type="checkbox" ${saving?'disabled':''}> Trolley rescan mode</label><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><div class="steps">${fields.map((f,i)=>`<button class="step ${i===state.step?'current':''} ${i<state.step?'complete':''}" data-step="${i}" ${i>state.step?'disabled':''}><span>${i<state.step?icon('check'):i+1}</span>${escape(f[1].replace(' number',''))}</button>`).join('')}</div>
  ${state.settings.reuseModel?`<div class="batch-model-chip">Batch model <strong>${escape(state.settings.batchModel)}</strong></div>`:''}<div class="scan-icon">${icon(current?'barcode':'check')}</div><div class="scan-label">${current?`FIELD ${state.step+1} OF ${fields.length}`:'READY TO RECORD'}</div><h2>${current?escape(current[1]):'Review this equipment'}</h2><p>${current?'Scan the label or type its value, then press Enter.':'Check the values below, then save this item to the collection register.'}</p>
  ${current?`<form id="scan-form"><label class="sr-only" for="scan">${escape(current[1])}</label><input id="scan" ${state.collectionPaused?'disabled':''} autocomplete="off" spellcheck="false" placeholder="${current[0]==='asset'?'Asset number: A1234 or N/A':'Waiting for a scan…'}" value="${escape(pendingScan?.step===state.step&&pendingScan.collectionId===state.activeCollectionId?pendingScan.value:state.draft[current[0]]||'')}"><button class="primary" type="submit">Capture value ${icon('arrow')}</button></form><div class="scan-actions"><button id="start" class="text-button">${icon(scanning?'voice':'play')} ${scanning?'Repeat spoken prompt':'Start scanning'}</button><button id="skip" class="secondary">${icon('skip')} Skip · N/A</button></div><div class="hint">${current[0]==='asset'?'Format: A followed by four digits (A1234). ':''}Double-click the scanner trigger (two empty Enter presses) to skip.</div>`:` ${state.draft.recognitionNeedsReview?`<label class="recognition-review"><input id="confirm-recognition" type="checkbox" ${state.draft.recognitionConfirmed?'checked':''}> I checked the suggested model and manufacturer against this equipment.</label>`:''}<button id="save" class="primary wide" ${saving?'disabled':''}>${saving?'Saving…':'Save item & start next'} ${icon('arrow')}</button><p id="save-feedback" aria-live="polite">${escape(notice||storageError)}</p>`}
  ${recognitionEvidenceCard()}
  ${modelCandidates.length?`<div class="model-candidates"><strong>Choose a matching model</strong><p>${modelMatch.suffix?`Serial ending ${escape(modelMatch.suffix)}${modelMatch.format?` · format ${escape(modelMatch.format)}`:''}`:modelMatch.prefix?`Prefix ${escape(modelMatch.prefix)}`:'This serial'} has ${modelCandidates.length>1?'conflicting reference models':'reference models'} to check. Confirm the equipment label before choosing.</p><label for="model-candidate">Reference model and manufacturer</label><select id="model-candidate"><option value="">Choose a suggestion…</option>${modelCandidates.map((candidate,index)=>`<option value="${index}">${escape(candidate.model)} · ${escape(candidate.manufacturer)} (${candidate.support} example${candidate.support===1?'':'s'})</option>`).join('')}</select><button type="button" class="secondary" id="use-model-candidate">Use selected model</button><p>You can also scan or type the model above.</p></div>`:''}
- ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>
+ ${state.draft.manufacturer!==undefined?`<div class="recognized-manufacturer"><label for="recognized-maker">Manufacturer</label><input id="recognized-maker" aria-label="Manufacturer for this item" value="${escape(state.draft.manufacturer)}" maxlength="1000"><span>Check these details before saving.</span></div>`:''}<div class="captured">${fields.filter(f=>state.draft[f[0]]).map(([k,label])=>`<div><span>${escape(label)}</span><strong>${escape(state.draft[k])}</strong></div>`).join('')||`<span class="capture-empty">${icon('list')} Your captured values will appear here.</span>`}</div><div class="station-footer"><button id="back" class="text-button" ${state.step===0?'disabled':''}>${icon('back')} Previous field</button><button id="reset" class="text-button">Clear current item</button></div></section>`}
  <section class="card defaults"><div class="defaults-heading"><span class="defaults-icon">${icon('list')}</span><div class="eyebrow">BATCH DEFAULTS</div></div><h2>Set once. Keep scanning.</h2><p>Applied to each item when you save it.</p><form id="defaults">${defaultFields.map(([k,label,type])=>`<label for="default-${k}">${label}</label><input id="default-${k}" name="${k}" type="${type}" value="${escape(state.defaults[k])}" maxlength="1000" required>`).join('')}<button class="secondary wide" type="submit">Apply batch defaults</button></form><div class="note">Technician initials automatically fill <strong>Who disposed of it?</strong> in your Excel export.</div></section></div>
  <section id="inventory" class="card register"><div class="section-top"><div><div class="eyebrow">COLLECTION REGISTER</div><h2><span id="inventory-title">Ready for the next collection</span> <span class="count">${state.items.length}</span></h2></div><button id="export" class="primary" ${!state.items.length||exporting?'disabled':''}>${icon('download')} ${exporting?'Preparing Excel…':'Export Excel'}</button></div><div id="trolley-inventory-banner"></div><div class="register-tools"><div class="register-filters"><div class="search-field">${icon('list')}<label class="sr-only" for="register-search">Search collection register</label><input id="register-search" type="search" placeholder="Search equipment, serial, trolley or technician…" value="${escape(search)}"></div><div class="collection-filter-field"><label for="collection-register-filter">Collection inventory</label><select id="collection-register-filter"></select></div></div><div class="backup-actions"><button class="secondary" id="equipment-import">Import equipment Excel</button><button class="secondary" id="backup">${icon('download')} Backup</button><button class="secondary" id="restore">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept=".json,application/json" tabindex="-1" aria-label="Choose backup file"></div></div><div id="bulk-move-tools"></div><div id="review-filter"></div><div id="search-count" class="search-count" aria-live="polite"></div><div class="table-wrap"><table><thead><tr><th class="selection-cell"><input type="checkbox" id="select-visible" aria-label="Select visible equipment"></th><th class="scan-order-cell" scope="col" title="Order recorded in this workspace">No.</th><th>Equipment / model</th><th>Serial number</th><th>Asset number</th><th>Trolley</th><th>Technician</th><th>Disposal date</th><th>Actions</th></tr></thead><tbody></tbody></table></div><div class="register-footer">Excel exports the selected trolley, or all inventory when no trolley is selected. The collection filter applies when no trolley is selected. Search does not change the export. Backups also keep trolley details, profiles and captured progress.</div></section>
  <section id="collection-review" class="card collection-review" aria-label="Collection review" hidden></section>
  <section id="collection-history" class="card collection-history" hidden><div class="section-top"><div><div class="eyebrow">COMPLETED COLLECTIONS</div><h2>Collection history</h2><p>Retained trolley inventories and collection details.</p></div><span id="history-total" class="tag"></span></div><label for="history-search">Search collected trolleys</label><input id="history-search" type="search" placeholder="Reference, trolley, company or technician…" value="${escape(historySearch)}"><button class="secondary" id="prepare-history-handover">Prepare handover pack</button><div id="handover-history"></div><div id="history-results"></div></section>
  <footer>DecomPro · Less clicking. More clearing.</footer></main><dialog id="profile-dialog"><form id="profile-form"><h2>Add a technician</h2><p>Local profiles identify records; they are not secure sign-in accounts.</p><label for="name">Name</label><input id="name" name="name" required maxlength="60"><label for="code">Disposal initials</label><input id="code" name="code" required maxlength="12"><div class="dialog-actions"><button class="secondary" type="button" id="cancel-profile">Cancel</button><button class="primary">Save profile</button></div><p id="profile-error" role="alert"></p></form></dialog><dialog id="edit-dialog"></dialog><dialog id="restore-dialog"></dialog><dialog id="settings-dialog"></dialog><dialog id="import-preview-dialog"></dialog><dialog id="reference-library-dialog"></dialog><dialog id="reference-edit-dialog"></dialog><dialog id="scan-correction-dialog"></dialog><dialog id="trolley-dialog"></dialog><dialog id="trolley-manager"></dialog><dialog id="database-dialog"></dialog><dialog id="local-import-dialog"></dialog><dialog id="equipment-import-dialog"></dialog><dialog id="collection-session-dialog"></dialog><dialog id="team-access-dialog"></dialog><dialog id="handover-dialog"></dialog><dialog id="bulk-move-dialog"></dialog><dialog id="move-history-dialog"></dialog><dialog id="admin-dialog" class="admin-dialog"></dialog>`;
  bind(); updateRegister(); updateHistory(); updateConnectionStatus(); updateOverviewLayout(); focus();
+}
+function resetRescan(){rescan.enabled=false;rescan.busy=false;rescan.serial='';rescan.item=null;rescan.message='';rescan.request++;}
+function rescanDestination() {
+ return state.trolleys.find(t=>t.id===state.activeTrolleyId)||(()=>{const matches=state.trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley));return matches.length===1?matches[0]:null;})();
+}
+function renderRescanStation() {
+ const item=rescan.item,destination=rescanDestination(),source=item?state.trolleys.find(t=>t.id===item.trolleyId):null;
+ return `<section id="station" class="card station"><div class="section-top"><span class="eyebrow">TROLLEY RESCAN</span><label class="rescan-toggle"><input id="rescan-mode" type="checkbox" checked ${rescan.busy?'disabled':''}> Trolley rescan mode</label><button id="voice" class="pill">${icon('voice')} ${state.voice?'Voice on':'Voice off'}</button></div><h2>Find it. Check it. Place it.</h2><p>Exact saved serials fill existing equipment details. Confirm placement to move that record without creating another item. Your normal scan stays paused.</p><div class="rescan-target"><strong>Target: ${escape(destination?.name||'Select a trolley')}</strong><span>${escape(destination?.reference||'Use Change trolley to choose the physical trolley.')}</span></div><form id="rescan-form"><label for="rescan-serial">Rescan serial number</label><input id="rescan-serial" maxlength="1000" autocomplete="off" spellcheck="false" value="${escape(rescan.serial)}" ${rescan.busy?'disabled':''}><button class="primary" ${rescan.busy?'disabled':''}>${rescan.busy?'Checking…':'Find saved item'}</button></form><p id="rescan-message" role="status">${escape(rescan.message)}</p>${item?`<div class="captured">${[['serial','Serial number'],['model','Model number'],['manufacturer','Manufacturer'],['asset','Asset number'],['barcode','Barcode'],['etch','Security etch'],['technician','Originally recorded by'],['date','Disposal date']].map(([key,label])=>`<div><span>${label}</span><strong>${escape(item[key])}</strong></div>`).join('')}</div><p>Recorded trolley: <strong>${escape(source?.name||item.trolley)}</strong> · ${escape(source?.reference||'')}</p><button id="confirm-rescan" class="primary wide" ${rescan.busy||!destination?'disabled':''}>${rescan.busy?'Confirming…':'Confirm trolley placement'}</button>`:''}</section>`;
+}
+async function lookupRescan() {
+ if(rescan.busy||!rescan.enabled||!writable())return;
+ const request=++rescan.request,client=sharedClient,locked=sharedLocked;rescan.busy=true;rescan.item=null;rescan.message='Looking for this serial in the equipment register…';render();
+ try{
+  if(client){const records=await client.load();if(client!==sharedClient||locked!==sharedLocked)throw Error('Workspace changed. Sign in and rescan.');state.items=records.items;state.trolleys=records.trolleys;persist();}
+  rescan.item=findRescanItem(state.items,rescan.serial);rescan.version=client?.versionFor(rescan.item.id)||0;
+  rescan.message='Saved details found. Check the physical item and target trolley, then confirm placement.';
+ }catch(error){if(request!==rescan.request)return;rescan.item=null;rescan.message=`Rescan stopped. ${firebaseErrorMessage(error)}`;}
+ finally{if(request===rescan.request){rescan.busy=false;render();const input=document.querySelector('#rescan-serial');input?.focus();input?.select();}}
+}
+async function confirmRescan() {
+ if(rescan.busy||!rescan.enabled||!rescan.item||!writable())return;
+ if(state.collectionPaused){rescan.message='Resume the collection before confirming a trolley placement.';render();return;}
+ const client=sharedClient,locked=sharedLocked,item=structuredClone(rescan.item),version=rescan.version,destination=rescanDestination(),collectionId=state.activeCollectionId;
+ if(!destination){rescan.message='Choose the target trolley by its permanent reference using Change trolley.';render();return;}
+ const request=++rescan.request;let confirmed=false;rescan.busy=true;rescan.message='Checking and confirming trolley placement…';render();
+ try{
+  if(client){const records=await client.load();if(client!==sharedClient||locked!==sharedLocked)throw Error('Workspace changed. Reconnect and rescan.');state.items=records.items;state.trolleys=records.trolleys;}
+  if(state.activeCollectionId!==collectionId||rescanDestination()?.id!==destination.id)throw Error('The target trolley or collection changed. Check it and confirm again.');
+  const latest=state.items.find(row=>row.id===item.id);
+  if(!latest||!sameRecord(latest,item)||(client&&client.versionFor(item.id)!==version))throw Error('This equipment record changed since lookup. Scan its serial again to review the latest details.');
+  const target=state.trolleys.find(t=>t.id===destination.id);if(!target)throw Error('The target trolley is no longer available.');assertCollectionTrolley(target);
+  const row=movePlan(state.items,state.trolleys,[item.id],destination.id)[0],profile=client?.profile||state.profiles.find(p=>p.code===state.active);
+  if(!profile)throw Error('Select a technician before confirming placement.');
+  if(!row.skip){
+   if(client){await client.write(row.after,version,{collectionId});confirmed=true;}
+   if(client!==sharedClient||locked!==sharedLocked)throw Error('Workspace changed. Sign in again to retrieve the confirmed move.');
+   const next={...state,items:state.items.map(record=>record.id===item.id?row.after:record),...(!client?{trolleyMoves:[...(state.trolleyMoves||[]),localMoveEvent(row,profile)]}:{})};
+   commitTrolleyWorkspace(next);confirmed=true;
+  }
+  rescan.item=null;rescan.serial='';rescan.message=row.skip?'Already recorded on this trolley. No duplicate item or move was created. Scan the next serial.':`Existing item moved to ${target.name}. Its saved identifiers and disposal attribution are preserved. Scan the next serial.`;
+  speak(row.skip?'Already on this trolley. Next serial.':'Trolley placement confirmed. Next serial.');
+ }catch(error){if(request!==rescan.request)return;rescan.message=`${confirmed?'Move confirmed; check the register before retrying.':'Placement not confirmed.'} ${firebaseErrorMessage(error)}`;}
+ finally{if(request===rescan.request){rescan.busy=false;render();document.querySelector('#rescan-serial')?.focus();}}
 }
 function capture(value) {
  if(state.collectionPaused){notice='This collection session is paused. Resume it before scanning.';render();return;}
@@ -181,6 +226,7 @@ function saveFeedback(message,field) {
  if(field)document.querySelector(field==='manufacturer'&&state.draft.manufacturer!==undefined?'#recognized-maker':`#default-${field}`)?.setAttribute('aria-invalid','true');
 }
 async function saveItem() {
+ if(rescan.enabled)return;
  if(saving){saveFeedback('Saving is still in progress. Your scan will stay here until confirmation arrives.');return;}
  const client=sharedClient,locked=sharedLocked;
  let waiting,confirmed=false;
@@ -243,6 +289,11 @@ function writable() {
 }
 
 function bind() {
+ document.querySelector('#rescan-mode')?.addEventListener('change',event=>{if(saving||rescan.busy)return;rescan.enabled=event.target.checked;rescan.item=null;rescan.serial='';rescan.message='';render();if(rescan.enabled){document.querySelector('#rescan-serial')?.focus();prompt();}});
+ document.querySelector('#rescan-serial')?.addEventListener('input',event=>{rescan.serial=event.target.value;rescan.item=null;const button=document.querySelector('#confirm-rescan');if(button)button.disabled=true;});
+ document.querySelector('#rescan-form')?.addEventListener('submit',event=>{event.preventDefault();lookupRescan();});
+ document.querySelector('#confirm-rescan')?.addEventListener('click',confirmRescan);
+
  document.querySelector('#database').onclick=openDatabase;
  document.querySelector('#prepare-history-handover').onclick=openHandoverPack;
  document.querySelector('#history-search').oninput=e=>{historySearch=e.target.value;updateHistory();};
@@ -267,9 +318,9 @@ function bind() {
  });
  document.querySelector('#recognized-maker')?.addEventListener('input',e=>{state.draft.manufacturer=e.target.value;if(state.draft.recognitionNeedsReview){state.draft.recognitionConfirmed=false;const check=document.querySelector('#confirm-recognition');if(check)check.checked=false;if(state.draft.recognitionCorrected){const certainty=document.querySelector('#recognition-certainty');if(certainty)certainty.textContent='Edited details need a fresh label check.';}}persist();});
  document.querySelector('#confirm-recognition')?.addEventListener('change',e=>{state.draft.recognitionConfirmed=e.target.checked;persist();});
- document.querySelector('#back').onclick=()=>{if(state.step>0){pendingScan=null;state.step--;lastEmpty=0;persist();render();prompt();}};
+ document.querySelector('#back')?.addEventListener('click',()=>{if(state.step>0){pendingScan=null;state.step--;lastEmpty=0;persist();render();prompt();}});
  document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{pendingScan=null;state.step=Number(b.dataset.step);lastEmpty=0;persist();render();prompt();});
- document.querySelector('#reset').onclick=()=>{if(Object.keys(state.draft).length&&!confirm('Clear the current unsaved item?'))return;resetDraft();lastEmpty=0;persist();render();prompt();};
+ document.querySelector('#reset')?.addEventListener('click',()=>{if(Object.keys(state.draft).length&&!confirm('Clear the current unsaved item?'))return;resetDraft();lastEmpty=0;persist();render();prompt();});
  document.querySelector('#defaults').addEventListener('input',e=>{
   if(!defaultFields.some(([key])=>key===e.target.name))return;
   if(e.target.name==='date'&&!validDate(e.target.value))return;
@@ -729,7 +780,7 @@ function openSettings() {
  document.querySelector('#import-excel').onclick=()=>document.querySelector('#reference-file').click();
  document.querySelector('#reference-file').onchange=importReference;
  document.querySelector('#cancel-settings').onclick=()=>dialog.close();
- document.querySelector('#reset-test-data')?.addEventListener('click',()=>{if(!confirm('Reset this test workspace to its original 96 synthetic records? Only test data will be replaced.'))return;try{const next=createTestWorkspace(today());localStorage.setItem(key,JSON.stringify(next));state=next;storageError='';pendingScan=null;search='';historySearch='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';dashboardCollectionId='';dashboardStatus='all';collectionViewId=state.activeCollectionId;scanning=false;lastEmpty=0;location.hash='inventory';notice='Synthetic test data reset.';render();}catch(error){document.querySelector('#settings-error').textContent=`Test data was not reset. ${error.message}`;}});
+ document.querySelector('#reset-test-data')?.addEventListener('click',()=>{if(!confirm('Reset this test workspace to its original 96 synthetic records? Only test data will be replaced.'))return;try{const next=createTestWorkspace(today());localStorage.setItem(key,JSON.stringify(next));state=next;resetRescan();storageError='';pendingScan=null;search='';historySearch='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';dashboardCollectionId='';dashboardStatus='all';collectionViewId=state.activeCollectionId;scanning=false;lastEmpty=0;location.hash='inventory';notice='Synthetic test data reset.';render();}catch(error){document.querySelector('#settings-error').textContent=`Test data was not reset. ${error.message}`;}});
  document.querySelector('#settings-lock')?.addEventListener('click',()=>lockWorkspace());
  document.querySelector('#settings-signout')?.addEventListener('click',()=>{dialog.close();disconnectDatabase();});
  dialog.querySelectorAll('[data-settings-tool]').forEach(button=>button.onclick=()=>{dialog.close();({database:openDatabase,trolleys:openTrolleyManager,import:openEquipmentWorkbook,backup:downloadBackup,restore:()=>document.querySelector('#backup-file').click()})[button.dataset.settingsTool]();});
@@ -1096,7 +1147,7 @@ async function activateDatabase(config,teamId,email,password,{remember=devicePre
   devicePreferences=saveDevicePreferences({...devicePreferences,remember});
   const workspaceId=`${config.projectId}/${teamId}/${client.uid}`,sameCollections=state.collectionWorkspace===workspaceId;
   const next=validateWorkspace({...state,...(!sameCollections?{collectionSessions:[],collectionTrolleys:[],collectionScans:{},activeCollectionId:'',collectionPaused:false,...(state.collectionWorkspace?{draft:{},step:0}:{})}:{}),collectionWorkspace:workspaceId,activeTrolleyId:records.trolleys.some(t=>t.id===state.activeTrolleyId)?state.activeTrolleyId:records.trolleys.filter(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).length===1?records.trolleys.find(t=>trolleyNameKey(t.name)===trolleyNameKey(state.defaults.trolley)).id:'',profiles:[client.profile],active:client.profile.code,trolleyMoves:[],items:records.items,trolleys:records.trolleys,referenceExamples:records.examples,referenceCorrections:records.corrections||[]});
-  workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
+  resetRescan();workspaceManuallyLocked=false;localStorage.removeItem('decompro.workspaceLocked');recordActivity();
   if(!sharedLocked)localStorage.setItem(localWorkspaceKey,JSON.stringify(state));
   localStorage.setItem('decompro.firebaseConfig',JSON.stringify({config,teamId}));localStorage.setItem('decompro.mode','shared');
   selectedEquipment.clear();sharedClient?.stop();sharedClient=client;sharedLocked=true;releaseLocalTab?.();connectionPhase='connected';lastConfirmedAt=new Date().toISOString();state=next;collectionViewId=state.activeCollectionId||'';collectionError='';notice='';persist();render();
@@ -1110,7 +1161,7 @@ async function disconnectDatabase() {
   const local=localStorage.getItem(localWorkspaceKey);if(!local)throw Error('No preserved local workspace was found. Export the cached team register before continuing.');
   const restored=validateWorkspace(JSON.parse(local));
   if(sharedClient)await sharedClient.logout();else{const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}
-  selectedEquipment.clear();sharedClient=null;sharedLocked=false;localStorage.removeItem('decompro.mode');await acquireLocalTab();state=restored;collectionViewId=state.activeCollectionId||'';collectionError='';notice='Returned to your local workspace. Shared records are unchanged.';persist();render();
+  resetRescan();selectedEquipment.clear();sharedClient=null;sharedLocked=false;localStorage.removeItem('decompro.mode');await acquireLocalTab();state=restored;collectionViewId=state.activeCollectionId||'';collectionError='';notice='Returned to your local workspace. Shared records are unchanged.';persist();render();
  }catch(error){notice=error.message;render();}
 }
 async function uploadLocal() {
@@ -1209,7 +1260,7 @@ async function prepareRestore(e) {
   document.querySelector('#confirm-restore').onclick=()=>{
    try {localStorage.setItem(key,JSON.stringify(pendingRestore));}
    catch {document.querySelector('#restore-error').textContent='Browser storage is unavailable or full. Your current workspace has not been replaced.';return;}
-   state=pendingRestore;pendingRestore=null;storageError='';search='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';scanning=false;lastEmpty=0;collectionViewId=state.activeCollectionId||'';notice='Backup restored. Select Start scanning when you are ready.';location.hash='inventory';render();
+   state=pendingRestore;resetRescan();pendingRestore=null;storageError='';search='';missingDetailsOnly=false;trolleyViewId='';selectedEquipment.clear();collectionReviewTrolley='all';collectionReviewKind='all';scanning=false;lastEmpty=0;collectionViewId=state.activeCollectionId||'';notice='Backup restored. Select Start scanning when you are ready.';location.hash='inventory';render();
   };
  } catch(error) {pendingRestore=null;notice=`Backup was not restored. ${error instanceof SyntaxError?'The file is not valid JSON.':error.message}`;render();}
 }
@@ -1237,7 +1288,7 @@ async function exportExcel() {
  }
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&state.step===fields.length&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();saveItem();}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!rescan.enabled&&state.step===fields.length&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();saveItem();}});
 window.addEventListener('hashchange',()=>{updateOverviewLayout();trolleyViewId=readTrolleyHash();updateRegister();updateHistory();document.querySelector(location.hash==='#overview'?'#overview':location.hash==='#collection-history'?'#collection-history':location.hash==='#collection-review'?'#collection-review':location.hash==='#station'?'#station':location.hash==='#collections'?'#collections':'#inventory')?.scrollIntoView({behavior:'smooth'});});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateSessionSummary();});
 window.addEventListener('offline',updateConnectionStatus);
@@ -1247,7 +1298,7 @@ async function lockWorkspace(message='Workspace locked. Sign in to continue.') {
  if(!sharedLocked||lockInProgress)return;
  lockInProgress=true;workspaceManuallyLocked=true;try{localStorage.setItem('decompro.workspaceLocked','true');}catch{}
  const input=document.querySelector('#scan');if(input&&fields[state.step]&&input.value.length<=1000){if(input.value.trim())state.draft[fields[state.step][0]]=input.value;else delete state.draft[fields[state.step][0]];}persist();
- const client=sharedClient;sharedClient=null;scanning=false;window.speechSynthesis?.cancel();notice=message;render();
+ resetRescan();const client=sharedClient;sharedClient=null;scanning=false;window.speechSynthesis?.cancel();notice=message;render();
  try {if(client?.logout)await client.logout();else {client?.stop();const saved=JSON.parse(localStorage.getItem('decompro.firebaseConfig')||'{}');if(saved.config){const {disconnectFirebaseAuth}=await import('./firebase-db');await disconnectFirebaseAuth(saved.config);}}}
  catch{notice='Workspace locked. Firebase sign-out could not be confirmed; sign in again before continuing.';render();}
  finally{lockInProgress=false;}
