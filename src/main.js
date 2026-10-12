@@ -104,7 +104,13 @@ function focus() { if(scanning) document.querySelector('#scan')?.focus(); }
 function render() {
  syncTrolleyNames();
  if(localTabBlocked){
-  document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><h1>${navigator.locks?'Workspace open in another tab':'Local workspace needs a current browser'}</h1><p>${escape(localTabReason)}</p><button class="primary" id="retry-local-tab">Retry workspace</button></section></main>`;
+  const secureUrl=new URL(location.href);secureUrl.protocol='https:';
+  document.querySelector('#app').innerHTML=`<main class="workspace-lock"><section class="card"><img src="./decompro-icon.svg" width="52" height="52" alt="DecomPro"><h1>${navigator.locks?'Workspace open in another tab':'Local workspace needs a current browser'}</h1><p>${escape(localTabReason)}</p>${!navigator.locks?'<p>Open this website directly in an up-to-date Safari, Chrome or Edge. Local editing stays paused to protect saved records.</p>':''}${!window.isSecureContext?`<p>Browser coordination requires a secure connection.</p><a class="primary" href="${escape(secureUrl.href)}">Open with HTTPS</a>`:!navigator.locks&&!testWorkspace?'<button class="primary" id="open-shared-from-local">Sign in to shared workspace</button>':''}<button class="secondary" id="retry-local-tab">Retry workspace</button><p class="app-version">${escape(versionLabel)}</p></section></main>`;
+  document.querySelector('#open-shared-from-local')?.addEventListener('click',()=>{
+   try{localStorage.setItem(localWorkspaceKey,localStorage.getItem(key)||JSON.stringify(state));}
+   catch{localTabReason='Your local workspace could not be preserved. Open this site in a current browser before continuing.';render();return;}
+   localTabBlocked=false;sharedLocked=true;notice='Sign in to Firebase to open the shared workspace. Local editing remains unavailable until browser coordination is supported.';render();openDatabase();
+  });
   document.querySelector('#retry-local-tab').onclick=()=>location.reload();return;
  }
  if(sharedLocked&&!sharedClient) {
