@@ -47,7 +47,7 @@ export async function connectFirebase(config,teamId,email,password,{remember=fal
  }catch(error){await signOut(auth).catch(()=>{});throw error;}
 }
 export function createTeamStore(db,uid,teamId,member,auth=null) {
- const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),corrections=collection(root,'referenceCorrections');
+ const root=doc(db,'teams',teamId),equipment=collection(root,'equipment'),references=collection(root,'references'),serials=collection(root,'serials'),trolleys=collection(root,'trolleys'),trolleyNames=collection(root,'trolleyNames'),corrections=collection(root,'referenceCorrections');
  const versions=new Map(),stops=[];
  const trolleyVersions=new Map(),correctionVersions=new Map();
  const sessionVersions=new Map(),sessions=collection(root,'collectionSessions'),sessionTrolleys=collection(root,'collectionTrolleys');
@@ -238,15 +238,32 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
      expectedVersion=client.trolleyVersionFor(trolley.id)||expectedVersion;
     }
    }
+   // Check legacy references too; their IDs may predate deterministic name IDs.
+   const existing=await getDocFromServer(doc(trolleys,trolley.id));
+   const naming=!existing.exists()||trolleyNameKey(existing.data().payload.name)!==trolleyNameKey(trolley.name);
+   if(naming){const current=await getDocsFromServer(trolleys);if(current.docs.some(d=>d.id!==trolley.id&&!d.data().deleted&&trolleyNameKey(d.data().payload.name)===trolleyNameKey(trolley.name)))throw Error('A trolley already uses this name. Choose its permanent reference rather than creating another.');}
+   const nameClaim=await hash(trolleyNameKey(trolley.name)),nameRow=doc(trolleyNames,nameClaim);
    const row=doc(trolleys,trolley.id),revisionId=createId();
    await runTransaction(db,async tx=>{
     const snapshot=await tx.get(row),before=snapshot.exists()?snapshot.data():null;
+    const claimNeeded=!before||before.payload.name!==trolley.name||Boolean(before.nameClaim);
+    const claim=claimNeeded?await tx.get(nameRow):null;
+    const owner=claim?.exists()&&claim.data().trolleyId!==trolley.id?await tx.get(doc(trolleys,claim.data().trolleyId)):null;
+    if(owner?.exists()&&!owner.data().deleted&&owner.data().nameClaim===nameClaim)throw Error('A trolley already uses this name. Refresh and select its permanent reference.');
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this trolley. Reopen trolley management and review the latest details.');
     if(before?.deleted)throw Error('This trolley was deleted. Create a new trolley reference.');
     if(before?.payload.status==='collected')throw Error('This trolley has already been collected. Its history is locked.');
     const payload={...trolley,...(trolley.status==='ready'?{readyBy:member.code}:{}),collectedBy:trolley.status==='collected'?(historicalImport?trolley.collectedBy:member.code):''};
-    const after={payload,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
+    const after={payload,...(claimNeeded?{nameClaim}:{}),version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId};
+    if(claimNeeded)tx.set(nameRow,{trolleyId:trolley.id,name:payload.name,updatedBy:uid,updatedAt:serverTimestamp()});
     tx.set(row,after);tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:payload.status==='collected'?'collect':before?'update':'create',at:serverTimestamp()});
+   }).catch(async error=>{
+    // A concurrent claim can be rejected by rules before the SDK retries its transaction.
+    if(error.code==='permission-denied'){
+     const latest=await getDocFromServer(nameRow);
+     if(latest.exists()&&latest.data().trolleyId!==trolley.id){const owner=await getDocFromServer(doc(trolleys,latest.data().trolleyId));if(owner.exists()&&!owner.data().deleted&&owner.data().nameClaim===nameClaim)throw Error('A trolley already uses this name. Refresh and select its permanent reference.');}
+    }
+    throw error;
    });
    trolleyVersions.set(trolley.id,expectedVersion+1);
   },

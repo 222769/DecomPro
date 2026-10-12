@@ -388,3 +388,19 @@ test('six linked collected trolleys unlock atomically within rules access limits
  const batch=writeBatch(db);batch.set(ref,after);batch.set(doc(ref,'revisions','partial'),{actor:'admin',before,after,action:'unlock',reason:'Partial group',at:serverTimestamp()});await assertFails(batch.commit());
  const unlocked=await owner.unlockTrolleys(trolleys[3].id,versions,'Correct linked pickup');assert.equal(unlocked.length,6);assert.ok((await owner.load()).trolleys.every(t=>t.status==='open'&&!t.handover));
 });
+
+test('atomic name reservations prevent concurrent creation and rename collisions across different trolley IDs',async()=>{
+ const jawad=createTeamStore(context('tech'),'tech','college-it',member),owner=createTeamStore(context('admin'),'admin','college-it',admin);
+ const first=createTrolley('Trolley 1.1'),second=createTrolley(' trolley   1.1 ');
+ const results=await Promise.allSettled([jawad.writeTrolley(first),owner.writeTrolley(second)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.match(results.find(r=>r.status==='rejected').reason.message,/already uses/);
+ assert.equal((await jawad.load()).trolleys.filter(t=>t.name.toLowerCase().includes('1.1')).length,1);
+ await assert.rejects(owner.writeTrolley({...initialTrolley,name:'TROLLEY 1.1'},owner.trolleyVersionFor(initialTrolley.id)),/already uses/);
+ const claim=(await getDocs(collection(context('admin'),'teams/college-it/trolleyNames'))).docs.map(d=>d.data()).find(r=>r.name.toLowerCase().includes('1.1'));assert.ok(claim);
+});
+test('legacy trolley names block new references and a renamed or deleted name can be reused safely',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),legacy=createTrolley('Legacy 1.1');
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),`teams/college-it/trolleys/${legacy.id}`),{payload:legacy,version:1,createdBy:'admin',updatedBy:'admin',createdAt:new Date(),updatedAt:new Date(),revisionId:'seed'});});
+ await assert.rejects(owner.writeTrolley(createTrolley(' legacy   1.1 ')),/already uses/);
+ await owner.load();await owner.writeTrolley({...legacy,name:'Renamed legacy'},1);const replacement=createTrolley('Legacy 1.1');await owner.writeTrolley(replacement);
+ await owner.load();await owner.deleteTrolley(replacement.id,owner.trolleyVersionFor(replacement.id));const reused=createTrolley('Legacy 1.1');await owner.writeTrolley(reused);assert.notEqual(reused.id,replacement.id);
+});
