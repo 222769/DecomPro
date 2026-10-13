@@ -534,9 +534,9 @@ test('manifest paginates long fields with repeated headings, QR link and complet
  });
  const pdf=Buffer.from(encoded.pdf,'base64').toString('latin1');expect(pdf.startsWith('%PDF-')).toBe(true);
  const pages=pdf.match(/\/Type \/Page\b/g).length;expect(pages).toBeGreaterThan(3);
- expect(pdf.match(/\(Serial number\)/g)).toHaveLength(pages-1);expect(pdf.match(/Page \d+ of/g)).toHaveLength(pages);
+ expect(pdf.match(/Trolley inventory/g).length).toBeGreaterThanOrEqual(pages);expect(pdf.match(/Trolley page \d+ \/ \d+/g)).toHaveLength(pages);
  for(let index=0;index<32;index++){expect(pdf).toContain(`MANIFEST-SERIAL-${index}`);expect(pdf).toContain(`ENDMODEL-${index}`);}
- for(const value of ['33 items','LEGACY-TROLLEY-ITEM','CACHED WORKSPACE SNAPSHOT','Handover confirmation','Received by',encoded.reference,'https://decompro.hxali.com/#trolley/'+encoded.id])expect(pdf).toContain(value);
+ for(const value of ['33 ITEMS','LEGACY-TROLLEY-ITEM','CACHED SNAPSHOT','Handover confirmation','Received by',encoded.reference,'https://decompro.hxali.com/#trolley/'+encoded.id])expect(pdf).toContain(value);
  expect(pdf).not.toContain('WRONG-TROLLEY-ITEM');expect(pdf.match(/\/Subtype \/Image/g).length).toBeGreaterThanOrEqual(2);
 });
 

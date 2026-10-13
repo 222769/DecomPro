@@ -1,10 +1,13 @@
 import {jsPDF} from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
+import {drawPdfLogo,drawPdfFooter} from './pdf-brand.js';
 
 export async function trolleyLabel(trolley,count,url) {
  const pdf=new jsPDF({unit:'mm',format:'a4'}),width=210;
- pdf.setFillColor(20,38,62);pdf.rect(0,0,width,65,'F');
+ pdf.setFillColor(20,38,62);pdf.rect(0,0,width,65,'F');pdf.setFillColor(67,108,238);pdf.rect(0,0,5,65,'F');
+ pdf.setFillColor(255);pdf.roundedRect(150,10,44,28,3,3,'F');
+ if(!drawPdfLogo(pdf,154,13,36,22)){pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(29,52,91);pdf.text('DecomPro',172,28,{align:'center'});}
  pdf.setTextColor(255);pdf.setFont('helvetica','bold');pdf.setFontSize(17);pdf.text('PROPERTY OF TSU',18,22);
  pdf.setFontSize(13);pdf.text(pdf.splitTextToSize(trolley.department,174),18,34);
  pdf.setFontSize(12);pdf.text('IT EQUIPMENT DECOMMISSIONING',18,56);
@@ -18,6 +21,6 @@ export async function trolleyLabel(trolley,count,url) {
  pdf.addImage(await QRCode.toDataURL(url,{width:300,margin:2,errorCorrectionLevel:'M'}),'PNG',18,201,48,48);
  pdf.setFontSize(11);pdf.text(['Or scan this QR code with a phone.','Sign in to the team workspace to view shared inventory.'],73,215);
  if(trolley.status==='collected'){pdf.text(pdf.splitTextToSize(`Collected by ${trolley.company} on ${new Date(trolley.collectedAt).toLocaleDateString('en-GB')}`,174),18,263);}
- pdf.setFontSize(9);pdf.text('DecomPro | Label contents reflect the time of printing.',18,284);
+ drawPdfFooter(pdf,18,192,trolley.reference,'Label contents reflect the time of printing');
  return pdf.output('arraybuffer');
 }

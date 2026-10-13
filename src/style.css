@@ -360,6 +360,13 @@ main:not([data-view="station"]) .station-session {display:none;}
 .register-filter-help[hidden]{display:none;}
 html[data-theme="dark"] .register-filter-help{background:#253653;color:#d4e0f5;}
 .mobile-table-hint { display: none; }
+.pdf-logo-preview{display:grid;place-items:center;min-height:96px;margin:14px 0;padding:14px;border:1px dashed #aec2e6;border-radius:14px;background:#f7f9ff;color:#66758b;font-size:12px}
+.pdf-logo-preview img{max-width:100%;max-height:130px;object-fit:contain}
+.pdf-logo-preview [hidden]{display:none}
+.pdf-brand-settings #remove-pdf-logo{margin-top:12px}
+html[data-theme="dark"] .pdf-logo-preview{background:#101c31;border-color:#46618a;color:#aebfda}
+.register-export-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+@media(max-width:700px){.register-export-actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.register-export-actions button{min-height:46px;padding:10px 6px;font-size:11px}}
 
 /* The phone layout keeps scanning close at hand without hiding the other tools. */
 @media (max-width: 700px) {

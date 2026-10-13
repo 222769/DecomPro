@@ -3,92 +3,100 @@ import {jsPDF} from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import {trolleyForItem} from './trolleys.js';
+import {drawPdfFooter,drawPdfLogo} from './pdf-brand.js';
 
-const text=value=>String(value??'').replace(/\s+/g,' ').trim();
-const dateTime=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Europe/London',dateStyle:'medium',timeStyle:'short'});
+const clean=value=>String(value??'').replace(/\s+/g,' ').trim()||'N/A';
+const london=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Europe/London',dateStyle:'medium',timeStyle:'short'});
+const status=trolley=>trolley.status==='collected'?'COLLECTED':trolley.status==='ready'?'READY FOR COLLECTION':'AWAITING COLLECTION';
 
-// This is a snapshot of the supplied register, not a write or a collection action.
-export async function trolleyManifest(trolley,register,url,{cached=false,printedAt=new Date().toISOString(),document:existingPdf=null,handover=null}={}) {
+// One printable inventory snapshot. The same pages are used inside a combined handover.
+export async function trolleyManifest(trolley,register,url,{cached=false,printedAt=new Date().toISOString(),document:existingPdf=null,handover=null}={}){
  const items=register.filter(item=>trolleyForItem(item,trolley)),review=checkReadiness(trolley,register);
- const pdf=existingPdf||new jsPDF({unit:'mm',format:'a4'}),left=16,right=194,bottom=273;
+ const pdf=existingPdf||new jsPDF({unit:'mm',format:'a4'}),left=16,right=194,bottom=270;
  if(existingPdf)pdf.addPage();
  const firstPage=pdf.getNumberOfPages();
- const columns=[['#',8],['Serial number',42],['Asset',20],['Manufacturer',31],['Model',51],['Disposed by',26]];
- const barcode=document.createElement('canvas');
- JsBarcode(barcode,trolley.reference,{format:'CODE128',width:3,height:70,displayValue:false,margin:8});
- const barcodeImage=barcode.toDataURL('image/png'),qr=await QRCode.toDataURL(url,{width:300,margin:2,errorCorrectionLevel:'M'});
- if(!existingPdf)pdf.setProperties({title:`Trolley inventory manifest - ${trolley.reference}`,author:'TSU - '+text(trolley.department),subject:'IT equipment collection handover'});
- let y;
- function line(value,size=9,bold=false,width=right-left) {
-  pdf.setFont('helvetica',bold?'bold':'normal');pdf.setFontSize(size);
-  const lines=pdf.splitTextToSize(text(value),width);pdf.text(lines,left,y);y+=lines.length*size*0.4+3;
+ const qr=await QRCode.toDataURL(url,{width:300,margin:2,errorCorrectionLevel:'M'});
+ let barcode=null;
+ if(trolley.reference&&typeof document!=='undefined'){
+  const canvas=document.createElement('canvas');JsBarcode(canvas,trolley.reference,{format:'CODE128',width:2,height:40,displayValue:false,margin:3});barcode=canvas.toDataURL('image/png');
  }
- function header(first=false,heading='Inventory continued') {
-  pdf.setFillColor(20,38,62);pdf.rect(0,0,210,12,'F');pdf.setTextColor(255);pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.text('DECOMPRO  /  TROLLEY INVENTORY MANIFEST',left,8);
-  pdf.setTextColor(20,38,62);y=23;
-  line('Property of TSU - '+trolley.department,11,true,138);
-  line(trolley.reference,9,true,138);
-  line(`${items.length} item${items.length===1?'':'s'} | ${trolley.status==='collected'?'COLLECTED':trolley.status==='ready'?'READY FOR COLLECTION':'AWAITING COLLECTION'}`,9,false,138);
-  pdf.addImage(qr,'PNG',159,16,35,35);pdf.link(159,16,35,35,{url});
-  pdf.setFontSize(7);pdf.text('QR: live team inventory',176.5,54,{align:'center'});
-  pdf.addImage(barcodeImage,'PNG',left,52,138,17);
-  y=77;
-  if(first) {
-   line(trolley.name,11,true);
-   line('Collection company: '+(trolley.status==='collected'?trolley.company:handover?.company||'________________________________________'));
-   line('Collection date: '+(trolley.status==='collected'?dateTime(trolley.collectedAt)+' (UK time)':handover?dateTime(handover.collectedAt)+' (UK time; planned)':'________________________________________'));
-   if(trolley.status==='collected')line('Collection recorded by: '+trolley.collectedBy);
-   if(trolley.readyAt)line('Readiness checked: '+dateTime(trolley.readyAt)+' (UK time) by '+trolley.readyBy);
-   if(trolley.status!=='collected'&&review.unresolved.length)line(`READINESS ISSUES: ${review.unresolved.length} unresolved - review before handover.`,9,true);
-   if(cached)line('CACHED WORKSPACE SNAPSHOT - reconnect to confirm the latest team inventory.',9,true);
-  } else line(heading,10,true);
+ if(!existingPdf)pdf.setProperties({title:`Trolley inventory - ${trolley.reference}`,author:'TSU - '+clean(trolley.department),subject:'Complete decommissioning equipment inventory'});
+ let y=0;
+ function pageHeader(continued=false){
+  pdf.setFillColor(20,36,61);pdf.rect(0,0,210,19,'F');pdf.setFillColor(76,113,238);pdf.rect(0,0,4,19,'F');
+  pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(255);pdf.text('DecomPro',left,12);
+  if(!drawPdfLogo(pdf,158,3,36,13)){pdf.setFontSize(7);pdf.text('TSU / HELPDESK',194,11,{align:'right'});}
+  pdf.setTextColor(26,42,68);pdf.setFontSize(17);pdf.text(continued?'Trolley inventory / continued':'Trolley inventory',left,32);
+  pdf.setFontSize(11);pdf.text(pdf.splitTextToSize(clean(trolley.name),137).slice(0,2),left,41);
+  pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(87,105,132);
+  pdf.text(`Property of TSU - ${clean(trolley.department)}`,left,52);
+  pdf.text(clean(trolley.reference),left,58);
+  pdf.addImage(qr,'PNG',164,25,30,30);pdf.link(164,25,30,30,{url});
+  pdf.setFillColor(236,243,255);pdf.roundedRect(left,63,178,10,2,2,'F');
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(51,83,177);
+  pdf.text(`${items.length} ITEM${items.length===1?'':'S'}  /  ${status(trolley)}`,left+4,69.5);
+  if(barcode&&!continued){pdf.addImage(barcode,'PNG',left,77,103,12);pdf.setFontSize(6.5);pdf.setTextColor(94,109,130);pdf.text('SCAN TROLLEY REFERENCE',left+109,84);y=96;}
+  else y=82;
+  if(cached){pdf.setTextColor(158,88,29);pdf.setFontSize(7);pdf.text('CACHED SNAPSHOT - reconnect to confirm the latest team inventory.',left,y);y+=7;}
  }
- function tableHeader() {
-  pdf.setFillColor(232,238,245);pdf.rect(left,y,right-left,9,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(8);
-  let x=left;for(const [label,width] of columns){pdf.text(label,x+2,y+6);x+=width;}y+=9;
+ function nextPage(){pdf.addPage();pageHeader(true);}
+ function itemHeading(number,description,continued=false){
+  if(y+15>bottom)nextPage();
+  pdf.setFillColor(229,237,252);pdf.roundedRect(left,y,right-left,11,2,2,'F');
+  pdf.setFillColor(54,95,237);pdf.roundedRect(left,y,13,11,2,2,'F');
+  pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(255);pdf.text(String(number).padStart(2,'0'),left+6.5,y+7,{align:'center'});
+  pdf.setTextColor(26,44,72);pdf.setFontSize(9.5);
+  const title=pdf.splitTextToSize(clean(description)+(continued?' / continued':''),158);pdf.text(title[0],left+18,y+7);
+  y+=15;
  }
- function nextPage(table=false,heading='Collection handover') {pdf.addPage();header(false,table?'Inventory continued':heading);if(table)tableHeader();}
- header(true);tableHeader();
- if(!items.length){y+=9;line('No equipment recorded in this trolley.',10);}
- items.forEach((item,index)=>{
-  pdf.setFont('helvetica','normal');pdf.setFontSize(8);
-  const values=[String(index+1),item.serial||'N/A',item.asset||'N/A',item.manufacturer||'N/A',item.model||'N/A',item.technician||'N/A'];
-  const cells=values.map((value,i)=>pdf.splitTextToSize(text(value),columns[i][1]-4));
-  const height=Math.max(...cells.map(cell=>cell.length));let offset=0;
-  // Split unusually long rows across pages rather than dropping or clipping fields.
-  while(offset<height) {
-   if(bottom-y<12)nextPage(true);
-   const take=Math.min(height-offset,Math.floor((bottom-y-4)/4)),rowHeight=take*4+4;
-   if(index%2===0){pdf.setFillColor(246,248,251);pdf.rect(left,y,right-left,rowHeight,'F');}
-   pdf.setFont('helvetica','normal');pdf.setFontSize(8);let x=left;
-   cells.forEach((cell,i)=>{const part=cell.slice(offset,offset+take);if(i===0&&offset>0)part.push('*');if(part.length)pdf.text(part,x+2,y+5);x+=columns[i][1];});
-   pdf.setDrawColor(218,225,234);pdf.line(left,y+rowHeight,right,y+rowHeight);y+=rowHeight;offset+=take;
-  }
- });
+ function fieldPair(aLabel,aValue,bLabel,bValue,number,description){
+  const cells=[pdf.splitTextToSize(clean(aValue),80),pdf.splitTextToSize(clean(bValue),80)];
+  const count=Math.max(cells[0].length,cells[1].length);let offset=0;
+  do{
+   if(y+11>bottom){nextPage();itemHeading(number,description,true);}
+   const take=Math.max(1,Math.min(count-offset,Math.floor((bottom-y-8)/3.2)));
+   const x2=107;
+   pdf.setFont('helvetica','bold');pdf.setFontSize(6.3);pdf.setTextColor(92,115,152);
+   pdf.text(aLabel.toUpperCase()+(offset?' / CONT.':''),left+2,y+3);
+   pdf.text(bLabel.toUpperCase()+(offset?' / CONT.':''),x2,y+3);
+   pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(31,47,72);
+   const one=cells[0].slice(offset,offset+take),two=cells[1].slice(offset,offset+take);
+   if(one.length)pdf.text(one,left+2,y+7);if(two.length)pdf.text(two,x2,y+7);
+   y+=7+take*3.2;
+   pdf.setDrawColor(226,232,241);pdf.line(left,y-1,right,y-1);
+   offset+=take;
+  }while(offset<count);
+ }
+ pageHeader();
+ if(!items.length){pdf.setFontSize(11);pdf.setTextColor(70,83,104);pdf.text('No equipment recorded on this trolley.',left,y+8);y+=21;}
+ for(const [index,item] of items.entries()){
+  if(y+78>bottom)nextPage();
+  itemHeading(index+1,item.description);
+  fieldPair('Serial number',item.serial,'Asset number',item.asset,index+1,item.description);
+  fieldPair('Barcode',item.barcode,'Security etch',item.etch,index+1,item.description);
+  fieldPair('Manufacturer',item.manufacturer,'Model number',item.model,index+1,item.description);
+  fieldPair('Equipment description',item.description,'Disposal date',item.date,index+1,item.description);
+  fieldPair('Taken from',item.source,'Reason for disposal',item.reason,index+1,item.description);
+  fieldPair('Disposed by',item.technician,'Trolley',item.trolley,index+1,item.description);
+  y+=4;
+ }
  const exceptions=review.issues.filter(issue=>issue.kind==='missing'&&issue.resolved);
- if(exceptions.length) {
-  if(bottom-y<20)nextPage(false,'Recorded exceptions');else y+=10;
-  line('Recorded exceptions',11,true);
-  for(const issue of exceptions) {
-   const index=items.findIndex(item=>item.id===issue.itemId);
-   pdf.setFont('helvetica','normal');pdf.setFontSize(9);
-   const lines=pdf.splitTextToSize(text(`Item ${index+1} - ${issue.field}: ${issue.note}`),right-left);
-   for(const value of lines){if(bottom-y<7)nextPage(false,'Recorded exceptions');pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.text(value,left,y);y+=4;}
-   y+=3;
+ if(exceptions.length){
+  if(y+26>bottom)nextPage();
+  pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(26,44,72);pdf.text('Recorded exceptions',left,y+4);y+=10;
+  for(const issue of exceptions){
+   const index=items.findIndex(item=>item.id===issue.itemId),lines=pdf.splitTextToSize(`Item ${index+1} - ${issue.field}: ${clean(issue.note)}`,175);
+   for(const line of lines){if(y+6>bottom)nextPage();pdf.setFont('helvetica','normal');pdf.setFontSize(8.5);pdf.setTextColor(44,60,84);pdf.text(line,left,y);y+=4.5;}y+=3;
   }
  }
- // Keep signatures together and leave enough room for handwriting.
- if(bottom-y<66)nextPage();else y+=10;
- line('Handover confirmation',11,true);
- line('Check the equipment and item count before signing. * indicates a continued row.',8);
- for(const label of ['Released by (name / signature)','Received by (name / signature)','Handover date / time']){y+=8;line(label+': __________________________________________',9);}
- const pages=pdf.getNumberOfPages();
- for(let page=firstPage;page<=pages;page++) {
-  pdf.setPage(page);pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(80,92,110);
-  pdf.text(trolley.reference,left,282);pdf.text(`Page ${page-firstPage+1} of ${pages-firstPage+1}`,right,282,{align:'right'});
-  pdf.text(`Printed ${dateTime(printedAt)} (UK time) | ${cached?'Cached snapshot':'Register snapshot'} at printing`,left,287);
-  pdf.text(handover?`Handover ${handover.reference} | QR viewers must sign in to the same team.`:'QR viewers must sign in to the same team workspace. Local records stay in their browser.',left,292);
- }
- // A combined handover serializes once after all trolley sections are added.
+ if(y+62>bottom)nextPage();
+ pdf.setDrawColor(159,181,217);pdf.line(left,y,right,y);y+=9;
+ pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(26,44,72);pdf.text('Handover confirmation',left,y);y+=8;
+ pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.text('Check equipment and item count before signing.',left,y);y+=10;
+ if(trolley.readyAt){pdf.setFontSize(7.5);pdf.setTextColor(77,94,122);pdf.text(`Readiness checked: ${london(trolley.readyAt)} (UK time) by ${clean(trolley.readyBy)}`,left,y);y+=7;}
+ for(const label of ['Released by (name / signature)','Received by (name / signature)','Handover date / time']){pdf.setFontSize(8);pdf.text(`${label}: ____________________________________`,left,y);y+=9;}
+ if(trolley.status==='collected'||handover){if(y+7>bottom)nextPage();pdf.setFontSize(7.5);pdf.setTextColor(77,94,122);pdf.text(`Collection company: ${clean(trolley.status==='collected'?trolley.company:handover.company)}  /  ${trolley.status==='collected'?'Collected':'Planned'}: ${london(trolley.status==='collected'?trolley.collectedAt:handover.collectedAt)} (UK time)`,left,y);if(trolley.status==='collected')pdf.text(`Collection recorded by: ${clean(trolley.collectedBy)}`,left,y+5);}
+ const lastPage=pdf.getNumberOfPages();
+ for(let page=firstPage;page<=lastPage;page++){pdf.setPage(page);drawPdfFooter(pdf,left,right,clean(trolley.reference),`Trolley page ${page-firstPage+1} / ${lastPage-firstPage+1}`);}
  return existingPdf?pdf:pdf.output('arraybuffer');
 }
