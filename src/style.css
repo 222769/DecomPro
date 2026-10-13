@@ -293,6 +293,7 @@ html[data-theme="dark"] .compact-connection .connection-chip { background:#16223
 /* Overview stays focused on collection readiness; scanning has its own shortcut. */
 .overview-view :is(.stats,.station-layout,#inventory) { display:none; }
 .nav:not(.active) .nav-active-dot { display:none; }
+.scroll-dock { display:none; }
 .station #save-feedback.save-message { text-align:left; background:#ffffff0d; border:1px solid #7d9ccb; border-radius:12px; padding:14px; color:#edf3ff; line-height:1.7; margin-top:14px; }
 [aria-invalid="true"] { outline:2px solid #d48b51; outline-offset:2px; }
 .test-workspace-banner { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; padding:16px 20px; margin-bottom:20px; border:1px solid #e4c16b; border-radius:14px; background:#fff6dc; color:#795b19; }
@@ -432,6 +433,18 @@ html[data-theme="dark"] .pdf-logo-preview{background:#101c31;border-color:#46618
  dialog { width: min(calc(100% - 24px), 480px); max-width: min(calc(100% - 24px), 480px); max-height: min(88dvh, 750px); padding: 20px; overflow: auto; }
  dialog input, dialog select { min-height: 44px; font-size: 16px; }
  .dialog-actions > button { min-height: 44px; }
+}
+
+/* A small floating dock replaces the phone header while reading down the page. */
+@media (max-width: 700px) {
+ aside { transition:transform .22s ease,opacity .22s ease,visibility .22s; }
+ body.nav-condensed aside { transform:translateY(calc(-100% - 8px));opacity:0;visibility:hidden;pointer-events:none; }
+ body.nav-condensed .scroll-dock { position:fixed;z-index:31;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;width:min(356px,calc(100vw - 24px));padding:5px;border:1px solid #49617e;border-radius:22px;background:#12243be8;color:#d9e6f8;box-shadow:0 12px 28px #07142766;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px); }
+ .scroll-dock a,.scroll-dock button { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:49px;padding:5px 2px;border:0;border-radius:16px;background:transparent;color:inherit;font-size:9px;font-weight:600;line-height:1.1;cursor:pointer; }
+ .scroll-dock svg { width:19px;height:19px; }
+ .scroll-dock :is(a,button).active { background:#315280;color:#fff;box-shadow:inset 0 0 0 1px #a6c5ff30; }
+ .scroll-dock :is(a,button):focus-visible { outline:2px solid #9ac7ff;outline-offset:2px; }
+ html:has(body.nav-condensed) { scroll-padding-top:72px; }
 }
 
 /* Phone composition: clear scan priority, compact collection cards and calm spacing. */

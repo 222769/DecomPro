@@ -62,3 +62,24 @@ test('connected database indicator glows without an outer green panel in dark mo
  const shadow=await status.locator('.connection-chip').evaluate(node=>getComputedStyle(node).boxShadow);
  expect(shadow).toContain('rgba(78, 228, 187');
 });
+
+test('mobile header yields to a compact dock on downward scroll and returns on upward scroll',async({page})=>{
+ await page.setViewportSize({width:402,height:874});
+ await page.goto('/?workspace=demo#inventory');
+ await page.locator('#inventory').waitFor();
+ await page.mouse.wheel(0,650);
+ await expect(page.locator('body')).toHaveClass(/nav-condensed/);
+ await expect(page.locator('aside')).toBeHidden();
+ await expect(page.locator('#scroll-dock')).toBeVisible();
+ await expect(page.locator('#scroll-dock a[href="#inventory"]')).toHaveAttribute('aria-current','page');
+ await page.mouse.wheel(0,-180);
+ await expect(page.locator('body')).not.toHaveClass(/nav-condensed/);
+ await expect(page.locator('aside')).toBeVisible();
+ await page.mouse.wheel(0,300);
+ await expect(page.locator('#scroll-dock')).toBeVisible();
+ await page.locator('#scroll-dock-more').click();
+ await expect(page.locator('.mobile-nav-extra')).toBeVisible();
+ await expect(page.locator('#mobile-nav-toggle')).toHaveAttribute('aria-expanded','true');
+ await page.locator('aside a[href="#station"]').click();
+ await expect(page.locator('#station')).toBeVisible();
+});
