@@ -4,6 +4,13 @@ import assert from 'node:assert/strict';
 import {recognizeSerial,cleanExamples,examplesFromWorkbook} from '../../src/recognition.js';
 import ExcelJS from 'exceljs';
 const examples=[101,102,103].map(n=>({serial:`ABC${n}`,model:'Desk 400',manufacturer:'Example manufacturer'}));
+test('exact and agreed family matches carry the known equipment category',()=>{
+ const facts=[{serial:'IPAD1001',model:'A1822',manufacturer:'Apple',description:'iPad'},{serial:'IPAD1002',model:'A1822',manufacturer:'Apple',description:'Tablet'},{serial:'IMAC1001',model:'A1822',manufacturer:'Apple',description:'All-in-one computer'}];
+ assert.equal(recognizeSerial('IPAD1001',facts).description,'Tablet');
+ assert.equal(recognizeSerial('IPAD1003',facts).description,'Tablet');
+ assert.equal(recognizeSerial('IMAC1001',facts).description,'All-in-one computer');
+ assert.equal(recognizeSerial('IPAD1001',[...facts,{...facts[0],description:'Monitor'}]).description,undefined);
+});
 test('exact serial normalization and conservative pattern inference',()=>{
  assert.equal(recognizeSerial(' abc101 ',examples).method,'exact');
  const guess=recognizeSerial('ABC104',examples);assert.equal(guess.method,'pattern');assert.equal(guess.model,'Desk 400');assert.equal(guess.support,3);

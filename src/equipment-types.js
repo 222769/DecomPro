@@ -1,13 +1,15 @@
 // Equipment categories are independent of serial matching: a maker alone is not a type.
 export function normalizeEquipmentDescription(value) {
  const key=String(value||'').trim().toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ');
- const groups={Laptop:['laptop','notebook','chromebook'],Desktop:['desktop','pc','computer','workstation'],'All-in-one computer':['all in one','aio','all in one computer'],Monitor:['monitor','screen','display'],Tablet:['tablet'],Printer:['printer'],Scanner:['scanner'],Server:['server'],Switch:['switch','adls switch'],Router:['router'],Firewall:['firewall'],'Access point':['access point'],Projector:['projector'],TV:['tv','television'],UPS:['ups'],Battery:['battery'],'Hard drive':['hard drive','hdd'],'Tape drive':['tape drive'],'Backup tapes':['backup tapes'],CCTV:['cctv','camera'],Till:['till'],'Docking station':['docking station','dock'],'USB charging station':['usb charging station'],Fax:['fax']};
+ const groups={Laptop:['laptop','notebook','chromebook'],Desktop:['desktop','pc','computer','workstation'],'All-in-one computer':['all in one','aio','all in one computer'],Monitor:['monitor','screen','display'],Tablet:['tablet','tablet pc','tablet computer','ipad','ipads','apple ipad'],Printer:['printer'],Scanner:['scanner'],Server:['server'],Switch:['switch','adls switch'],Router:['router'],Firewall:['firewall'],'Access point':['access point'],Projector:['projector'],TV:['tv','television'],UPS:['ups'],Battery:['battery'],'Hard drive':['hard drive','hdd'],'Tape drive':['tape drive'],'Backup tapes':['backup tapes'],CCTV:['cctv','camera'],Till:['till'],'Docking station':['docking station','dock'],'USB charging station':['usb charging station'],Fax:['fax']};
  for(const [type,aliases] of Object.entries(groups))if(aliases.includes(key))return type;
+ if(/^(?:apple )?ipad(?:\s|$)/i.test(key))return 'Tablet';
  return null;
 }
 export function suggestEquipmentDescription(model,manufacturer,facts=[]) {
  const name=String(model||'').trim(),maker=String(manufacturer||'').trim();
  if(!name||/^n\/?a$/i.test(name))return null;
+ if(/\bipad\b/i.test(name))return 'Tablet';
  // Distinct product families also correct old records saved with the Monitor default.
  if(/\b(thinkcentre|thinkstation|optiplex|prodesk|elitedesk|mac mini|mac pro|legion (tower|t[57]))\b/i.test(name))return 'Desktop';
  if(/\bimac\b/i.test(name)||(/apple/i.test(maker)&&/^A(1418|1419|1311|1312)$/i.test(name)))return 'All-in-one computer';

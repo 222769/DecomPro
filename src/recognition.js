@@ -19,14 +19,16 @@ export function cleanExamples(examples) {
 export function recognizeSerial(value,examples) {
  const serial=normalizeSerial(value);if(!meaningful(serial))return null;
  const facts=cleanExamples(examples),exact=facts.filter(f=>f.serial===serial);
+ const agreedDescription=matches=>{const types=new Set(matches.map(f=>normalizeEquipmentDescription(f.description)).filter(Boolean));return types.size===1?[...types][0]:null;};
  const describe=(matches,method,prefix='')=>{
   const labels=new Set(matches.map(labelKey));
   if(labels.size!==1){
    const grouped=new Map(),manufacturers=new Set(matches.map(f=>f.manufacturer.toLowerCase()));
-   for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set()};candidate.serials.add(fact.serial);grouped.set(key,candidate);}
-   return {method:'conflict',basis:method,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', '),...(manufacturers.size===1?{manufacturer:matches[0].manufacturer}:{}),candidates:[...grouped.values()].map(({serials,...candidate})=>({...candidate,support:serials.size})).sort((a,b)=>b.support-a.support)};
+   for(const fact of matches){const key=labelKey(fact),candidate=grouped.get(key)||{model:fact.model,manufacturer:fact.manufacturer,serials:new Set(),facts:[]};candidate.serials.add(fact.serial);candidate.facts.push(fact);grouped.set(key,candidate);}
+   return {method:'conflict',basis:method,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', '),...(manufacturers.size===1?{manufacturer:matches[0].manufacturer}:{}),candidates:[...grouped.values()].map(({serials,facts,...candidate})=>{const description=agreedDescription(facts);return {...candidate,support:serials.size,...(description?{description}:{})};}).sort((a,b)=>b.support-a.support)};
   }
-  return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', ')};
+  const description=agreedDescription(matches);
+  return {method,model:matches[0].model,manufacturer:matches[0].manufacturer,support:new Set(matches.map(f=>f.serial)).size,prefix,sources:[...new Set(matches.flatMap(f=>f.source.split(' | ')))],source:[...new Set(matches.map(f=>f.source))].join(', '),...(description?{description}:{})};
  };
  if(exact.length)return describe(exact,'exact');
  // Try the most specific family first. A mixed broad prefix must not hide

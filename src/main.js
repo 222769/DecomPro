@@ -5,7 +5,7 @@ import {buildInfo,versionLabel,buildTime} from './build-info.js';
 import {equipmentDeletionPlan} from './equipment-deletion.js';
 import {registerColumns,sortRegister} from './register-sort.js';
 import {trolleyUnlockPlan,unlockReason} from './trolley-unlock.js';
-import { suggestEquipmentDescription, equipmentDescriptionPlan } from './equipment-types.js';
+import { suggestEquipmentDescription, normalizeEquipmentDescription, equipmentDescriptionPlan } from './equipment-types.js';
 import {findRescanItem} from './trolley-rescan.js';
 import {createTestWorkspace} from './test-workspace.js';
 import {readDevicePreferences,saveDevicePreferences,idleExpired} from './device-preferences.js';
@@ -271,7 +271,7 @@ function updateEquipmentDescription(draft=state.draft,candidates=null) {
  if(draft.descriptionEdited)return;
  const excluded=new Set((state.referenceCorrections||[]).map(f=>f.serial.toUpperCase()));
  const facts=baseReferenceFacts().filter(f=>!excluded.has(String(f.serial).toUpperCase()));
- const types=(candidates||[{model:draft.model,manufacturer:draft.manufacturer??state.defaults.manufacturer}]).map(f=>suggestEquipmentDescription(f.model,f.manufacturer,facts));
+ const types=(candidates||[{model:draft.model,manufacturer:draft.manufacturer??state.defaults.manufacturer}]).map(f=>suggestEquipmentDescription(f.model,f.manufacturer,facts)||normalizeEquipmentDescription(f.description));
  if(types.length&&types.every(type=>type&&type===types[0]))draft.description=types[0];else delete draft.description;
 }
 function editCurrentManufacturer(value){
@@ -302,7 +302,7 @@ function capture(value) {
   delete state.draft.recognitionEvidence;delete state.draft.recognitionCorrected;
   if(match)state.draft.recognitionEvidence=snapshotEvidence(match);
   if(match&&match.method!=='conflict') {
-   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method!=='exact',recognitionConfirmed:false};updateEquipmentDescription();state.step=2;
+   state.draft={...state.draft,serial:value,model:match.model,manufacturer:match.manufacturer,recognitionNeedsReview:match.method!=='exact',recognitionConfirmed:false};updateEquipmentDescription(state.draft,[match]);state.step=2;
    notice=`${match.method==='exact'?'Known serial':match.method==='similar'?`Serial family suggestion (prefix ${match.prefix}; reference ${match.referenceSerials.join(', ')})`:`Pattern suggestion (${match.suffix?'ending '+match.suffix:'prefix '+match.prefix})`}: ${match.model} · ${match.manufacturer}. ${match.support} distinct supporting example${match.support===1?'':'s'}. ${match.method==='similar'?'Check the scanned serial and physical model label before saving.':'Verify before saving.'}`;
    lastEmpty=0;persist();render();speak(`Suggested model, ${match.model}. Manufacturer, ${match.manufacturer}. Next, barcode.`);return;
   }
@@ -322,7 +322,13 @@ function capture(value) {
   lastEmpty=0;persist();render();speak(match?.method==='conflict'?'Multiple models found. Please select the correct model type.':state.step===1?'Serial captured. Next, model number.':'Serial captured. Next, barcode.');return;
  }
  if(state.step===1&&state.draft.recognitionNeedsReview)state.draft.recognitionConfirmed=false;
- pendingScan=null;state.draft[fields[state.step][0]]=value;if(state.step===1)updateEquipmentDescription();state.step++;
+ pendingScan=null;state.draft[fields[state.step][0]]=value;
+ if(state.step===1){
+  const maker=(state.draft.manufacturer??state.defaults.manufacturer).trim().toLowerCase();
+  const candidate=lookupSerial(state.draft.serial)?.candidates?.find(f=>f.model.trim().toLowerCase()===value.toLowerCase()&&f.manufacturer.trim().toLowerCase()===maker);
+  updateEquipmentDescription(state.draft,candidate?[candidate]:null);
+ }
+ state.step++;
  lastEmpty=0;notice='';persist();render();prompt();
 }
 
