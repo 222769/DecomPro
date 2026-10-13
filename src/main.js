@@ -85,7 +85,7 @@ let readinessSession=0;
 let dashboardCollectionId='',dashboardStatus='all';
 let collectionReviewTrolley="all",collectionReviewKind="all";
 let connectionPhase='syncing',lastConfirmedAt='',historySearch='';
-let navScrollAnchor=0,navScrollFrame=false,dockCollapseTimer=0;
+let navScrollAnchor=0,navScrollFrame=false,dockCollapseTimer=0,dockNavigationActive=false,dockNavigationHoldUntil=0;
 let sharedLocked = false;
 let saving=false, exporting=false, equipmentImportOpening=false;
 const localWorkspaceKey=testWorkspace?'decompro.demo.localWorkspace':'decompro.localWorkspace';
@@ -466,6 +466,10 @@ function bind() {
   if(document.body.classList.contains('nav-dock-minimized')){document.body.classList.remove('nav-dock-minimized');document.querySelector('#scroll-dock-more').setAttribute('aria-label','More workspace sections');scheduleDockCollapse(5000);return;}
   clearTimeout(dockCollapseTimer);document.body.classList.remove('nav-condensed','nav-dock-minimized');navScrollAnchor=window.scrollY;document.querySelector('aside').classList.add('mobile-nav-open');mobileNavToggle.setAttribute('aria-expanded','true');mobileNavToggle.focus({preventScroll:true});
  };
+ document.querySelectorAll('#scroll-dock a').forEach(link=>link.onclick=()=>{
+  dockNavigationActive=true;dockNavigationHoldUntil=performance.now()+1200;navScrollAnchor=window.scrollY;
+  document.body.classList.add('nav-condensed');scheduleDockCollapse(5000);
+ });
  document.querySelector('aside .app-nav').addEventListener('click',event=>{if(event.target.closest('#mobile-nav-toggle'))return;if(event.target.closest('a,button')){document.querySelector('aside').classList.remove('mobile-nav-open');mobileNavToggle.setAttribute('aria-expanded','false');}});
  document.querySelector('#prepare-history-handover').onclick=openHandoverPack;
  document.querySelector('#history-search').oninput=e=>{historySearch=e.target.value;updateHistory();};
@@ -577,13 +581,17 @@ function scheduleDockCollapse(delay=2800){
 }
 function resetMobileNavigation(){
  clearTimeout(dockCollapseTimer);
+ dockNavigationActive=false;dockNavigationHoldUntil=0;
  document.body.classList.remove('nav-condensed','nav-dock-minimized');
  document.querySelector('#scroll-dock-more')?.setAttribute('aria-label','More workspace sections');
 }
 function syncMobileNavigation(){
  const aside=document.querySelector('aside'),y=window.scrollY;
  if(!aside||!window.matchMedia('(max-width:700px)').matches){resetMobileNavigation();navScrollAnchor=y;return;}
- if(y<120||aside.classList.contains('mobile-nav-open')){resetMobileNavigation();navScrollAnchor=y;return;}
+ if(aside.classList.contains('mobile-nav-open')){resetMobileNavigation();navScrollAnchor=y;return;}
+ if(dockNavigationActive&&performance.now()<dockNavigationHoldUntil){navScrollAnchor=y;return;}
+ if(dockNavigationActive&&navScrollAnchor-y>22){resetMobileNavigation();navScrollAnchor=y;return;}
+ if(y<120&&!dockNavigationActive){resetMobileNavigation();navScrollAnchor=y;return;}
  if(y-navScrollAnchor>35){document.body.classList.add('nav-condensed');document.body.classList.remove('nav-dock-minimized');document.querySelector('#scroll-dock-more')?.setAttribute('aria-label','More workspace sections');navScrollAnchor=y;scheduleDockCollapse();}
  else if(navScrollAnchor-y>22){resetMobileNavigation();navScrollAnchor=y;}
 }

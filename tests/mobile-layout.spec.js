@@ -81,6 +81,11 @@ test('mobile header yields to a bottom dock that minimizes after scrolling stops
  await page.locator('#scroll-dock-more').click();
  await expect(page.locator('body')).not.toHaveClass(/nav-dock-minimized/);
  await expect(page.locator('#scroll-dock a[href="#inventory"]')).toBeVisible();
+ await page.locator('#scroll-dock a[href="#station"]').click();
+ await expect(page.locator('main')).toHaveAttribute('data-view','station');
+ await page.waitForTimeout(1400);
+ await expect(page.locator('aside')).toBeHidden();
+ await expect(page.locator('#scroll-dock')).toBeVisible();
  await page.mouse.wheel(0,-180);
  await expect(page.locator('body')).not.toHaveClass(/nav-condensed/);
  await expect(page.locator('aside')).toBeVisible();
