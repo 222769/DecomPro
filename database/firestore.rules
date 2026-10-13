@@ -96,15 +96,16 @@ service cloud.firestore {
      && (request.resource.data.payload.technician==membership(team).code || (admin(team) && request.resource.data.historicalImport))
      && openTrolley(team,request.resource.data.payload) && inventoryTouch(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==null;
-    allow update: if member(team) && !resource.data.deleted && valid(request.resource.data)
+    allow update: if member(team) && (!resource.data.deleted || (admin(team) && !request.resource.data.deleted)) && valid(request.resource.data)
      && request.resource.data.createdBy==resource.data.createdBy && request.resource.data.createdAt==resource.data.createdAt
+     && (!resource.data.deleted || (request.resource.data.payload.diff(resource.data.payload).affectedKeys().hasOnly(['trolley','trolleyId']) && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.action=='restore'))
      && request.resource.data.historicalImport==resource.data.historicalImport && request.resource.data.payload.technician==resource.data.payload.technician
-     && request.resource.data.version==resource.data.version+1 && (!('trolleyId' in resource.data.payload) || (existingOpenTrolley(team,resource.data.payload) && inventoryTouch(team,resource.data.payload))) && openTrolley(team,request.resource.data.payload) && inventoryTouch(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
+     && request.resource.data.version==resource.data.version+1 && (resource.data.deleted || !('trolleyId' in resource.data.payload) || (existingOpenTrolley(team,resource.data.payload) && inventoryTouch(team,resource.data.payload))) && openTrolley(team,request.resource.data.payload) && inventoryTouch(team,request.resource.data.payload) && claim(request.resource.data) && revision(request.resource.data)
      && getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)/revisions/$(request.resource.data.revisionId)).data.before==resource.data;
     allow delete: if false;
     match /revisions/{revision} {
      allow read: if member(team);
-     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','edit','remove'] && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)).data && request.resource.data.after.revisionId==revision;
+     allow create: if member(team) && request.resource.data.keys().hasOnly(['actor','before','after','action','at']) && request.resource.data.actor==request.auth.uid && request.resource.data.at==request.time && request.resource.data.action in ['create','edit','remove','restore'] && request.resource.data.after==getAfter(/databases/$(database)/documents/teams/$(team)/equipment/$(item)).data && request.resource.data.after.revisionId==revision;
      allow update, delete: if false;
     }
    }
@@ -275,6 +276,26 @@ service cloud.firestore {
      && (resource.data.sessionId=='' || resource.data.sessionId==request.resource.data.changedInSession)
      && (request.resource.data.sessionId!='' || request.resource.data.changedInSession==resource.data.sessionId);
     allow delete: if false;
+   }
+   match /historicalFiles/{file} {
+    allow read: if member(team);
+    function validFile(d) {return d.keys().hasOnly(['name','generation','rows','version','updatedBy','updatedAt']) && boundedText(d.name) && d.name.size()<=255 && d.generation is string && d.generation.matches('^[a-zA-Z0-9-]{1,100}$') && d.rows is int && d.rows>0 && d.rows<=5000 && d.version is int && d.updatedBy==request.auth.uid && d.updatedAt==request.time;}
+    allow create: if admin(team) && validFile(request.resource.data) && request.resource.data.version==1;
+    allow update: if admin(team) && validFile(request.resource.data) && request.resource.data.name==resource.data.name && request.resource.data.version==resource.data.version+1;
+    allow delete: if false;
+    match /versions/{generation}/rows/{row} {
+     function txt(v){return v is string && v.size()<=1000;}
+     function validRow(d){let p=d.payload;let v=p.values;
+      return d.keys().hasOnly(['payload','identifiers','uploadedBy','uploadedAt']) && p.keys().hasOnly(['id','file','sheet','row','values']) && p.id==row && boundedText(p.id) && p.id.size()<=100 && boundedText(p.file) && p.file.size()<=255 && txt(p.sheet) && p.sheet.size()<=255 && p.row is int && p.row>0
+       && v.keys().hasOnly(['date','description','model','manufacturer','source','serial','barcode','etch','asset','reason','technician'])
+       && txt(v.date) && txt(v.description) && txt(v.model) && txt(v.manufacturer) && txt(v.source) && txt(v.serial) && txt(v.barcode) && txt(v.etch) && txt(v.asset) && txt(v.reason) && txt(v.technician)
+       && d.identifiers is list && d.identifiers.size()<=4 && d.identifiers.toSet().hasOnly([v.serial.upper().trim(),v.barcode.upper().trim(),v.etch.upper().trim(),v.asset.upper().trim()])
+       && d.uploadedBy==request.auth.uid && d.uploadedAt==request.time;
+     }
+     allow read: if member(team);
+     allow create: if admin(team) && validRow(request.resource.data);
+     allow update, delete: if false;
+    }
    }
    match /references/{reference} {
     allow read: if member(team);

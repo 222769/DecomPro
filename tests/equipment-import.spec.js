@@ -12,7 +12,7 @@ test('register Excel importer appends historical records, preserves draft and re
  await expect(page.getByRole('button',{name:'Import selected equipment'})).toBeDisabled();
  await page.getByRole('button',{name:'Close',exact:true}).click();await expect(page.locator('#inventory tbody')).toContainText('00001234');
  await page.reload();const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(saved.items).toHaveLength(1);expect(saved.items[0]).toMatchObject({date:'2026-02-16',technician:'OLD',serial:'00001234',barcode:'000007',etch:'009090',asset:'A1234',recognitionConfirmed:false});expect(saved.draft).toEqual(before.draft);expect(saved.referenceExamples).toEqual(before.referenceExamples);expect(saved.profiles).toEqual(before.profiles);
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
+ const download=page.waitForEvent('download');await page.locator('#export').click();expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
  await open(page,[equipment('00001234','A1234')]);await expect(page.locator('#equipment-import-dialog')).toContainText('Serial already in the register');await expect(page.getByRole('button',{name:'Import selected equipment'})).toBeDisabled();await page.getByRole('button',{name:'Close',exact:true}).click();
  page.on('dialog',d=>d.accept());await page.getByRole('button',{name:'Clear current item',exact:true}).click();await page.locator('#scan').fill('00001234');await page.locator('#scan').press('Enter');await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
 });

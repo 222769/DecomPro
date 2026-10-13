@@ -404,3 +404,41 @@ test('legacy trolley names block new references and a renamed or deleted name ca
  await owner.load();await owner.writeTrolley({...legacy,name:'Renamed legacy'},1);const replacement=createTrolley('Legacy 1.1');await owner.writeTrolley(replacement);
  await owner.load();await owner.deleteTrolley(replacement.id,owner.trolleyVersionFor(replacement.id));const reused=createTrolley('Legacy 1.1');await owner.writeTrolley(reused);assert.notEqual(reused.id,replacement.id);
 });
+
+test('private historical files require an administrator to upload and are searchable by all four identifiers',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ const row={id:'source-row',file:'Private previous.xlsx',sheet:'Items',row:2,values:{date:'2026-05-01',description:'PC',model:'Original model',manufacturer:'Example',source:'Storage',serial:'HIST-123',barcode:'000123',etch:'090011',asset:'A0803',reason:'EOL',technician:'OLD'}};
+ await assert.rejects(tech.publishHistorical([row],row.file),/administrator/);
+ await owner.publishHistorical([row],row.file);
+ for(const identifier of ['hist-123','000123','090011','A0803']){const found=await tech.findHistorical(identifier);assert.equal(found.length,1);assert.deepEqual(found[0].values,row.values);}
+ await assertFails(getDocs(collection(env.unauthenticatedContext().firestore(),'teams/college-it/historicalFiles')));
+ await assertFails(getDocs(collection(context('outsider'),'teams/college-it/historicalFiles')));
+ await owner.publishHistorical([{...row,values:{...row.values,serial:'REPLACEMENT',etch:'090012',barcode:'000124',asset:'A0804'}}],row.file);
+ assert.equal((await tech.findHistorical('090011')).length,0);assert.equal((await tech.findHistorical('090012')).length,1);
+ const manifests=await getDocs(collection(context('admin'),'teams/college-it/historicalFiles')),manifest=manifests.docs[0],version=manifest.data().generation;
+ await assertFails(setDoc(doc(context('tech'),`${manifest.ref.path}/versions/${version}/rows/injected`),{payload:row,identifiers:['090011'],uploadedBy:'tech',uploadedAt:serverTimestamp()}));
+});
+test('only admins restore tombstones, with original facts, serial reservation and audit history preserved',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member),item=sample('restore-item','RESTORE-123');
+ await tech.write(item);await tech.write(item,1,{deleted:true});await assert.rejects(tech.loadDeleted(),/administrator/);await assert.rejects(tech.write(item,2,{restore:true}),/administrator/);
+ const removed=await owner.loadDeleted();assert.equal(removed.length,1);
+ await assert.rejects(owner.write({...item,model:'Changed'},2,{restore:true}));
+ await owner.write(item,2,{restore:true});assert.equal((await owner.loadDeleted()).length,0);assert.equal((await tech.load()).items[0].technician,'TT');
+ const revisions=await getDocs(collection(context('admin'),'teams/college-it/equipment/restore-item/revisions'));assert.equal(revisions.size,3);assert.ok(revisions.docs.some(row=>row.data().action==='restore'));
+ await assert.rejects(owner.write({...item,id:'duplicate'},0),/already recorded/);
+});
+test('restoration rejects a reused serial and can place deleted equipment on another open trolley',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),item=sample('restore-old','RESTORE-OLD'),other=createTrolley('Recovery trolley');
+ await owner.write(item);await owner.write(item,1,{deleted:true});await owner.write({...item,id:'replacement'});await assert.rejects(owner.write(item,2,{restore:true}),/already recorded/);
+ await owner.write({...item,id:'replacement'},1,{deleted:true});await owner.writeTrolley(other);
+ await owner.write({...item,trolley:other.name,trolleyId:other.id},2,{restore:true});assert.equal((await owner.load()).items[0].trolleyId,other.id);
+});
+
+test('historical workbooks larger than one write batch publish completely and reject row mutation',async()=>{
+ const owner=createTeamStore(context('admin'),'admin','college-it',admin),tech=createTeamStore(context('tech'),'tech','college-it',member);
+ const rows=Array.from({length:205},(_,i)=>({id:`source-${i}`,file:'Batch.xlsx',sheet:'Items',row:i+2,values:{date:'',description:'PC',model:'Model',manufacturer:'Maker',source:'Storage',serial:`BATCH-${i}`,barcode:`000${i}`,etch:`ETCH-${i}`,asset:`A${String(i).padStart(4,'0')}`,reason:'EOL',technician:'OLD'}}));
+ await owner.publishHistorical(rows,'Batch.xlsx');assert.equal((await tech.findHistorical('BATCH-204')).length,1);
+ const files=await getDocs(collection(context('admin'),'teams/college-it/historicalFiles')),file=files.docs[0];assert.equal(file.data().rows,205);
+ const stored=await getDocs(collection(file.ref,'versions',file.data().generation,'rows'));assert.equal(stored.size,205);
+ await assertFails(setDoc(stored.docs[0].ref,{...stored.docs[0].data(),identifiers:['UNRELATED']}));
+});

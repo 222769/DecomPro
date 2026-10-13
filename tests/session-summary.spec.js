@@ -29,7 +29,7 @@ test('summary reviews missing details across trolleys and refreshes after correc
  await summary.getByRole('button',{name:'Review missing details'}).click();
  await expect(page.locator('#inventory tbody tr')).toHaveCount(1);await expect(page.locator('#inventory tbody')).toContainText('SUMMARY-001');
  await expect(page.getByLabel('Search collection register')).toHaveValue('');
- const exportDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();
+ const exportDownload=page.waitForEvent('download');await page.locator('#export').click();
  const exported=await exportDownload,workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(await exported.path());
  expect(workbook.worksheets[0].rowCount).toBe(4);
  expect([2,3,4].map(row=>workbook.worksheets[0].getRow(row).getCell(6).value)).toEqual(['SUMMARY-001','SUMMARY-002','SUMMARY-003']);

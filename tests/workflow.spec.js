@@ -86,7 +86,7 @@ test('saving works without crypto.randomUUID and produces distinct persistent ID
 
 test('empty register is not exported and unsaved scans remain available',async({page})=>{
  await page.goto('/');await defaults(page);await item(page,'UNSAVED-EXPORT-001');
- await expect(page.getByRole('button',{name:'Export Excel',exact:true})).toBeDisabled();
+ await expect(page.locator('#export')).toBeDisabled();
  await page.evaluate(()=>document.querySelector('#export').onclick());
  await expect(page.getByRole('status')).toContainText('There are no saved items to export');
  await expect(page.getByRole('heading',{name:'Review this equipment'})).toBeVisible();
@@ -97,12 +97,12 @@ test('export errors show the cause and reflect records removed while export was 
  await page.goto('/');await defaults(page);await item(page,'EXPORT-REMOVED-001');await page.getByRole('button',{name:'Save item & start next'}).click();
  let release,signal;const started=new Promise(resolve=>signal=resolve);
  await page.route('**/exceljs*',async route=>{signal();await new Promise(resolve=>release=resolve);await route.abort();});
- await page.getByRole('button',{name:'Export Excel',exact:true}).click();await started;
+ await page.locator('#export').click();await started;
  page.on('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Delete item EXPORT-REMOVED-001',exact:true}).click();await page.getByRole('button',{name:'Remove item',exact:true}).click();
  release();
  await expect(page.getByRole('status')).toContainText('Excel component could not load');
  await expect(page.getByRole('status')).toContainText('There are no saved items in the current workspace');
- await expect(page.getByRole('button',{name:'Export Excel',exact:true})).toBeDisabled();
+ await expect(page.locator('#export')).toBeDisabled();
 });
 
 test('trolley management creates labels, barcode inventory views and retained collection history',async({page})=>{
@@ -131,7 +131,7 @@ test('trolley management creates labels, barcode inventory views and retained co
  await expect(page.locator('#inventory-title')).toHaveText('Helpdesk collection 02 inventory');
  await expect(page.locator('tbody')).toContainText('TROLLEY-NEW-001');await expect(page.locator('tbody')).not.toContainText('TROLLEY-OLD-001');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('DRAFT-TO-KEEP');
- const inventoryDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel',exact:true}).click();
+ const inventoryDownload=page.waitForEvent('download');await page.locator('#export').click();
  const workbook=new ExcelJS.Workbook();await workbook.xlsx.readFile(await (await inventoryDownload).path());expect(workbook.getWorksheet('Sheet1').rowCount).toBe(2);
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();
  await readyTrolley(page,card);await card.getByRole('button',{name:'Mark collected',exact:true}).click();
@@ -148,7 +148,7 @@ test('trolley management creates labels, barcode inventory views and retained co
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(restored.trolleys.find(t=>t.id===trolley.id).status).toBe('collected');expect(restored.items).toHaveLength(2);
  await page.evaluate(id=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.activeTrolleyId=id;state.defaults.trolley='Helpdesk collection 02';localStorage.setItem('decompro.v1',JSON.stringify(state));},trolley.id);await page.reload();await expect(page.getByLabel('Caged trolley')).toHaveAttribute('readonly','');
- await scan(page,'Test model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();
+ await page.getByRole('link',{name:'Scan station'}).click();await scan(page,'Test model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();
  await page.getByRole('button',{name:'Save item & start next'}).click();
  await expect(page.locator('#save-feedback')).toContainText('collected');expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items.length)).toBe(2);
 });
@@ -201,7 +201,7 @@ test('scanner, spoken prompts, profiles, persistence and exact Excel mapping',as
  await expect(page.locator('tbody')).toContainText('00001234');
  await page.reload();await expect(page.locator('tbody')).toContainText('00001234');
  await expect(page.locator('#profile')).toHaveValue('AL');
- const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel'}).click();
+ const downloaded=page.waitForEvent('download');await page.locator('#export').click();
  const download=await downloaded;const book=new ExcelJS.Workbook();await book.xlsx.readFile(await download.path());
  const sheet=book.getWorksheet('Sheet1');expect(sheet.getRow(1).values.slice(1)).toEqual(headers);
  expect(sheet.columnCount).toBe(11);expect(sheet.autoFilter).toBe('A1:K1');
@@ -255,7 +255,7 @@ test('trolley switching and adjustable scanning settings preserve existing recor
  await expect(page.locator('tbody')).toContainText('Trolley 01');
  await page.getByRole('button',{name:'Open settings'}).click();
  await page.getByLabel('Use one model for this batch').check();await page.getByLabel('Batch model number').fill('BATCH-MODEL');
- await page.getByLabel('Double-trigger window').selectOption('1500');
+ await page.getByLabel('Double-Enter window').selectOption('1500');
  await page.getByRole('button',{name:'Save settings'}).click();
  await expect(page.getByRole('heading',{name:'Serial number',exact:true})).toBeVisible();
  await scan(page,'SECOND-001');await page.locator('#scan').press('Enter');await page.waitForTimeout(800);await page.locator('#scan').press('Enter');
@@ -278,10 +278,10 @@ test('search and saved-item editing do not change other records; export includes
  await page.getByRole('button',{name:'Edit item EDIT-002',exact:true}).click();
  await page.locator('#edit-serial').fill('EDIT-001');await page.getByRole('button',{name:'Save changes'}).click();
  await expect(page.locator('#edit-error')).toContainText('another item');
- await page.locator('#edit-serial').fill('EDIT-003');await page.locator('#edit-trolley').fill('Cage B');await page.getByRole('button',{name:'Save changes'}).click();
+ await page.locator('#cancel-edit').click();await page.evaluate(trolley=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.trolleys.push(trolley);localStorage.setItem('decompro.v1',JSON.stringify(state));},createTrolley('Cage B'));await page.reload();await page.getByRole('button',{name:'Edit item EDIT-002',exact:true}).click();await page.locator('#edit-serial').fill('EDIT-003');const destination=await page.locator('#edit-trolley option').filter({hasText:'Cage B'}).getAttribute('value');await page.locator('#edit-trolley').selectOption(destination);await page.getByRole('button',{name:'Save changes'}).click();
  await page.getByLabel('Search collection register').fill('EDIT-003 Cage');
  await expect(page.locator('#search-count')).toHaveText('Showing 1 of 2 items');await expect(page.locator('tbody')).toContainText('Cage B');await expect(page.locator('tbody')).not.toContainText('EDIT-001');
- const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Export Excel'}).click();
+ const downloaded=page.waitForEvent('download');await page.locator('#export').click();
  const book=new ExcelJS.Workbook();await book.xlsx.readFile(await (await downloaded).path());
  expect(book.getWorksheet('Sheet1').rowCount).toBe(3);expect(book.getWorksheet('Sheet1').getRow(3).getCell(6).value).toBe('EDIT-003');
  await page.getByLabel('Search collection register').fill('no such equipment');await expect(page.locator('tbody')).toContainText('No equipment matches');
@@ -298,7 +298,7 @@ test('backup restore requires confirmation and retains trolley, settings and cap
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.model)).toBe('UNBACKED-MODEL');
  await page.locator('#backup-file').setInputFiles(path);await page.getByRole('button',{name:'Replace workspace & restore'}).click();
- await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Scan station'}).click();await expect(page.getByRole('heading',{name:'Model number',exact:true})).toBeVisible();
  const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
  expect(state.draft).toEqual({serial:'IN-PROGRESS-SERIAL'});expect(state.items[0].trolley).toBe('Trolley 01');expect(state.settings.skipWindow).toBe(700);
  const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
@@ -503,7 +503,7 @@ test('shared preview rechecks Firebase evidence before importing and requires re
 test('scan evidence persists and a reviewed correction preserves other scans and teaches the corrected serial',async({page})=>{
  await page.goto('/');await configureBatch(page);await scan(page,'001917BD324B');await expect(page.getByRole('region',{name:'Recognition evidence'})).toContainText('Built-in Excel');await expect(page.locator('.recognition-evidence')).toContainText('1 distinct serial');await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');await scan(page,'BARCODE-KEEP');const before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await page.reload();await expect(page.locator('.recognition-evidence')).toContainText('001917BD323B');
  await page.getByRole('button',{name:'This suggestion is wrong'}).click();await page.getByLabel('Checked model',{exact:true}).fill('Verified terminal model');await page.getByLabel('Checked manufacturer',{exact:true}).fill('Verified maker');await page.getByLabel('Reason for correction').fill('Read actual equipment label');await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.getByRole('heading',{name:'Correct this suggestion'})).toBeVisible();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);await page.getByLabel('I checked these corrected details').check();await page.getByRole('button',{name:'Apply checked correction'}).click();await expect(page.locator('.recognition-evidence')).toContainText('Corrected after a label check');const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(saved.draft.barcode).toBe('BARCODE-KEEP');expect(saved.draft.model).toBe('Verified terminal model');expect(saved.referenceCorrections[0].serial).toBe('001917BD324B');
- const download=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backupPath=await (await download).path();const backup=JSON.parse(await readFile(backupPath,'utf8'));expect(backup.state.draft.recognitionEvidence.referenceSerials).toEqual(['001917BD323B']);await page.getByRole('button',{name:'Clear current item'}).click();await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();await expect(page.locator('.recognition-evidence')).toContainText('Corrected after a label check');
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backupPath=await (await download).path();const backup=JSON.parse(await readFile(backupPath,'utf8'));expect(backup.state.draft.recognitionEvidence.referenceSerials).toEqual(['001917BD323B']);await page.getByRole('button',{name:'Clear current item'}).click();await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();await page.getByRole('link',{name:'Scan station'}).click();await expect(page.locator('.recognition-evidence')).toContainText('Corrected after a label check');
  for(let i=0;i<2;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('tbody')).toContainText('Verified terminal model');await scan(page,'001917BD324B');await expect(page.getByRole('status')).toContainText('Known serial: Verified terminal model · Verified maker');await expect(page.locator('.recognition-evidence')).toContainText('Reviewed correction');
 });
 
@@ -566,7 +566,7 @@ test('readiness reviews missing details and guesses, requires duplicate fixes, p
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();await card.getByRole('button',{name:'Reopen trolley'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(restored.trolleys[0].status).toBe('ready');expect(restored.items[0].recognitionConfirmed).toBe(true);expect(restored.items[0].readinessNotes.serial).toContain('Serial label worn off');
- await scan(page,'Draft model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('ready or collected');
+ await page.getByRole('link',{name:'Scan station'}).click();await scan(page,'Draft model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('ready or collected');
  await page.reload();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await expect(card).toContainText('Ready for collection');await card.getByRole('button',{name:'Reopen trolley'}).click();await expect(card).toContainText('Open');
  state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.trolleys[0].readyAt).toBe('');expect(state.draft.serial).toBe('KEEP-READINESS-DRAFT');
 });
@@ -631,7 +631,7 @@ test('local import previews duplicates, preserves originals and safely retries a
  await page.getByRole('button',{name:'Retry remaining items'}).click();await expect(page.locator('#local-import-result')).toContainText('1 item saved to Firebase');
  expect(await page.evaluate(()=>window.importWrites)).toEqual([local.items[0].id,local.items[1].id,local.items[1].id]);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).draft.serial)).toBe('PRESERVED-SHARED-DRAFT');
- await page.locator('#close-local-import').click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Sign out & return to local workspace'}).click();
+ await page.locator('#close-local-import').click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Logout'}).click();
  await expect(page.locator('.alert')).toContainText('Returned to your local workspace');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items)).toEqual(local.items);
 });

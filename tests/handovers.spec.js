@@ -33,7 +33,7 @@ test('handover PDF includes only selected ready inventories and exceptions; coll
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(saved.trolleys.slice(0,2).map(t=>t.status)).toEqual(['collected','collected']);expect(saved.trolleys[2].status).toBe('open');expect(saved.trolleys[0].handover.trolleyIds).toEqual(trolleys.slice(0,2).map(t=>t.id));expect(saved.draft.serial).toBe('UNFINISHED');expect(saved.items.map(i=>i.technician)).toEqual(['JA','JA']);
  const retainedDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Download retained handover PDF'}).click();const retained=await retainedDownload;expect(retained.suggestedFilename()).toBe(`${reference}.pdf`);expect((await readFile(await retained.path())).toString('latin1')).toContain('Collection recorded by: MA');
  await page.getByLabel('Search collected trolleys').fill(reference);await expect(page.locator('.handover-history-card')).toBeVisible();
- const backupDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backup=await backupDownload;expect(parseBackup(await readFile(await backup.path(),'utf8')).trolleys[0].handover).toEqual(saved.trolleys[0].handover);
+ const backupDownload=page.waitForEvent('download');await page.locator('a[href="#inventory"]').click();await page.getByRole('button',{name:'Backup',exact:true}).click();const backup=await backupDownload;expect(parseBackup(await readFile(await backup.path(),'utf8')).trolleys[0].handover).toEqual(saved.trolleys[0].handover);
  await page.reload();await expect(page.locator('.handover-history-card')).toContainText(reference);
 });
 test('changing printed details requires a fresh PDF; failed local collection preserves all ready trolleys',async({page})=>{
@@ -65,7 +65,7 @@ test('supplier Excel combines the saved handover only, ignores searches and pres
   localStorage.setItem('decompro.v1',JSON.stringify(state));
  });await page.reload();
  await prepare(page,trolleys);await page.getByLabel('I checked the pack and these trolleys have been collected').check();await page.getByRole('button',{name:'Mark selected collected'}).click();
- await page.getByLabel('Search collected trolleys').fill('Collection 01');await page.getByLabel('Search collection register').fill('HANDOVER-001');
+ await page.getByLabel('Search collected trolleys').fill('Collection 01');await page.locator('a[href="#inventory"]').click();await page.getByLabel('Search collection register').fill('HANDOVER-001');await page.locator('a[href="#collection-history"]').click();
  const before=await page.evaluate(()=>localStorage.getItem('decompro.v1')),download=page.waitForEvent('download');
  await page.getByRole('button',{name:'Download supplier Excel',exact:true}).click();const file=await download;
  expect(file.suggestedFilename()).toBe(`${handoverReference(trolleys[0].id)}-supplier.xlsx`);

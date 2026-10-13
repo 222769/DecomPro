@@ -340,3 +340,16 @@ footer .app-version{display:block;margin-top:6px;font-size:11px;color:var(--mute
 .historical-tools{border:1px solid #4b6280;border-radius:14px;padding:16px;margin:20px 0;text-align:left}.station .historical-tools p{font-size:12px;line-height:1.7;margin:12px 0 0;color:#c2d0e5}
 .historical-preview{border:1px solid #6785ad;border-radius:16px;padding:20px;margin-top:20px;text-align:left}.historical-preview h3{color:#fff}.station .historical-preview p{font-size:13px;line-height:1.8;color:#d2def0}.historical-preview label{display:block;font-size:12px;color:#c6d7ed;margin:14px 0 7px}.historical-preview input,.historical-preview select{font-size:14px}.historical-preview summary{color:#c6d7ed;cursor:pointer;font-size:13px}.historical-preview .captured{margin-top:15px}.historical-preview .historical-ack{display:flex;gap:12px;align-items:flex-start;line-height:1.7;margin:20px 0}.historical-ack input{width:18px;height:18px;flex:0 0 18px;margin-top:3px;accent-color:#86a6ff}.historical-preview .primary{margin-top:10px}
 .historical-source,#rescan-message{overflow-wrap:anywhere}
+
+/* Keep the current task prominent while preserving the mounted scan draft. */
+main:not([data-view="overview"]) #collection-dashboard { display: none; }
+main[data-view="inventory"] :is(.station-layout,.stats,#collections),
+main:is([data-view="collection-review"],[data-view="collection-history"],[data-view="collections"]) :is(.station-layout,.stats,#inventory),
+main:not([data-view="overview"]):not([data-view="collections"]) #collections { display: none; }
+main:not([data-view="overview"]):not([data-view="station"]) > header { display: none; }
+
+.station-session {display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:16px;}
+.station-session a {font-weight:700;} .station-session span {flex:1;}
+main:not([data-view="station"]) .station-session {display:none;}
+
+.station-session[hidden] {display:none;}

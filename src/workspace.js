@@ -64,6 +64,9 @@ export function validateWorkspace(value) {
     const clean = validateEquipmentRecord(item,{maxLength:Infinity});
     return clean;
   });
+  if(value.deletedItems!==undefined&&(!Array.isArray(value.deletedItems)||value.deletedItems.length>20000))throw Error('Invalid deleted equipment backup.');
+  const deletedItems=(value.deletedItems||[]).map(item=>validateEquipmentRecord(item));
+  if(new Set(deletedItems.map(item=>item.id)).size!==deletedItems.length||deletedItems.some(item=>ids.has(item.id)))throw Error('Repeated deleted equipment IDs.');
   const draft = {};
   for (const [key] of fields) {
     if (value.draft[key] !== undefined) {
@@ -128,7 +131,7 @@ export function validateWorkspace(value) {
     collectionScans[id]={draft:checked.draft,step:checked.step,defaults:checked.defaults,activeTrolleyId:checked.activeTrolleyId};
    }
   }
-  return { ...(value.trolleyUnlocks===undefined?{}:{trolleyUnlocks:validateUnlockHistory(value.trolleyUnlocks)}), captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), historicalEquipment, referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
+  return { ...(value.trolleyUnlocks===undefined?{}:{trolleyUnlocks:validateUnlockHistory(value.trolleyUnlocks)}), captureOrder:'serial-first', activeTrolleyId, trolleys, collectionSessions,collectionTrolleys,collectionScans,activeCollectionId,collectionPaused,collectionWorkspace, ...(value.trolleyMoves===undefined?{}:{trolleyMoves}), historicalEquipment, deletedItems, referenceExamples, referenceCorrections, profiles, active: value.active, defaults, items, draft, step, voice: value.voice, settings };
 }
 export function parseBackup(contents) {
   const data = JSON.parse(contents);

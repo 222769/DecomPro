@@ -13,7 +13,7 @@ for (const failure of ['entry download','download','initialization']) {
     expect(await page.evaluate(()=>localStorage.getItem('decompro.recovery-test'))).toBe('preserved equipment');
     await page.unroute(asset);
     await page.getByRole('button',{name:'Refresh app',exact:true}).click();
-    await expect(page.locator('#station')).toBeVisible();
+    await expect(page.locator('#inventory')).toBeVisible();
     await expect(page.locator('#startup')).toBeHidden();
     expect(new URL(page.url()).searchParams.has('app-refresh')).toBe(true);
     expect(new URL(page.url()).hash).toBe('#trolley/test-trolley');

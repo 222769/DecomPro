@@ -9,7 +9,7 @@ async function seed(page) {
  const defaults={date:'2026-10-11',description:'Monitor',manufacturer:'Dell',source:'Storage',reason:'EOL',trolley:trolleys[1].name};
  const items=trolleys.slice(1).map((trolley,index)=>({...defaults,id:`dashboard-${index}`,serial:`DASH-${index}`,model:index?'P2419H':'N/A',asset:'N/A',barcode:'N/A',etch:'N/A',technician:'MA',trolley:trolley.name,trolleyId:trolley.id}));
  const state={captureOrder:'serial-first',activeTrolleyId:trolleys[1].id,trolleys,profiles:[{name:'Muhammad Ali',code:'MA'}],active:'MA',defaults,items,draft:{serial:'KEEP-MY-SCAN'},step:1,voice:false,settings:defaultSettings,referenceExamples:[],referenceCorrections:[],collectionSessions:[summer,autumn],collectionTrolleys:trolleys.map((trolley,i)=>({trolleyId:trolley.id,sessionId:i<3?summer.id:autumn.id})),activeCollectionId:summer.id};
- await page.addInitScript(state=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify(state));},state);await page.goto('/');return {summer,autumn,trolleys};
+ await page.addInitScript(state=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify(state));},state);await page.goto('/#overview');return {summer,autumn,trolleys};
 }
 
 test('dashboard separates unresolved records, physical checks, pickup and collection; filters preserve the active scan',async({page})=>{
@@ -30,8 +30,8 @@ test('dashboard separates unresolved records, physical checks, pickup and collec
 
 test('correcting equipment refreshes dashboard counts without marking a physical trolley ready',async({page})=>{
  const {summer}=await seed(page);const dashboard=page.getByRole('region',{name:'Collection dashboard',exact:true});
- await page.getByRole('button',{name:'Edit item DASH-0',exact:true}).click();await page.locator('#edit-model').fill('P2419H');await page.getByRole('button',{name:'Save changes',exact:true}).click();
- await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);await expect(dashboard.locator('.dashboard-trolley').filter({hasText:'Needs details'})).toContainText('Awaiting physical check');
+ await page.getByRole('link',{name:'Collection register',exact:false}).click();await page.getByRole('button',{name:'Edit item DASH-0',exact:true}).click();await page.locator('#edit-model').fill('P2419H');await page.getByRole('button',{name:'Save changes',exact:true}).click();
+ await page.locator('a[href="#overview"]').click();await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);await expect(dashboard.locator('.dashboard-trolley').filter({hasText:'Needs details'})).toContainText('Awaiting physical check');
  await page.reload();await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).activeCollectionId)).toBe(summer.id);
 });

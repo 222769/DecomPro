@@ -1,7 +1,8 @@
+import {sharedHistory} from './shared-history.js';
 import {trolleyUnlockPlan,unlockReason} from './trolley-unlock.js';
 import {checkReadiness,validateReadinessNotes} from './readiness.js';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { getAuth, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import {getFunctions,httpsCallable} from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, where, onSnapshot, runTransaction, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { normalizeSerial, cleanExamples } from './recognition.js';
@@ -56,6 +57,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
  const decode=snapshot=>snapshot.docs.sort((a,b)=>(a.data().createdAt?.toMillis?.()||0)-(b.data().createdAt?.toMillis?.()||0)).map(d=>{versions.set(d.id,d.data().version);return {...d.data().payload,id:d.id};});
  const memberProfile={name:member.displayName,code:member.code};
  const client={
+  ...sharedHistory(db,root,uid,member.role),
   uid,profile:memberProfile,role:member.role,projectId:db.app.options.projectId,email:auth?.currentUser?.email||'',teamId,
   async adminAction(data) {
    if(member.role!=='admin')throw Error('Only an active team administrator can manage users.');
@@ -270,7 +272,7 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
   stop(){stops.splice(0).forEach(stop=>stop());},
   async rememberDevice(remember){if(auth&&typeof window!=='undefined')await setPersistence(auth,remember?browserLocalPersistence:browserSessionPersistence);},
   async logout(){client.stop();if(auth)await signOut(auth);},
-  async write(item,expectedVersion=0,{deleted=false,historicalImport=false,collectionId=''}={}) {
+  async write(item,expectedVersion=0,{deleted=false,historicalImport=false,collectionId='',restore=false}={}) {
    if(historicalImport&&member.role!=='admin')throw Error('Only an administrator can import historical local records.');
    if(item.readinessNotes!==undefined)item={...item,readinessNotes:validateReadinessNotes(item.readinessNotes)};
    const touchedVersions=new Map();
@@ -282,12 +284,13 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
      if(!assignment.exists()||assignment.data().sessionId!==collectionId)throw Error('The trolley is no longer assigned to your active collection. Review collection trolleys before saving.');
     }
     if((before?.version||0)!==expectedVersion)throw Error('Another technician changed this record. Refresh the register and review their changes before retrying.');
-    if(before?.deleted&&!deleted)throw Error('This item was removed. Create a new record rather than overwriting its history.');
+    if(restore&&(member.role!=='admin'||!before?.deleted||deleted))throw Error('Only an administrator can restore a deleted item.');
+    if(before?.deleted&&!deleted&&!restore)throw Error('This item was removed. Restore it through Deleted equipment.');
     const oldKey=before?.serialKey||'';
     const claim=newKey?await tx.get(doc(serials,newKey)):null;
     if(claim?.exists()&&claim.data().itemId!==item.id)throw Error('This serial number is already recorded by the team.');
     const touched=[];
-    for(const trolleyId of new Set([item.trolleyId,before?.payload.trolleyId].filter(Boolean))) {
+    for(const trolleyId of new Set([item.trolleyId,...(restore?[]:[before?.payload.trolleyId])].filter(Boolean))) {
      const trolley=await tx.get(doc(trolleys,trolleyId));
      if(!trolley.exists()||trolley.data().deleted||trolley.data().payload.status!=='open')throw Error('This trolley is unavailable, ready or collected. Reopen a ready trolley before changing its equipment.');
      if(trolleyId===item.trolleyId)item={...item,trolley:trolley.data().payload.name};
@@ -301,11 +304,16 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
     const payload={...item,technician:before?before.payload.technician:historicalImport?item.technician:member.code};
     const after={payload,serialKey:newKey,version:expectedVersion+1,createdBy:before?.createdBy||uid,updatedBy:uid,createdAt:before?.createdAt||serverTimestamp(),updatedAt:serverTimestamp(),revisionId,deleted,historicalImport:before?.historicalImport||historicalImport};
     tx.set(row,after);
-    tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:deleted?'remove':before?'edit':'create',at:serverTimestamp()});
+    tx.set(doc(row,'revisions',revisionId),{actor:uid,before,after,action:restore?'restore':deleted?'remove':before?'edit':'create',at:serverTimestamp()});
     if(newKey)tx.set(doc(serials,newKey),{itemId:item.id,serial});
     if(oldKey&&oldKey!==newKey)tx.delete(doc(serials,oldKey));
    });
    versions.set(item.id,expectedVersion+1);for(const [id,version] of touchedVersions)trolleyVersions.set(id,version);
+  },
+  async loadDeleted(){
+   if(member.role!=='admin')throw Error('Only an administrator can restore deleted equipment.');
+   const snapshot=await getDocsFromServer(query(equipment,where('deleted','==',true)));
+   return decode(snapshot);
   },
   async importExamples(examples) {
    examples=cleanExamples(examples);
@@ -318,4 +326,11 @@ export function createTeamStore(db,uid,teamId,member,auth=null) {
 export async function disconnectFirebaseAuth(config) {
  const app=getApps().find(app=>app.name===`decompro-${config.projectId}`);
  if(app)await signOut(getAuth(app));
+}
+
+export async function resetFirebasePassword(config,email) {
+ config=validateFirebaseConfig(config);
+ const name=`decompro-${config.projectId}`,app=getApps().find(app=>app.name===name)||initializeApp(config,name);
+ try{await sendPasswordResetEmail(getAuth(app),email);}
+ catch(error){if(!['auth/user-not-found','auth/invalid-credential'].includes(error.code))throw error;}
 }
