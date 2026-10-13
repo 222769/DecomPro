@@ -15,7 +15,7 @@ test('collection PDF includes every item detail in the trolley scope and the req
  const download=page.waitForEvent('download');await page.locator('#export-pdf').click();const file=await download;
  const pdf=(await readFile(await file.path())).toString('latin1');
  expect(pdf.startsWith('%PDF')).toBe(true);
- for(const detail of ['PDF-SERIAL-1','PDF-SERIAL-2','PDF-SERIAL-3','PDF-BARCODE-2','PDF-ETCH-2','A1232','ThinkPad T14','Storage','EOL','Developed by Muhammad Ali','Tested by Jawad Ahmed'])expect(pdf).toContain(detail);
+ for(const detail of ['PDF-SERIAL-1','PDF-SERIAL-2','PDF-SERIAL-3','PDF-BARCODE-2','PDF-ETCH-2','A1232','ThinkPad T14','Storage','EOL','Developed by Muhammad Ali','Tested by Jawad Ahmed','Designed for the people who keep IT running.'])expect(pdf).toContain(detail);
  expect(pdf).not.toContain('OTHER-SERIAL');
  expect((pdf.match(/\/Type \/Page\b/g)||[]).length).toBeLessThanOrEqual(4);
 });
