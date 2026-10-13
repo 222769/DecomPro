@@ -353,3 +353,6 @@ main:not([data-view="overview"]):not([data-view="station"]) > header { display: 
 main:not([data-view="station"]) .station-session {display:none;}
 
 .station-session[hidden] {display:none;}
+.register-filter-help{margin:0;padding:10px 12px;border-radius:10px;background:var(--light-blue,#eef3ff);color:var(--ink,#263752);font-size:12px;line-height:1.5;}
+.register-filter-help[hidden]{display:none;}
+html[data-theme="dark"] .register-filter-help{background:#253653;color:#d4e0f5;}
