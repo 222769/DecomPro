@@ -24,14 +24,14 @@ test('dashboard separates unresolved records, physical checks, pickup and collec
  await page.getByLabel('Collection overview',{exact:true}).selectOption(summer.id);await expect(dashboard.locator('.dashboard-trolley')).toHaveCount(1);
  await dashboard.getByRole('button',{name:'View inventory',exact:true}).click();await expect(page.locator('#inventory tbody')).toContainText('DASH-0');await expect(page.locator('#inventory tbody tr')).toHaveCount(1);
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(saved.draft.serial).toBe('KEEP-MY-SCAN');expect(saved.activeCollectionId).toBe(summer.id);
- await page.locator('a[href="#overview"]').click();
+ await page.locator('aside a[href="#overview"]').click();
  await dashboard.getByRole('button',{name:'Check trolley',exact:true}).click();await expect(page.locator('#trolley-manager')).toContainText('Model is unavailable');
 });
 
 test('correcting equipment refreshes dashboard counts without marking a physical trolley ready',async({page})=>{
  const {summer}=await seed(page);const dashboard=page.getByRole('region',{name:'Collection dashboard',exact:true});
  await page.getByRole('link',{name:'Collection register',exact:false}).click();await page.getByRole('button',{name:'Edit item DASH-0',exact:true}).click();await page.locator('#edit-model').fill('P2419H');await page.getByRole('button',{name:'Save changes',exact:true}).click();
- await page.locator('a[href="#overview"]').click();await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);await expect(dashboard.locator('.dashboard-trolley').filter({hasText:'Needs details'})).toContainText('Awaiting physical check');
+ await page.locator('aside a[href="#overview"]').click();await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);await expect(dashboard.locator('.dashboard-trolley').filter({hasText:'Needs details'})).toContainText('Awaiting physical check');
  await page.reload();await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','0','1','1']);
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).activeCollectionId)).toBe(summer.id);
 });

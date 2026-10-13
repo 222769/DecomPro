@@ -112,3 +112,48 @@ html[data-theme=dark] :is(.collection-dashboard,.session-summary,.named-collecti
  html[data-theme=dark] .collection-session-card .trolley-actions .primary{background:linear-gradient(110deg,#4bcddd,#688eff);}
  html[data-theme=dark] .session-summary a.secondary{background:#223f60;}
 }
+
+/* The desktop workspace has room for a stronger sense of depth and hierarchy. */
+@media(min-width:901px){
+ html[data-theme=dark] body{
+  background:radial-gradient(ellipse 48rem 38rem at 82% -8%,#2457805e,transparent 75%),radial-gradient(ellipse 42rem 34rem at 35% 85%,#17475d48,transparent 78%),#091523;
+  background-attachment:fixed;
+ }
+ html[data-theme=dark] aside{
+  background:radial-gradient(circle at 0 0,#1b3b55 0,transparent 18rem),linear-gradient(180deg,#0d2035,#091827 78%);
+  box-shadow:12px 0 38px #030b1840;
+ }
+ html[data-theme=dark] aside .brand{font-size:24px;letter-spacing:-1px;}
+ html[data-theme=dark] aside .brand-mark{width:42px;height:42px;border-radius:14px;box-shadow:0 0 0 1px #91e7ff5c,0 10px 26px #2a9fd65e;}
+ html[data-theme=dark] .workspace{margin-top:58px;color:#82aac4;}
+ html[data-theme=dark] .nav{border:1px solid transparent;transition:background .18s,border-color .18s,transform .18s;}
+ html[data-theme=dark] .nav:hover{background:#264868a6;border-color:#5b86a380;transform:translateX(3px);}
+ html[data-theme=dark] .nav.active{border-color:#75b9e65c;background:linear-gradient(100deg,#2b5b80,#233d69);box-shadow:inset 3px 0 #65d5e1,0 9px 24px #030b1766;}
+ html[data-theme=dark] .aside-bottom{background:linear-gradient(145deg,#1b3550,#12263d);border-color:#406584;border-radius:16px;box-shadow:0 8px 26px #06111e66;}
+ html[data-theme=dark] main{padding-top:32px;}
+ html[data-theme=dark] main>header{
+  min-height:168px;padding:25px 30px;border:1px solid #426280;border-radius:24px;
+  background:radial-gradient(ellipse 35rem 16rem at 82% -30%,#3876a15e,transparent 80%),linear-gradient(115deg,#1b3552,#11243a 72%);
+  box-shadow:0 18px 40px #020b1970,inset 0 1px #c5f0ff1c;
+ }
+ html[data-theme=dark] main>header h1{font-size:clamp(30px,3vw,45px);line-height:1.1;letter-spacing:-1.8px;}
+ html[data-theme=dark] main>header h1>span{color:#7ee1e8;}
+ html[data-theme=dark] main>header .eyebrow{color:#83dce9;}
+ html[data-theme=dark] .profile{flex-basis:240px;border-radius:16px;background:#102940d9;box-shadow:inset 0 1px #d6f2ff17,0 12px 25px #04111c80;}
+ html[data-theme=dark] :is(.card,.stats>div){border-radius:20px;box-shadow:0 17px 34px #020b1966,inset 0 1px #e4f7ff0d;}
+ html[data-theme=dark] .stats>div{min-height:106px;transition:transform .18s,border-color .18s;}
+ html[data-theme=dark] .stats>div:hover{transform:translateY(-3px);border-color:#5b91b5;}
+ html[data-theme=dark] .stats strong{font-size:23px;color:#e8f7ff;}
+ html[data-theme=dark] .stats .stat-content>span{color:#a5c8df;}
+ html[data-theme=dark] .collection-dashboard{background:radial-gradient(ellipse 34rem 20rem at 100% 0,#32739867,transparent 76%),linear-gradient(145deg,#1d3b59,#122740 72%);border-color:#4d7697;}
+ html[data-theme=dark] :is(.dashboard-metrics>div,.dashboard-trolley,.session-metrics>div,.collection-session-card){border-radius:17px;transition:transform .18s,border-color .18s,box-shadow .18s;}
+ html[data-theme=dark] :is(.dashboard-metrics>div,.dashboard-trolley,.session-metrics>div,.collection-session-card):hover{transform:translateY(-3px);border-color:#5b91b5;box-shadow:0 12px 26px #06111f73,inset 0 1px #dff7ff14;}
+ html[data-theme=dark] :is(.dashboard-metrics strong,.session-metrics strong){font-size:30px;color:#b5e9ff;}
+ html[data-theme=dark] .station{border-radius:24px;background:radial-gradient(ellipse 32rem 25rem at 50% 0,#3268959e,transparent 80%),linear-gradient(155deg,#1d395a,#10243b 80%);}
+ html[data-theme=dark] .scan-icon{box-shadow:0 0 40px #60aaff22,inset 0 1px #c5edff17;}
+ html[data-theme=dark] .register th{background:#1d3855;color:#c8e1f5;border-bottom:1px solid #4c7293;}
+ html[data-theme=dark] .register tbody tr:nth-child(even){background:#10263d69;}
+ html[data-theme=dark] .register tbody tr:hover{background:#2851779c;}
+ html[data-theme=dark] .register td{border-color:#37536e;}
+ html[data-theme=dark] :is(button,a,input,select):focus-visible{outline:2px solid #80e3ea;outline-offset:3px;}
+}
