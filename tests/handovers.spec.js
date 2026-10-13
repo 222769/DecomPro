@@ -15,6 +15,7 @@ async function seed(page) {
  await page.addInitScript(state=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify(state));},state);await page.goto('/');return {state,trolleys};
 }
 async function prepare(page,trolleys){
+ await page.locator('#manage-trolleys').waitFor({state:'attached'});if(!(await page.locator('#manage-trolleys').isVisible()))await page.locator('#mobile-nav-toggle').click();
  await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.locator('#prepare-handover').click();
  await page.getByLabel('Collection company',{exact:true}).fill('Decom Supplier');
  for(const trolley of trolleys.slice(0,2))await page.locator(`[name=handover-trolley][value="${trolley.id}"]`).check();
@@ -65,7 +66,7 @@ test('supplier Excel combines the saved handover only, ignores searches and pres
   localStorage.setItem('decompro.v1',JSON.stringify(state));
  });await page.reload();
  await prepare(page,trolleys);await page.getByLabel('I checked the pack and these trolleys have been collected').check();await page.getByRole('button',{name:'Mark selected collected'}).click();
- await page.getByLabel('Search collected trolleys').fill('Collection 01');await page.locator('a[href="#inventory"]').click();await page.getByLabel('Search collection register').fill('HANDOVER-001');await page.locator('a[href="#collection-history"]').click();
+ await page.getByLabel('Search collected trolleys').fill('Collection 01');await page.locator('a[href="#inventory"]').click();await page.getByLabel('Search collection register').fill('HANDOVER-001');await page.locator('#mobile-nav-toggle').click();await page.locator('a[href="#collection-history"]').click();
  const before=await page.evaluate(()=>localStorage.getItem('decompro.v1')),download=page.waitForEvent('download');
  await page.getByRole('button',{name:'Download supplier Excel',exact:true}).click();const file=await download;
  expect(file.suggestedFilename()).toBe(`${handoverReference(trolleys[0].id)}-supplier.xlsx`);

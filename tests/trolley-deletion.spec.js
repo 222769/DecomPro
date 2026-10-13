@@ -5,7 +5,7 @@ async function seed(page,{full=false,assigned=false,last=false}={}){
  await page.addInitScript(state=>{if(!localStorage.getItem('decompro.v1'))localStorage.setItem('decompro.v1',JSON.stringify(state));},state);await page.goto('/');await expect(page.locator('#station')).toBeVisible();return {trolley,other,state};
 }
 const stored=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));
-async function open(page,id){await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.locator(`[data-delete-trolley="${id}"]`).click();}
+async function open(page,id){await page.locator('#manage-trolleys').waitFor({state:'attached'});if(!(await page.getByRole('button',{name:'Trolleys',exact:true}).isVisible()))await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.locator(`[data-delete-trolley="${id}"]`).click();}
 async function confirm(page){await page.getByLabel('Type DELETE to confirm').fill('DELETE');await page.getByLabel('I understand this removes this trolley from the workspace.').check();await page.locator('#confirm-delete-trolley').click();}
 
 test('empty trolley deletion requires DELETE and acknowledgement, cancels safely and clears selections without losing the draft',async({page})=>{

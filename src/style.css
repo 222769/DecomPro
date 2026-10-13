@@ -23,6 +23,9 @@ aside { position: fixed; inset: 0 auto 0 0; width: 232px; padding: 32px 20px; ba
 .nav:hover { background: #243754; }
 .nav > span { margin-left: auto; font-size: 11px; }
 .nav .nav-active-dot { height: 6px; width: 6px; background: #8bb5ff; border-radius: 50%; }
+.app-nav { display: block; }
+.mobile-nav-extra { display: contents; }
+.mobile-more { display: none; }
 .aside-bottom { position: absolute; bottom: 26px; left: 20px; right: 20px; padding: 17px; border: 1px solid #324059; background: #1a2940; border-radius: 12px; font-size: 12px; }
 .aside-bottom p { color: #a6b5cc; font-size: 11px; margin-top: 10px; }
 .dot { display: inline-block; width: 6px; height: 6px; background: #71ddb5; border-radius: 50%; margin-right: 6px; }
@@ -356,3 +359,68 @@ main:not([data-view="station"]) .station-session {display:none;}
 .register-filter-help{margin:0;padding:10px 12px;border-radius:10px;background:var(--light-blue,#eef3ff);color:var(--ink,#263752);font-size:12px;line-height:1.5;}
 .register-filter-help[hidden]{display:none;}
 html[data-theme="dark"] .register-filter-help{background:#253653;color:#d4e0f5;}
+.mobile-table-hint { display: none; }
+
+/* The phone layout keeps scanning close at hand without hiding the other tools. */
+@media (max-width: 700px) {
+ html { scroll-padding-top: 120px; }
+ body { overflow-x: hidden; }
+ aside { position: sticky; top: 0; z-index: 30; display: block; padding: max(10px, env(safe-area-inset-top)) 14px 10px; box-shadow: 0 8px 22px #0c19331a; }
+ aside .brand { width: auto; margin: 0 0 10px; font-size: 20px; }
+ aside .brand-mark { width: 35px; height: 35px; }
+ .app-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+ .app-nav > .nav { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 52px; margin: 0; padding: 6px 3px; border-radius: 11px; text-align: center; font-size: 10px; line-height: 1.15; white-space: nowrap; }
+ .app-nav > .nav svg { width: 18px; height: 18px; }
+ .app-nav > .nav > span { display: none; }
+ .app-nav > .nav.active, .app-nav > .nav.is-current { background: #2b4166; color: #fff; }
+ .app-nav .mobile-more { display: flex; width: 100%; border: 0; background: transparent; color: #a8b7cf; }
+ .mobile-nav-extra { display: none; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px 0 4px; border-top: 1px solid #33425e; }
+ aside.mobile-nav-open .mobile-nav-extra { display: grid; }
+ .mobile-nav-extra .nav { display: flex; align-items: center; gap: 11px; min-height: 46px; width: 100%; margin: 0; padding: 10px 12px; font-size: 12px; text-align: left; }
+ .mobile-nav-extra .settings-nav-label { display: inline; font-size: 12px; }
+ .mobile-nav-extra .nav svg { width: 18px; height: 18px; }
+ main { padding: 20px 16px 28px; }
+ .breadcrumb { margin-bottom: 16px; }
+ .card { border-radius: 18px; }
+ .station-layout { gap: 16px; }
+ .station { padding: 20px 18px; }
+ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
+ .profile select { font-size: 16px; }
+ #station > .section-top { justify-content: space-between; gap: 10px; }
+ #station .section-top .eyebrow { width: 100%; text-align: center; }
+ #station .section-top .pill { min-height: 42px; }
+ .rescan-button-content { min-height: 40px; }
+ .steps { margin: 24px 0; }
+ .step { min-width: 0; flex: 1; font-size: 9px; }
+ .step span { width: 34px; height: 34px; }
+ .scan-icon { width: 72px; height: 72px; margin-bottom: 16px; border-radius: 20px; }
+ .scan-icon svg { width: 43px; height: 43px; }
+ .scan-icon::after { top: 36px; }
+ .station h2 { font-size: 30px; }
+ .station p { font-size: 13px; }
+ #scan-form { margin-top: 20px; }
+ #scan { font-size: 16px; min-height: 56px; }
+ #scan-form .primary { min-height: 50px; font-size: 13px; }
+ .scan-actions { gap: 8px; }
+ .scan-actions .secondary, .scan-actions .text-button { min-height: 44px; }
+ .defaults { padding: 20px; }
+ .defaults input, .defaults select, .defaults button { min-height: 44px; font-size: 16px; }
+ .collection-dashboard :is(.primary,.secondary), .collection-session-card button, .trolley-actions button { min-height: 44px; }
+ .register { padding: 20px 16px; }
+ .register .section-top { align-items: stretch; flex-wrap: wrap; }
+ .register .section-top > div { flex: 1 1 180px; }
+ .register .section-top > .primary { min-height: 46px; font-size: 12px; }
+ .register-tools { margin-top: 18px; }
+ .register-filters { gap: 12px; }
+ .register-filters input, .register-filters select { min-height: 46px; font-size: 16px; }
+ .register-tools .backup-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+ .register-tools .backup-actions .secondary { min-height: 46px; padding: 9px 7px; font-size: 11px; }
+ .table-wrap { margin-right: -16px; padding-right: 16px; -webkit-overflow-scrolling: touch; }
+ .mobile-table-hint { display: block; margin: 14px 0 0; font-size: 11px; color: var(--muted); }
+ .table-wrap::after { content: ''; display: block; width: 1px; height: 1px; }
+ .table-wrap table { margin-top: 12px; }
+ .table-wrap td, .table-wrap th { padding-left: 10px; padding-right: 10px; }
+ dialog { width: min(calc(100% - 24px), 480px); max-width: min(calc(100% - 24px), 480px); max-height: min(88dvh, 750px); padding: 20px; overflow: auto; }
+ dialog input, dialog select { min-height: 44px; font-size: 16px; }
+ .dialog-actions > button { min-height: 44px; }
+}
