@@ -51,3 +51,14 @@ test('iPhone-width collection cards keep actions aligned without overflow in dar
  await expect(page.locator('.stats > div')).toHaveCount(3);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
 });
+
+test('connected database indicator glows without an outer green panel in dark mode',async({page})=>{
+ await page.setViewportSize({width:402,height:874});
+ await page.goto('/#station');
+ await page.locator('#connection-status').waitFor();
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';const status=document.querySelector('#connection-status');status.classList.add('connected','compact-connection');status.innerHTML='<span class="connection-chip">Database connected<i></i></span>';});
+ const status=page.locator('#connection-status');
+ await expect.poll(()=>status.evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ const shadow=await status.locator('.connection-chip').evaluate(node=>getComputedStyle(node).boxShadow);
+ expect(shadow).toContain('rgba(78, 228, 187');
+});
