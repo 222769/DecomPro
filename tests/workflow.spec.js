@@ -368,7 +368,7 @@ test('blocked browser storage shows the app and an error instead of a blank scre
  const failures=[];page.on('pageerror',error=>failures.push(error.message));
  await page.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new DOMException('Storage blocked','SecurityError');}}));
  await page.goto('/');
- await expect(page.getByRole('heading',{name:'Your DecomPro workspace.'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Every item. Every trolley. Accounted for.'})).toBeVisible();
  await expect(page.getByRole('alert')).toContainText('Saved data could not be loaded');
  expect(failures).toEqual([]);
 });

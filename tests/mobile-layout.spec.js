@@ -35,3 +35,19 @@ test('More menu exposes secondary sections and closes after navigation',async({p
  await expect(page.locator('.mobile-nav-extra')).toBeHidden();
  await expect(page.locator('#mobile-nav-toggle')).toHaveAttribute('aria-expanded','false');
 });
+
+test('iPhone-width collection cards keep actions aligned without overflow in dark mode',async({page})=>{
+ await page.setViewportSize({width:402,height:874});
+ await page.goto('/?workspace=demo#collections');
+ await page.locator('.collection-session-card').first().waitFor();
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ const headerButton=page.getByRole('button',{name:'Create collection',exact:true});
+ expect(await headerButton.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(65);
+ const card=page.locator('.collection-session-card').first();
+ const bounds=await card.evaluate(el=>{const card=el.getBoundingClientRect();return [...el.querySelectorAll('button')].map(button=>{const box=button.getBoundingClientRect();return {left:box.left,right:box.right,cardLeft:card.left,cardRight:card.right};});});
+ for(const box of bounds){expect(box.left).toBeGreaterThanOrEqual(box.cardLeft);expect(box.right).toBeLessThanOrEqual(box.cardRight);}
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
+ await page.locator('.app-nav > a[href="#overview"]').click();
+ await expect(page.locator('.stats > div')).toHaveCount(3);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
+});
