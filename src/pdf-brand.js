@@ -1,5 +1,7 @@
 const key='decompro.pdfLogo.v1';
-export const pdfCredit='© 2026 DecomPro · Developed by Muhammad Ali · Tested by Jawad Ahmed · Designed for the people who keep IT running.';
+export const portfolioUrl='https://hxali.co.uk/';
+export const pdfCredit='© 2026 DecomPro · Developed by Muhammad Ali & Jawad Ahmed · Designed for the people who keep IT running.';
+export const creditHtml=`© 2026 DecomPro · Developed by <a href="${portfolioUrl}" target="_blank" rel="noopener noreferrer">Muhammad Ali</a> & Jawad Ahmed · Designed for the people who keep IT running.`;
 
 export function readPdfLogo(){
  try{const value=localStorage.getItem(key);return /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(value||'')&&value.length<900000?value:null;}catch{return null;}
@@ -44,4 +46,6 @@ export function drawPdfFooter(pdf,left,right,reference,pageLabel){
  pdf.text(reference,left,284);pdf.text(pageLabel,right,284,{align:'right'});
  const lines=pdf.splitTextToSize(pdfCredit,right-left);
  pdf.setFontSize(6.4);pdf.text(lines,left,290);
+ const beforeName='© 2026 DecomPro · Developed by ';
+ if(lines[0]?.includes(beforeName+'Muhammad Ali'))pdf.link(left+pdf.getTextWidth(beforeName),286.5,pdf.getTextWidth('Muhammad Ali'),5,{url:portfolioUrl});
 }
