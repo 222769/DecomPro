@@ -297,6 +297,7 @@ main.workspace-lock { margin:0 auto; max-width:640px; min-height:100vh; display:
 .connection-status.compact-connection.connected .connection-chip { box-shadow:0 0 0 1px #39b78b20,0 0 18px #39b78b1c; }
 .dashboard-trolley-details { border-top:1px solid var(--border); margin-top:18px; padding-top:16px; }.dashboard-trolley-details>summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); }.dashboard-trolley-details>summary span { float:right; font-weight:400; }
 .collection-preparation { margin:0 0 26px; padding:30px; border-color:#cbd9ee; background:linear-gradient(125deg,#eef5ff,#fff 56%,#f2fbf8); scroll-margin-top:24px; }
+#inventory + #collection-preparation-station { margin-top:24px; }
 .preparation-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .preparation-heading h2 { font-size:clamp(24px,2vw,32px); margin:9px 0; }
 .preparation-heading p { font-size:13px; margin:0; }
@@ -338,6 +339,7 @@ main:not([data-view="overview"]) #collection-preparation-overview,main:not([data
 main:not([data-view="station"]) .station-next { display:none; }
 @media(max-width:1200px){.preparation-steps{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:700px){.collection-preparation{padding:20px;margin-bottom:18px}.preparation-heading{display:block}.preparation-progress{display:inline-block;margin-top:14px}.preparation-picker>div{flex-direction:column}.preparation-picker button,.preparation-actions>*{width:100%;justify-content:center}.preparation-steps{grid-template-columns:1fr;gap:8px}.preparation-steps li{padding:13px}.preparation-trolley{flex-wrap:wrap}.preparation-trolley .secondary{width:100%}.register-next{display:grid;padding:16px}.register-next .primary{width:100%}.station-next{display:none}}
+@media(max-width:700px){#inventory + #collection-preparation-station{margin-top:18px}}
 .settings-tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0; }.settings-tool-grid button { text-align:left; display:flex; align-items:center; gap:8px; font-size:11px; }.settings-tool-grid svg { width:17px; height:17px; }
 html[data-theme="dark"] .compact-connection .connection-chip { background:#162238; color:#bdcbe0; border-color:#2c3c55; }
 @media(max-width:700px) { .workspace-toolbar { gap:10px; margin-bottom:20px; }.workspace-toolbar-actions { gap:8px; }.workspace-toolbar-actions .text-button { font-size:11px; }.settings-tool-grid { grid-template-columns:1fr; } }

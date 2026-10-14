@@ -51,6 +51,16 @@ test('phone preparation stays inside the viewport',async({page})=>{
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
+test('register and preparation cards have breathing room on phone and desktop',async({page})=>{
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:900});
+  await page.goto('/?workspace=demo#station');
+  const register=await page.locator('#inventory').boundingBox();
+  const preparation=await page.locator('#collection-preparation-station').boundingBox();
+  expect(preparation.y-(register.y+register.height)).toBeGreaterThanOrEqual(width<=700?17:23);
+ }
+});
+
 test('switching the preparation collection updates its trolley counts',async({page})=>{
  await page.setViewportSize({width:1440,height:900});
  await page.goto('/?workspace=demo#overview');
