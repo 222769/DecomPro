@@ -99,6 +99,9 @@ test('mobile bottom dock stays available while scrolling and navigating, then yi
  await expect(page.locator('aside')).toBeHidden();
  await expect(page.locator('#scroll-dock')).toBeVisible();
  await expect(page.locator('#scroll-dock a[href="#inventory"]')).toHaveAttribute('aria-current','page');
+ const dockStyle=await page.locator('#scroll-dock').evaluate(element=>{const style=getComputedStyle(element);return {background:style.backgroundColor,blur:style.backdropFilter};});
+ expect(Number(dockStyle.background.match(/, (0?\.\d+)\)$/)?.[1])).toBeLessThan(0.85);
+ expect(dockStyle.blur).toContain('blur(22px)');
  const dockBounds=await page.locator('#scroll-dock').boundingBox();
  expect(dockBounds.y).toBeGreaterThan(740);
  expect(dockBounds.y+dockBounds.height).toBeLessThan(874);
