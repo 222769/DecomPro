@@ -36,7 +36,7 @@ test('inactivity locks at the configured threshold while scanner activity extend
 
 test('compact overview and Settings control layout, inactivity and trusted-device persistence',async({page})=>{
  await mockTeam(page);await page.goto('/');await signin(page);
- await page.locator('a[href="#overview"]').click();await expect(page.locator('#station')).toBeHidden();
+ await page.locator('aside a[href="#overview"]').click();await expect(page.locator('#station')).toBeHidden();
  await expect(page.locator('#collections')).toBeHidden();await expect(page.locator('#session-summary')).toBeHidden();await expect(page.locator('.dashboard-trolley-details')).not.toHaveAttribute('open','');
  expect(await page.locator('#connection-status').evaluate(node=>node.getBoundingClientRect().height)).toBeLessThan(60);
  await page.getByRole('button',{name:'Open settings',exact:true}).click();await page.getByLabel('Lock after inactivity').selectOption('15');await page.getByRole('checkbox',{name:'Remember me on this trusted device',exact:true}).check();await page.getByRole('checkbox',{name:'Show daily progress on the overview',exact:true}).check();await page.getByRole('checkbox',{name:'Show collection management on the overview',exact:true}).check();await page.getByRole('button',{name:'Save settings',exact:true}).click();

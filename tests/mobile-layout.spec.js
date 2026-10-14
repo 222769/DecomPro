@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {openMobileMore,openMobileSection} from './helpers/mobile-nav.js';
 
 for(const width of [320,375,402,430]) {
  test(`phone navigation and register fit a ${width}px viewport`,async({page})=>{
@@ -9,16 +10,16 @@ for(const width of [320,375,402,430]) {
   await expect(page.locator('#mobile-nav-toggle')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   await page.locator('#scan').fill('MOBILE-UNSAVED');
-  await page.locator('#mobile-nav-toggle').click();
+  await openMobileMore(page);
   await expect(page.locator('#mobile-nav-toggle')).toHaveAttribute('aria-expanded','true');
   await page.locator('#manage-trolleys').click();
   await expect(page.locator('#trolley-manager')).toBeVisible();
   expect(await page.locator('#trolley-manager').evaluate(el=>el.getBoundingClientRect().width)).toBeLessThanOrEqual(width-20);
   await page.locator('#trolley-manager').press('Escape');
-  await page.locator('.app-nav > a[href="#inventory"]').click();
+  await openMobileSection(page,'#inventory');
   await expect(page.locator('#inventory')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-  await page.locator('.app-nav > a[href="#station"]').click();
+  await openMobileSection(page,'#station');
   await expect(page.locator('#scan')).toHaveValue('MOBILE-UNSAVED');
  });
 }
@@ -63,7 +64,7 @@ test('connected database indicator glows without an outer green panel in dark mo
  expect(shadow).toContain('rgba(78, 228, 187');
 });
 
-test('mobile header yields to a bottom dock that minimizes after scrolling stops',async({page})=>{
+test('mobile bottom dock stays available while scrolling and navigating, then yields at the page top',async({page})=>{
  await page.setViewportSize({width:402,height:874});
  await page.goto('/?workspace=demo#inventory');
  await page.locator('#inventory').waitFor();
@@ -86,7 +87,20 @@ test('mobile header yields to a bottom dock that minimizes after scrolling stops
  await page.waitForTimeout(1400);
  await expect(page.locator('aside')).toBeHidden();
  await expect(page.locator('#scroll-dock')).toBeVisible();
+ await expect(page.locator('body')).toHaveClass(/nav-dock-minimized/,{timeout:5000});
+ await page.locator('#scroll-dock-more').click();
+ await page.locator('#scroll-dock a[href="#overview"]').click();
+ await expect(page.locator('main')).toHaveAttribute('data-view','overview');
+ await expect(page.locator('aside')).toBeHidden();
+ await page.locator('#scroll-dock a[href="#inventory"]').click();
+ await expect(page.locator('main')).toHaveAttribute('data-view','inventory');
+ await expect(page.locator('aside')).toBeHidden();
+ await expect(page.locator('body')).toHaveClass(/nav-dock-minimized/,{timeout:5000});
  await page.mouse.wheel(0,-180);
+ await expect(page.locator('body')).toHaveClass(/nav-condensed/);
+ await expect(page.locator('body')).toHaveClass(/nav-dock-minimized/);
+ await expect(page.locator('#scroll-dock')).toBeVisible();
+ await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
  await expect(page.locator('body')).not.toHaveClass(/nav-condensed/);
  await expect(page.locator('aside')).toBeVisible();
  await page.mouse.wheel(0,300);

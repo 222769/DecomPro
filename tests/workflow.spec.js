@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { headers } from '../src/data.js';
 import {createTrolley} from '../src/trolleys.js';
 import {readFile} from 'node:fs/promises';
+import {openMobileMore} from './helpers/mobile-nav.js';
 async function approveImport(page) {await expect(page.getByRole('heading',{name:'Spreadsheet import preview'})).toBeVisible();await page.getByRole('button',{name:'Import selected references'}).click();}
 async function readyTrolley(page,card=page) {
  await card.getByRole('button',{name:'Readiness checks',exact:true}).click();
@@ -550,24 +551,24 @@ test('readiness reviews missing details and guesses, requires duplicate fixes, p
   state.items.push({...original,id:crypto.randomUUID(),trolleyId:other.id,trolley:other.name,serial:'OTHER-READINESS',model:'Other model',manufacturer:'Dell'});
   Object.assign(original,{serial:'N/A',model:'N/A',manufacturer:'N/A',recognitionNeedsReview:true,recognitionConfirmed:false});
   localStorage.setItem('decompro.v1',JSON.stringify(state));
- });await page.reload();await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Trolleys',exact:true}).click();
+ });await page.reload();await openMobileMore(page);await page.getByRole('button',{name:'Trolleys',exact:true}).click();
  const card=page.locator('.trolley-card').filter({hasText:'Trolley 01'});await card.getByRole('button',{name:'Readiness checks',exact:true}).click();
  await expect(page.locator('.readiness-summary')).toContainText('5 unresolved issues');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();await expect(page.locator('.readiness-card')).toContainText('Other cage');
  await page.getByLabel('Why is the serial number unavailable?').fill('Serial label worn off; checked the base');await page.getByLabel('Why is model unavailable?').fill('Model label missing');await page.getByLabel('Why is manufacturer unavailable?').fill('Unbranded housing');
  await page.getByLabel('I checked the model and manufacturer against this equipment.').check();await page.getByRole('button',{name:'Save review notes'}).click();
  await expect(page.locator('.readiness-summary')).toContainText('1 unresolved issue');await expect(page.getByRole('button',{name:'Mark ready for collection'})).toBeDisabled();
  await page.getByRole('button',{name:'Edit equipment record'}).click();await page.getByLabel('Asset number',{exact:true}).fill('A0007');await page.getByRole('button',{name:'Save changes'}).click();
- await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await readyTrolley(page,card);
+ await openMobileMore(page);await page.getByRole('button',{name:'Trolleys',exact:true}).click();await readyTrolley(page,card);
  await expect(card).toContainText('Ready for collection');
  let state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.draft.serial).toBe('KEEP-READINESS-DRAFT');expect(state.items[0].readinessNotes.model).toBe('Model label missing');expect(state.trolleys[0].readyBy).toBe('JA');
  const download=page.waitForEvent('download');await card.getByRole('button',{name:'PDF manifest'}).click();const pdf=(await readFile(await (await download).path())).toString('latin1');for(const value of ['READY FOR COLLECTION','Recorded exceptions','Model label missing','Unbranded housing','Readiness checked:'])expect(pdf).toContain(value);
  await page.getByRole('button',{name:'Close',exact:true}).click();
  const backupDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Backup',exact:true}).click();const backupPath=await (await backupDownload).path();
- await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await card.getByRole('button',{name:'Reopen trolley'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
+ await openMobileMore(page);await page.getByRole('button',{name:'Trolleys',exact:true}).click();await card.getByRole('button',{name:'Reopen trolley'}).click();await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.locator('#backup-file').setInputFiles(backupPath);await page.getByRole('button',{name:'Replace workspace & restore'}).click();
  const restored=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(restored.trolleys[0].status).toBe('ready');expect(restored.items[0].recognitionConfirmed).toBe(true);expect(restored.items[0].readinessNotes.serial).toContain('Serial label worn off');
  await page.getByRole('link',{name:'Scan station'}).click();await scan(page,'Draft model');for(let i=0;i<3;i++)await page.getByRole('button',{name:'Skip · N/A'}).click();await page.getByRole('button',{name:'Save item & start next'}).click();await expect(page.locator('#save-feedback')).toContainText('ready or collected');
- await page.reload();await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Trolleys',exact:true}).click();await expect(card).toContainText('Ready for collection');await card.getByRole('button',{name:'Reopen trolley'}).click();await expect(card).toContainText('Open');
+ await page.reload();await openMobileMore(page);await page.getByRole('button',{name:'Trolleys',exact:true}).click();await expect(card).toContainText('Ready for collection');await card.getByRole('button',{name:'Reopen trolley'}).click();await expect(card).toContainText('Open');
  state=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(state.trolleys[0].readyAt).toBe('');expect(state.draft.serial).toBe('KEEP-READINESS-DRAFT');
 });
 
@@ -700,8 +701,8 @@ test('admin section creates personal accounts, edits access, generates private l
  export async function connectFirebase(){window.adminCalls=[];window.adminUsers=[{uid:'owner',displayName:'Administrator',email:'admin@example.invalid',code:'AD',role:'admin',active:true},{uid:'jawad',displayName:'Jawad',email:'jawad@example.invalid',code:'JA',role:'technician',active:true}];window.adminRevision=0;return {profile:{name:'Administrator',code:'AD'},role:'admin',email:'admin@example.invalid',teamId:'college-it',stop(){},listen(){},async load(){return {items:[],trolleys:[],examples:[],corrections:[]};},async adminAction(data){window.adminCalls.push(data);if(data.action==='list'){if(window.adminUnavailable){const error=Error('Function unavailable');error.code='functions/unavailable';throw error;}return {users:structuredClone(window.adminUsers),revision:window.adminRevision};}if(data.revision!==window.adminRevision)throw Error('Another administrator changed the accounts. Refresh users.');window.adminRevision++;if(data.action==='create'){window.adminUsers.push({...data,uid:'new-user'});return {uid:'new-user',message:'Account created.',setupLink:'https://example.invalid/private-setup-token'};}if(data.action==='update'){const user=window.adminUsers.find(user=>user.uid===data.uid);Object.assign(user,data);return {message:'Team access updated.'};}return {message:'Password reset link ready.',setupLink:'https://example.invalid/private-reset-token'};}};}
  `}));
  await page.goto('/');await expect(page.getByRole('button',{name:'Administration',exact:true})).toHaveCount(0);
- await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
- await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-users')).toContainText('Jawad');
+ await openMobileMore(page);await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('admin@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#profile')).toBeDisabled();
+ await openMobileMore(page);await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-users')).toContainText('Jawad');
  await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Technician name',{exact:true}).fill('New technician');await page.getByLabel('Account email',{exact:true}).fill('new@example.invalid');await page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true}).fill('NT');await page.getByRole('button',{name:'Create user account',exact:true}).click();
  await expect(page.getByLabel('Setup or reset link')).toHaveValue('https://example.invalid/private-setup-token');await expect(page.locator('#admin-users')).toContainText('new@example.invalid');
  await page.getByRole('button',{name:'Edit Jawad',exact:true}).click();await expect(page.locator('#admin-dialog').getByLabel('Disposal initials',{exact:true})).toHaveAttribute('readonly','');await page.getByLabel('Active team access',{exact:true}).uncheck();page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Save user changes',exact:true}).click();
@@ -709,7 +710,7 @@ test('admin section creates personal accounts, edits access, generates private l
  await page.locator('.admin-user').filter({hasText:'Jawad'}).getByRole('button',{name:'Password reset link',exact:true}).click();await expect(page.getByLabel('Setup or reset link')).toHaveValue('https://example.invalid/private-reset-token');
  expect(await page.evaluate(()=>Object.keys(localStorage).map(key=>localStorage.getItem(key)).join('').includes('private-reset-token'))).toBe(false);
  await page.locator('#admin-close').click();await expect(page.locator('#admin-dialog')).toBeEmpty();
- await page.evaluate(()=>window.adminUnavailable=true);await page.locator('#mobile-nav-toggle').click();await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-status')).toContainText('administration service is unavailable');
+ await page.evaluate(()=>window.adminUnavailable=true);await openMobileMore(page);await page.getByRole('button',{name:'Administration',exact:true}).click();await expect(page.locator('#admin-status')).toContainText('administration service is unavailable');
 });
 
 test('admin errors retain account form details for correction',async({page})=>{

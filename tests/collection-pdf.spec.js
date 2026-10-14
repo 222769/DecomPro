@@ -9,7 +9,7 @@ test('collection PDF includes every item detail in the trolley scope and the req
  items.push({...items[0],id:'other-item',serial:'OTHER-SERIAL',trolley:second.name,trolleyId:second.id});
  const state={captureOrder:'serial-first',activeTrolleyId:first.id,trolleys:[first,second],profiles:[{name:'Jawad',code:'JA'}],active:'JA',defaults:{date:'2026-10-13',description:'',manufacturer:'',source:'Storage',reason:'EOL',trolley:first.name},items,draft:{},step:0,voice:false,settings:defaultSettings,referenceExamples:[],referenceCorrections:[]};
  await page.addInitScript(data=>localStorage.setItem('decompro.v1',JSON.stringify(data)),state);
- await page.goto('/');await page.locator('a[href="#inventory"]').click();
+ await page.goto('/');await page.locator('aside a[href="#inventory"]').click();
  await page.locator('#trolley-register-filter').selectOption(first.id);
  await page.getByLabel('Search collection register').fill('no matching result');
  const download=page.waitForEvent('download');await page.locator('#export-pdf').click();const file=await download;
