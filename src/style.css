@@ -271,6 +271,12 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .dashboard-metrics>div { display:flex; flex-direction:column; align-items:flex-start; gap:10px; border:1px solid var(--border); border-radius:14px; padding:18px; background:#fff; }
 .dashboard-metrics svg { color:#6383e7; }.dashboard-metrics strong { font-size:27px; color:#355ac2; }.dashboard-metrics span { color:var(--muted); font-size:12px; }
 .dashboard-progress { margin:24px 0 16px; }.dashboard-progress>div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:13px; margin-bottom:12px; }.dashboard-progress span { color:var(--muted); }
+.dashboard-sustainability-toggle { display:flex; align-items:center; gap:12px; margin:20px 0 0; cursor:pointer; }
+.dashboard-sustainability-toggle input { appearance:none; flex:0 0 43px; width:43px; height:25px; padding:0; border:1px solid #a4b4c4; border-radius:999px; background:#c8d3df; position:relative; cursor:pointer; }
+.dashboard-sustainability-toggle input::after { content:''; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%; background:#fff; box-shadow:0 1px 4px #152c3b40; transition:transform .18s ease; }
+.dashboard-sustainability-toggle input:checked { background:#288c6c; border-color:#288c6c; }.dashboard-sustainability-toggle input:checked::after { transform:translateX(18px); }
+.dashboard-sustainability-toggle span { display:grid; gap:3px; min-width:0; }.dashboard-sustainability-toggle strong { font-size:12px; }.dashboard-sustainability-toggle small { color:var(--muted); font-size:11px; line-height:1.4; }
+#dashboard-sustainability-error:empty { display:none; }
 .sustainability-summary { margin:22px 0; padding:20px; border:1px solid #b6ddcf; border-radius:17px; background:linear-gradient(125deg,#f0faf4,#f8fcff); }
 .sustainability-summary .eyebrow { color:#328168; }.sustainability-summary h3 { margin:7px 0 16px; font-size:18px; }
 .sustainability-figures { display:flex; flex-wrap:wrap; gap:12px; }.sustainability-figures>div { display:grid; gap:3px; min-width:125px; }.sustainability-figures strong { color:#176b52; font-size:21px; }.sustainability-figures span { color:var(--muted); font-size:11px; }

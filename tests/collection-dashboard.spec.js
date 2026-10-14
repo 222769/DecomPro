@@ -45,3 +45,16 @@ test('phone dark dashboard has readable filters and no page overflow',async({pag
  await page.getByLabel('Trolleys to show',{exact:true}).selectOption('ready');await expect(page.locator('.dashboard-trolley')).toHaveCount(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('dashboard sustainability switch persists and hides the panel without changing inventory',async({page})=>{
+ await seed(page);
+ const dashboard=page.getByRole('region',{name:'Collection dashboard',exact:true}),toggle=dashboard.getByRole('checkbox',{name:/Sustainability summary/});
+ await expect(toggle).toBeChecked();
+ await toggle.uncheck();
+ await expect(dashboard.getByRole('region',{name:'Sustainability summary'})).toHaveCount(0);
+ await page.reload();
+ await expect(dashboard.getByRole('checkbox',{name:/Sustainability summary/})).not.toBeChecked();
+ await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','1','1','1']);
+ await dashboard.getByRole('checkbox',{name:/Sustainability summary/}).check();
+ await expect(dashboard.getByRole('region',{name:'Sustainability summary'})).toBeVisible();
+});

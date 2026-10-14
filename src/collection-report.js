@@ -5,7 +5,7 @@ import {drawPdfFooter,drawPdfLogo} from './pdf-brand.js';
 import {sustainabilitySummary} from './sustainability.js';
 
 const clean=value=>String(value??'').replace(/\s+/g,' ').trim();
-export async function collectionReportPdf({title,reference,items,trolleys,baseUrl,cached=false,printedAt=new Date().toISOString()}){
+export async function collectionReportPdf({title,reference,items,trolleys,baseUrl,cached=false,includeSustainability=true,printedAt=new Date().toISOString()}){
  if(!items.length)throw Error('Save equipment before creating a collection PDF.');
  const selected=trolleys.filter(trolley=>items.some(item=>trolleyForItem(item,trolley)));
  const covered=new Set(selected.flatMap(trolley=>items.filter(item=>trolleyForItem(item,trolley)).map(item=>item.id)));
@@ -38,6 +38,7 @@ export async function collectionReportPdf({title,reference,items,trolleys,baseUr
  pdf.text(pdf.splitTextToSize('Every saved equipment description, serial, model, manufacturer, asset number, barcode, security etch, disposal date, source, disposal reason, technician and trolley, followed by recorded exceptions and a handover sign-off.',177),left,y);
  if(cached){pdf.setFont('helvetica','bold');pdf.setTextColor(158,88,29);pdf.text('CACHED SNAPSHOT - reconnect to confirm the latest team inventory.',left,273);}
  coverPages.push(pdf.getNumberOfPages());
+ if(includeSustainability){
  const impact=sustainabilitySummary(items,selected);
  pdf.addPage();
  pdf.setFillColor(17,49,48);pdf.rect(0,0,210,62,'F');pdf.setFillColor(65,190,147);pdf.rect(0,0,5,62,'F');
@@ -56,6 +57,7 @@ export async function collectionReportPdf({title,reference,items,trolleys,baseUr
  pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(63,86,78);
  pdf.text(pdf.splitTextToSize('This report confirms inventory and recorded pickup only. Reuse, recycling, weight and CO2 savings cannot be claimed until the processor supplies a treatment report or certificate and a documented calculation method.',168),left+5,impactY+7);
  coverPages.push(pdf.getNumberOfPages());
+ }
  for(const trolley of selected){const url=new URL(baseUrl);url.hash=`trolley/${trolley.id}`;await trolleyManifest(trolley,items,url.href,{document:pdf,cached,printedAt});}
  const total=pdf.getNumberOfPages();
  for(const page of coverPages){pdf.setPage(page);drawPdfFooter(pdf,left,right,clean(reference),`Overview page ${coverPages.indexOf(page)+1} / ${coverPages.length}  |  ${total} pages`);}

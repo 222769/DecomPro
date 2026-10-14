@@ -18,6 +18,12 @@ test('collection PDF includes every item detail in the trolley scope and the req
  for(const detail of ['PDF-SERIAL-1','PDF-SERIAL-2','PDF-SERIAL-3','PDF-BARCODE-2','PDF-ETCH-2','A1232','ThinkPad T14','Storage','EOL','Environmental record','Carbon impact: awaiting verified evidence','Developed by Muhammad Ali & Jawad Ahmed','Designed for the people who keep IT running.','https://hxali.co.uk/'])expect(pdf).toContain(detail);
  expect(pdf).not.toContain('OTHER-SERIAL');
  expect((pdf.match(/\/Type \/Page\b/g)||[]).length).toBeLessThanOrEqual(4);
+ await page.locator('aside a[href="#overview"]').click();
+ await page.locator('#dashboard-sustainability-toggle').uncheck();
+ await page.locator('aside a[href="#inventory"]').click();
+ const secondDownload=page.waitForEvent('download');await page.locator('#export-pdf').click();const withoutSummary=(await readFile(await (await secondDownload).path())).toString('latin1');
+ expect(withoutSummary).not.toContain('Environmental record');
+ expect(withoutSummary).toContain('PDF-SERIAL-1');
 });
 
 test('PDF logo can be uploaded in Settings and survives reload',async({page})=>{
