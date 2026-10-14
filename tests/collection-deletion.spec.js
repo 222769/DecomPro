@@ -24,12 +24,14 @@ async function shared(page,role='admin'){
 }
 
 test('shared administrator retries failed deletion with the captured revision and equipment retained',async({page})=>{
- const fixture=await shared(page);await card(page).getByRole('button',{name:'Delete collection',exact:true}).click();await confirm(page);await page.evaluate(()=>window.failDelete=true);await page.locator('#confirm-delete-collection').click();await expect(page.locator('#delete-collection-error')).toContainText('Permission denied');await expect(card(page)).toBeVisible();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items)).toEqual(fixture.items);
+ const fixture=await shared(page);await card(page).getByRole('button',{name:'Manage collection trolleys'}).click();await page.locator('#collection-manage-delete').click();await confirm(page);await page.evaluate(()=>window.failDelete=true);await page.locator('#confirm-delete-collection').click();await expect(page.locator('#delete-collection-error')).toContainText('Permission denied');await expect(card(page)).toBeVisible();expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).items)).toEqual(fixture.items);
  await page.evaluate(()=>window.failDelete=false);await page.locator('#confirm-delete-collection').click();await expect(card(page)).toHaveCount(0);expect(await page.evaluate(()=>window.deleteVersion)).toBe(3);expect(await page.evaluate(()=>window.deleteCalls)).toBe(2);
 });
 
 test('ordinary shared technicians have no collection deletion control',async({page})=>{
  await shared(page,'technician');await expect(card(page)).toBeVisible();await expect(page.locator('[data-delete-collection]')).toHaveCount(0);
+ await card(page).getByRole('button',{name:'Manage collection trolleys'}).click();
+ await expect(page.locator('#collection-manage-delete')).toHaveCount(0);
 });
 
 test('refresh reconciles a collection deleted by another device without leaving an invalid saved workspace',async({page})=>{

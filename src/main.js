@@ -690,6 +690,10 @@ async function editCollection(id='') {
   await openSessionEditor({dialog:document.querySelector('#collection-session-dialog'),id,current,
    load:async()=>{if(!client)return state;const [records,groups]=await Promise.all([client.load(),client.loadCollections()]);return {...state,...records,...groups};},
    version:sessionId=>client?.sessionVersionFor(sessionId)||0,
+   canDelete:!sharedLocked||client?.role==='admin',
+   viewInventory:sessionId=>{collectionViewId=sessionId;trolleyViewId='';search='';missingDetailsOnly=false;selectedEquipment.clear();location.hash='inventory';updateRegister();document.querySelector('#inventory').scrollIntoView({behavior:'smooth'});},
+   reviewReadiness:sessionId=>{collectionReviewTrolley=state.collectionTrolleys.find(row=>row.sessionId===sessionId)?.trolleyId||'all';collectionReviewKind='all';location.hash='collection-review';updateCollectionReview();document.querySelector('#collection-review').scrollIntoView({behavior:'smooth'});},
+   remove:sessionId=>deleteCollection(sessionId),
    save:async(session,trolleyIds,version)=>{
     if(!current())throw Error('Workspace changed. Reopen this collection.');
     const records=client?await client.writeSession(session,trolleyIds,version):assignCollection(state.collectionSessions,state.collectionTrolleys,session,trolleyIds,state.trolleys);

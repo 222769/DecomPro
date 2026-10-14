@@ -18,7 +18,7 @@ test('desktop preparation takes a new collection from naming to trolley assignme
  await expect(stationGuide).toContainText('Step 2 of 4');
  await expect(stationGuide.getByLabel('Collection to prepare')).toHaveValue(/.+/);
  await stationGuide.getByRole('button',{name:'Assign trolleys'}).click();
- await expect(page.getByRole('heading',{name:'Manage collection trolleys'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Manage collection',exact:true})).toBeVisible();
 });
 
 test('desktop register leads to the guided physical check without changing trolley status',async({page})=>{

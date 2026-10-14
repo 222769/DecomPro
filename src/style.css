@@ -237,6 +237,12 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 .collection-active-actions { display:flex;flex-wrap:wrap;gap:10px; }
 .collection-error { color:#ad4848;overflow-wrap:anywhere; }
 #collection-session-dialog { width:min(650px,calc(100vw - 32px));max-width:650px;max-height:85vh;overflow:auto; }
+.collection-management{margin:18px 0;padding:16px;border:1px solid var(--border);border-radius:13px;background:#f6f9ff;}
+.collection-management>strong{font-size:13px}.collection-management p{margin:6px 0 14px;font-size:11px}
+.collection-management-actions{display:flex;flex-wrap:wrap;gap:8px}.collection-management-actions button{min-height:42px;text-align:center}
+#collection-manage-delete{margin-left:auto;color:#a63b45;border-color:#e6c3c7;background:#fff5f5}
+#collection-session-dialog .dialog-actions{position:sticky;bottom:-30px;z-index:1;padding:14px 0 8px;border-top:1px solid var(--border);background:#fff}
+@media(max-width:700px){#collection-session-dialog{padding:20px}.collection-management-actions{display:grid;grid-template-columns:1fr}.collection-management-actions button{width:100%}#collection-session-dialog .dialog-actions{bottom:-20px;padding:12px 0 6px}#collection-session-dialog .dialog-actions button{flex:1}}
 .collection-trolley-options { display:grid;gap:10px;margin-top:16px; }
 .collection-trolley-option { display:flex;gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;align-items:flex-start; }
 .collection-trolley-option input { width:18px;height:18px;flex:none;margin:2px 0;accent-color:#365fed; }
