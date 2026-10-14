@@ -18,8 +18,11 @@ test('dashboard separates unresolved records, physical checks, pickup and collec
  await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['4','5','1','1','1']);
  await expect(dashboard.locator('.dashboard-badge')).toHaveText(['Empty trolley','Needs review','Awaiting physical check','Ready for pickup','Collected']);
  await expect(dashboard).toContainText('1 of 4 items collected');
+ await expect(dashboard.getByRole('region',{name:'Sustainability summary'})).toContainText('Reuse, recycling and carbon savings need a processor report or certificate');
+ await expect(dashboard.locator('.sustainability-figures strong')).toHaveText(['4','1','Pending']);
  await page.getByLabel('Collection overview',{exact:true}).selectOption(autumn.id);
  await expect(dashboard.locator('.dashboard-metrics strong')).toHaveText(['2','2','0','1','1']);
+ await expect(dashboard.locator('.sustainability-figures strong')).toHaveText(['2','1','Pending']);
  await page.getByLabel('Trolleys to show',{exact:true}).selectOption('review');await expect(dashboard).toContainText('No trolleys match this status');
  await page.getByLabel('Collection overview',{exact:true}).selectOption(summer.id);await expect(dashboard.locator('.dashboard-trolley')).toHaveCount(1);
  await dashboard.getByRole('button',{name:'View inventory',exact:true}).click();await expect(page.locator('#inventory tbody')).toContainText('DASH-0');await expect(page.locator('#inventory tbody tr')).toHaveCount(1);

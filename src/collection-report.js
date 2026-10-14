@@ -2,6 +2,7 @@ import {jsPDF} from 'jspdf';
 import {trolleyForItem} from './trolleys.js';
 import {trolleyManifest} from './trolley-manifest.js';
 import {drawPdfFooter,drawPdfLogo} from './pdf-brand.js';
+import {sustainabilitySummary} from './sustainability.js';
 
 const clean=value=>String(value??'').replace(/\s+/g,' ').trim();
 export async function collectionReportPdf({title,reference,items,trolleys,baseUrl,cached=false,printedAt=new Date().toISOString()}){
@@ -36,6 +37,24 @@ export async function collectionReportPdf({title,reference,items,trolleys,baseUr
  pdf.setFont('helvetica','normal');pdf.setFontSize(8);pdf.setTextColor(74,92,120);
  pdf.text(pdf.splitTextToSize('Every saved equipment description, serial, model, manufacturer, asset number, barcode, security etch, disposal date, source, disposal reason, technician and trolley, followed by recorded exceptions and a handover sign-off.',177),left,y);
  if(cached){pdf.setFont('helvetica','bold');pdf.setTextColor(158,88,29);pdf.text('CACHED SNAPSHOT - reconnect to confirm the latest team inventory.',left,273);}
+ coverPages.push(pdf.getNumberOfPages());
+ const impact=sustainabilitySummary(items,selected);
+ pdf.addPage();
+ pdf.setFillColor(17,49,48);pdf.rect(0,0,210,62,'F');pdf.setFillColor(65,190,147);pdf.rect(0,0,5,62,'F');
+ pdf.setFont('helvetica','bold');pdf.setFontSize(8);pdf.setTextColor(153,231,202);pdf.text('SUSTAINABILITY  /  EVIDENCE FIRST',left,23);
+ pdf.setFontSize(21);pdf.setTextColor(255);pdf.text('Environmental record',left,40);
+ pdf.setFont('helvetica','normal');pdf.setFontSize(9);pdf.text('What this collection can currently demonstrate.',left,51);
+ pdf.setFillColor(233,248,241);pdf.roundedRect(left,75,178,35,3,3,'F');
+ pdf.setFont('helvetica','bold');pdf.setFontSize(18);pdf.setTextColor(25,111,80);pdf.text(String(impact.total),left+8,92);pdf.text(String(impact.collected),left+66,92);pdf.text(String(impact.pendingPickup),left+124,92);
+ pdf.setFontSize(7);pdf.setTextColor(55,105,86);pdf.text('ITEMS TRACKED',left+8,101);pdf.text('PICKUP CONFIRMED',left+66,101);pdf.text('AWAITING PICKUP',left+124,101);
+ let impactY=126;pdf.setFont('helvetica','bold');pdf.setFontSize(10);pdf.setTextColor(25,43,70);pdf.text('Equipment mix',left,impactY);impactY+=10;
+ pdf.setFont('helvetica','normal');pdf.setFontSize(8);
+ for(const row of impact.types.slice(0,8)){pdf.setDrawColor(225,237,231);pdf.line(left,impactY+3,right,impactY+3);pdf.setTextColor(35,59,65);pdf.text(pdf.splitTextToSize(clean(row.name),150)[0],left,impactY);pdf.text(String(row.count),right,impactY,{align:'right'});impactY+=10;}
+ if(impact.types.length>8){pdf.setTextColor(81,105,100);pdf.text(`${impact.types.length-8} additional equipment types in the item inventory`,left,impactY);impactY+=10;}
+ impactY=Math.max(impactY+12,239);
+ pdf.setFillColor(242,247,245);pdf.roundedRect(left,impactY-7,178,31,3,3,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.setTextColor(26,91,70);pdf.text('Carbon impact: awaiting verified evidence',left+5,impactY);
+ pdf.setFont('helvetica','normal');pdf.setFontSize(7.5);pdf.setTextColor(63,86,78);
+ pdf.text(pdf.splitTextToSize('This report confirms inventory and recorded pickup only. Reuse, recycling, weight and CO2 savings cannot be claimed until the processor supplies a treatment report or certificate and a documented calculation method.',168),left+5,impactY+7);
  coverPages.push(pdf.getNumberOfPages());
  for(const trolley of selected){const url=new URL(baseUrl);url.hash=`trolley/${trolley.id}`;await trolleyManifest(trolley,items,url.href,{document:pdf,cached,printedAt});}
  const total=pdf.getNumberOfPages();
