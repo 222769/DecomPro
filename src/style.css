@@ -388,6 +388,8 @@ html[data-theme="dark"] .pdf-logo-preview{background:#101c31;border-color:#46618
  .app-nav > .nav > span { display: none; }
  .app-nav > .nav.active, .app-nav > .nav.is-current { background: #2b4166; color: #fff; }
  .app-nav .mobile-more { display: flex; width: 100%; border: 0; background: transparent; color: #a8b7cf; }
+ .app-nav > #mobile-nav-toggle:is(.is-current,[aria-expanded="true"]) { background: #2b4166; color: #fff; }
+ aside.mobile-nav-open .app-nav > a.nav.active { background: transparent; color: #a8b7cf; box-shadow: none; }
  .mobile-nav-extra { display: none; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px 0 4px; border-top: 1px solid #33425e; }
  aside.mobile-nav-open .mobile-nav-extra { display: grid; }
  .mobile-nav-extra .nav { display: flex; align-items: center; gap: 11px; min-height: 46px; width: 100%; margin: 0; padding: 10px 12px; font-size: 12px; text-align: left; }

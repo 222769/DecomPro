@@ -27,14 +27,34 @@ for(const width of [320,375,402,430]) {
 test('More menu exposes secondary sections and closes after navigation',async({page})=>{
  await page.setViewportSize({width:402,height:874});
  await page.goto('/?workspace=demo#station');
+ await expect(page.locator('#mobile-nav-toggle')).toBeVisible();
+ const scan=page.locator('.app-nav > a[href="#station"]');
+ const more=page.locator('#mobile-nav-toggle');
+ const background=locator=>locator.evaluate(element=>getComputedStyle(element).backgroundImage);
+ const color=locator=>locator.evaluate(element=>getComputedStyle(element).backgroundColor);
+ await page.evaluate(()=>document.documentElement.dataset.theme='light');
+ await expect.poll(()=>color(scan)).toBe('rgb(43, 65, 102)');
+ await more.click();
+ await expect.poll(()=>color(more)).toBe('rgb(43, 65, 102)');
+ await expect.poll(()=>color(scan)).toBe('rgba(0, 0, 0, 0)');
+ await more.click();
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  await expect(page.locator('.mobile-nav-extra')).toBeHidden();
- await page.locator('#mobile-nav-toggle').click();
+ await expect.poll(()=>background(scan)).toContain('gradient');
+ await expect.poll(()=>background(more)).toBe('none');
+ await more.click();
+ await expect.poll(()=>background(more)).toContain('gradient');
+ await expect.poll(()=>background(scan)).toBe('none');
  await expect(page.locator('#manage-trolleys')).toBeVisible();
  await expect(page.locator('#settings')).toBeVisible();
+ await more.click();
+ await expect.poll(()=>background(scan)).toContain('gradient');
+ await expect.poll(()=>background(more)).toBe('none');
+ await more.click();
  await page.locator('aside a[href="#collection-history"]').click();
  await expect(page.locator('main')).toHaveAttribute('data-view','collection-history');
  await expect(page.locator('.mobile-nav-extra')).toBeHidden();
- await expect(page.locator('#mobile-nav-toggle')).toHaveAttribute('aria-expanded','false');
+ await expect(more).toHaveAttribute('aria-expanded','false');
 });
 
 test('iPhone-width collection cards keep actions aligned without overflow in dark mode',async({page})=>{
