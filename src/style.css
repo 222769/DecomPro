@@ -421,6 +421,8 @@ html[data-theme="dark"] .pdf-logo-preview{background:#101c31;border-color:#46618
  .scan-actions .secondary, .scan-actions .text-button { min-height: 44px; }
  .defaults { padding: 20px; }
  .defaults input, .defaults select, .defaults button { min-height: 44px; font-size: 16px; }
+ .defaults input[type="date"] { display: block; width: 100%; min-width: 0; max-width: 100%; -webkit-appearance: none; appearance: none; text-align: left; }
+ .defaults input[type="date"]::-webkit-date-and-time-value { min-height: 1.4em; text-align: left; }
  .collection-dashboard :is(.primary,.secondary), .collection-session-card button, .trolley-actions button { min-height: 44px; }
  .register { padding: 20px 16px; }
  .register .section-top { align-items: stretch; flex-wrap: wrap; }

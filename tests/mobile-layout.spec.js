@@ -8,6 +8,12 @@ for(const width of [320,375,402,430]) {
   await expect(page.locator('#station')).toBeVisible();
   await expect(page.locator('.app-nav > a[href="#station"]')).toBeVisible();
   await expect(page.locator('#mobile-nav-toggle')).toBeVisible();
+  const date=page.locator('#default-date');
+  const dateBounds=await date.evaluate(input=>{const field=input.getBoundingClientRect(),card=input.closest('.defaults').getBoundingClientRect(),next=document.querySelector('#default-description').getBoundingClientRect();return {fieldLeft:field.left,fieldRight:field.right,cardLeft:card.left,cardRight:card.right,nextRight:next.right,textAlign:getComputedStyle(input).textAlign};});
+  expect(dateBounds.fieldLeft).toBeGreaterThan(dateBounds.cardLeft);
+  expect(dateBounds.fieldRight).toBeLessThan(dateBounds.cardRight);
+  expect(Math.abs(dateBounds.fieldRight-dateBounds.nextRight)).toBeLessThan(1);
+  expect(dateBounds.textAlign).toBe('left');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   await page.locator('#scan').fill('MOBILE-UNSAVED');
   await openMobileMore(page);
