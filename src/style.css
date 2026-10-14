@@ -43,6 +43,10 @@ h2 { font-size: 21px; font-weight: 700; letter-spacing: -.6px; margin: 12px 0; }
 .profile select { font-size: 12px; padding: 8px 0; margin: 4px 0; border: none; font-weight: 650; }
 .profile .text-button { padding: 5px 0; color: var(--blue); font-size: 10px; }
 .profile .text-button svg { width: 13px; height: 13px; }
+.profile.shared-profile { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:5px; padding:14px 16px; }
+.shared-profile .profile-label { color:var(--muted); font-size:10px; font-weight:600; }
+.shared-profile strong { font-size:15px; line-height:1.35; overflow-wrap:anywhere; }
+.shared-profile .profile-email { color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
 .stats > div { display: flex; align-items: center; gap: 14px; padding: 19px; border: 1px solid var(--border); background: #fff; border-radius: 12px; box-shadow: 0 2px 4px #10233f02; min-width: 0; }
 .stat-icon { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; }

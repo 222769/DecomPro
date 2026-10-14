@@ -36,6 +36,9 @@ test('inactivity locks at the configured threshold while scanner activity extend
 
 test('compact overview and Settings control layout, inactivity and trusted-device persistence',async({page})=>{
  await mockTeam(page);await page.goto('/');await signin(page);
+ await expect(page.locator('#signed-in-technician')).toHaveText('Team Technician · TT');
+ await expect(page.locator('.shared-profile .profile-email')).toHaveText('tech@example.invalid');
+ await expect(page.locator('#profile,#add-profile')).toHaveCount(0);
  await page.locator('aside a[href="#overview"]').click();await expect(page.locator('#station')).toBeHidden();
  await expect(page.locator('#collections')).toBeHidden();await expect(page.locator('#session-summary')).toBeHidden();await expect(page.locator('.dashboard-trolley-details')).not.toHaveAttribute('open','');
  expect(await page.locator('#connection-status').evaluate(node=>node.getBoundingClientRect().height)).toBeLessThan(60);
@@ -105,7 +108,7 @@ for(const rejectSignout of [false,true])test(`timeout re-login waits for delayed
  await page.getByRole('button',{name:'Sign in to DecomPro',exact:true}).click();await expect(page.getByLabel('Team account email')).toHaveValue('tech@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only-password');await page.getByRole('button',{name:'Sign in & connect',exact:true}).click();await expect(page.getByRole('button',{name:'Finishing sign-out…',exact:true})).toBeDisabled();expect(await page.evaluate(()=>window.connectCalls)).toBe(1);
  await page.evaluate(()=>document.querySelector('#database-form').requestSubmit());expect(await page.evaluate(()=>window.connectCalls)).toBe(1);
  await page.evaluate(reject=>{window.rejectSignout=reject;window.finishSignout();},rejectSignout);
- await expect(page.locator('#connection-status')).toContainText('Database connected');await expect(page.locator('#scan')).toHaveValue('TIMEOUT-UNFINISHED');await expect(page.locator('#profile')).toHaveValue('JA');expect(await page.evaluate(()=>window.connectCalls)).toBe(2);expect(await page.evaluate(()=>localStorage.getItem('decompro.workspaceLocked'))).toBeNull();
+ await expect(page.locator('#connection-status')).toContainText('Database connected');await expect(page.locator('#scan')).toHaveValue('TIMEOUT-UNFINISHED');await expect(page.locator('#signed-in-technician')).toHaveText('Jawad test technician · JA');await expect(page.locator('#profile')).toHaveCount(0);expect(await page.evaluate(()=>window.connectCalls)).toBe(2);expect(await page.evaluate(()=>localStorage.getItem('decompro.workspaceLocked'))).toBeNull();
 });
 
 test('wrong password and membership errors after timeout remain distinct and allow retry without losing the scan',async({page})=>{
@@ -140,7 +143,7 @@ async function cachedAuthTeam(page){
 
 test('timeout login resets cached authentication directly and retains the shared register without a local-mode switch',async({page})=>{
  await page.clock.install();await cachedAuthTeam(page);const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));await signin(page);
- const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(after.items).toEqual(before.items);expect(after.trolleys).toEqual(before.trolleys);expect(await page.evaluate(()=>window.authResets)).toBe(1);await expect(page.locator('#scan')).toHaveValue('CACHED-SESSION-DRAFT');await expect(page.locator('#profile')).toHaveValue('JA');expect(await page.evaluate(()=>localStorage.getItem('decompro.mode'))).toBe('shared');
+ const after=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')));expect(after.items).toEqual(before.items);expect(after.trolleys).toEqual(before.trolleys);expect(await page.evaluate(()=>window.authResets)).toBe(1);await expect(page.locator('#scan')).toHaveValue('CACHED-SESSION-DRAFT');await expect(page.locator('#signed-in-technician')).toHaveText('Jawad test technician · JA');await expect(page.locator('#profile')).toHaveCount(0);expect(await page.evaluate(()=>localStorage.getItem('decompro.mode'))).toBe('shared');
 });
 
 test('the reported cached-credential error can recover through local mode while retaining the shared records',async({page})=>{
