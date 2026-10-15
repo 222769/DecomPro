@@ -33,7 +33,7 @@ export function equipmentDescriptionPlan(items,trolleys,facts=[]) {
   if(normalizeEquipmentDescription(item.description)===type){skipped.unchanged++;continue;}
   const matches=item.trolleyId?trolleys.filter(t=>t.id===item.trolleyId):trolleys.filter(t=>t.name===item.trolley);
   if(matches.length!==1||matches[0].status!=='open'){skipped.locked++;continue;}
-  changes.push({before:structuredClone(item),after:{...structuredClone(item),description:type},selected:/^monitor$/i.test(item.description.trim())});
+  changes.push({before:structuredClone(item),after:{...structuredClone(item),description:type},selected:/^monitor$/i.test(item.description.trim())||(type==='Projector'&&epsonProjectorModel(item.model,item.manufacturer)&&/^hard drive$/i.test(item.description.trim()))});
  }
  return {changes,skipped};
 }

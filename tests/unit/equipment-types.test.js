@@ -39,4 +39,7 @@ test('existing-record repair plans change only descriptions and preserve ambiguo
  for(const status of ['ready','collected'])assert.equal(equipmentDescriptionPlan([item],[{...trolley,status}]).changes.length,0);
  assert.equal(equipmentDescriptionPlan([{...item,trolleyId:undefined}],[trolley,{...trolley,id:'t2'}]).changes.length,0);
  assert.equal(equipmentDescriptionPlan([{...item,description:'Custom laptop kit'}],[trolley]).changes[0].selected,false);
+ const epson={...item,id:'epson',serial:'MRMF070041L',model:'EB-450Wi',manufacturer:'Epson',description:'Hard drive'};
+ assert.deepEqual(equipmentDescriptionPlan([epson],[trolley],facts).changes.map(row=>({description:row.after.description,selected:row.selected})),[{description:'Projector',selected:true}]);
+ assert.equal(equipmentDescriptionPlan([epson],[{...trolley,status:'collected'}],facts).skipped.locked,1);
 });

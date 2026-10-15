@@ -28,6 +28,7 @@ html[data-theme=dark] :is(.breadcrumb,.eyebrow,.stats .stat-content>span,.stats 
 html[data-theme=dark] :is(.session-summary summary,.settings-section h3,.history-card dd,.connection-status strong,.readiness-summary strong,.empty strong,.handover-selection legend){color:var(--ink)}
 html[data-theme=dark] :is(.session-metrics>div,.session-trolleys article,.readiness-card,.collection-review-item,.move-history-entry,.import-counts span,#admin-link,.empty-icon){background:var(--raised);border-color:var(--border)}
 html[data-theme=dark] :is(.review-trolley-card,.handover-history-card){background:linear-gradient(135deg,#1c2e4c,#141f32);border-color:#3a5075}
+html[data-theme=dark] .completed-collection-export{background:linear-gradient(125deg,#153d3b,#182d50);border-color:#397d78}
 html[data-theme=dark] .session-metrics strong{color:#a5bcff}
 html[data-theme=dark] .search-field{background:#0f1a2d;border-color:#3b4c68}
 html[data-theme=dark] .search-field input{background:transparent}

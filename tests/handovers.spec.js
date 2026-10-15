@@ -80,10 +80,10 @@ test('supplier Excel combines the saved handover only, ignores searches and pres
  await expect(page.locator('.handover-export-status')).toContainText('2 items from this handover');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('a completed named collection offers the college its full eleven-column Excel in collection history',async({page})=>{
- const {trolleys}=await seed(page),session=createCollection('College October');
+ await page.setViewportSize({width:390,height:844});const {trolleys}=await seed(page),session=createCollection('College October');
  await page.evaluate(({session,ids})=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.collectionSessions=[session];state.collectionTrolleys=ids.map(trolleyId=>({trolleyId,sessionId:session.id}));localStorage.setItem('decompro.v1',JSON.stringify(state));},{session,ids:trolleys.slice(0,2).map(t=>t.id)});
  await page.reload();await expect(page.locator('.completed-collection-export')).toHaveCount(0);await prepare(page,trolleys);await page.getByLabel('I checked the pack and these trolleys have been collected').check();await page.getByRole('button',{name:'Mark selected collected'}).click();
- const card=page.locator('.completed-collection-export').filter({hasText:'College October'});await expect(card).toBeVisible();await expect(card).toContainText('2 equipment items');
+ const card=page.locator('.completed-collection-export').filter({hasText:'College October'});await expect(card).toBeVisible();await expect(card).toContainText('2 equipment items');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  const pending=page.waitForEvent('download');await card.getByRole('button',{name:'Download collection Excel'}).click();const file=await pending,book=new ExcelJS.Workbook();await book.xlsx.readFile(await file.path());
  expect(file.suggestedFilename()).toContain('College October');expect(book.worksheets[0].rowCount).toBe(3);expect(book.worksheets[0].getRow(1).values.slice(1)).toEqual(headers);expect(book.worksheets[0].getCell('F2').value).toBe('HANDOVER-001');
 });
