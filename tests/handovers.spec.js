@@ -23,6 +23,26 @@ async function prepare(page,trolleys){
  for(const trolley of trolleys.slice(0,2))await page.locator(`[name=handover-trolley][value="${trolley.id}"]`).check();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download handover PDF',exact:true}).click();return await download;
 }
+test('handover dialog exports selected ready trolleys to college Excel before PDF or collection confirmation',async({page})=>{
+ await page.setViewportSize({width:390,height:844});const {trolleys}=await seed(page);
+ await page.locator('#manage-trolleys').waitFor({state:'attached'});if(!(await page.locator('#manage-trolleys').isVisible()))await page.locator('#mobile-nav-toggle').click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.locator('#prepare-handover').click();
+ await page.locator(`[name=handover-trolley][value="${trolleys[0].id}"]`).check();
+ const before=await page.evaluate(()=>localStorage.getItem('decompro.v1')),pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download equipment Excel'}).click();
+ const file=await pending,book=new ExcelJS.Workbook();await book.xlsx.readFile(await file.path());const sheet=book.worksheets[0];
+ expect(file.suggestedFilename()).toBe(`${handoverReference(trolleys[0].id)}-equipment.xlsx`);expect(sheet.getRow(1).values.slice(1)).toEqual(headers);expect(sheet.rowCount).toBe(2);expect(sheet.getCell('F2').value).toBe('HANDOVER-001');
+ await expect(page.locator('#handover-excel-status')).toContainText('1 item from 1 selected trolley');await expect(page.getByRole('button',{name:'Mark selected collected'})).toBeDisabled();expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByLabel('Collection company',{exact:true}).fill('Supplier');const pdf=page.waitForEvent('download');await page.getByRole('button',{name:'Download handover PDF'}).click();await pdf;await page.getByLabel('I checked the pack and these trolleys have been collected').check();const second=page.waitForEvent('download');await page.getByRole('button',{name:'Download equipment Excel'}).click();await second;await expect(page.getByRole('button',{name:'Mark selected collected'})).toBeEnabled();
+});
+test('handover Excel reads fresh shared equipment and reports server errors without downloading',async({page})=>{
+ const {state,trolleys}=await seed(page);
+ await page.evaluate(state=>{window.handoverExcelFixture={items:[...state.items,{...state.items[0],id:'new-from-team',serial:'TEAM-ADDED',asset:'A0099'}],trolleys:state.trolleys,examples:[],corrections:[]};},state);
+ await page.route('**/src/firebase-db*',route=>route.fulfill({contentType:'text/javascript',body:`export async function connectFirebase(){return {profile:{name:'Ali',code:'MA'},role:'technician',email:'ali@example.invalid',teamId:'college-it',stop(){},listen(a,b,c,d,phase){phase('connected')},async load(){if(window.failHandoverExcel)throw Error('Server unavailable');return structuredClone(window.handoverExcelFixture)}}}`}));
+ await page.getByRole('button',{name:'Shared database'}).click();await page.getByLabel('Team account email').fill('ali@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-password');await page.getByRole('button',{name:'Sign in & connect'}).click();
+ await page.getByRole('button',{name:'Trolleys',exact:true}).click();await page.locator('#prepare-handover').click();await page.locator(`[name=handover-trolley][value="${trolleys[0].id}"]`).check();
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'Download equipment Excel'}).click();const file=await pending,book=new ExcelJS.Workbook();await book.xlsx.readFile(await file.path());expect(book.worksheets[0].rowCount).toBe(3);expect(book.worksheets[0].getCell('F3').value).toBe('TEAM-ADDED');
+ await page.evaluate(()=>window.failHandoverExcel=true);const downloads=[];page.on('download',download=>downloads.push(download));await page.getByRole('button',{name:'Download equipment Excel'}).click();await expect(page.locator('#handover-error')).toContainText('Server unavailable');expect(downloads).toHaveLength(0);
+});
 test('handover PDF includes only selected ready inventories and exceptions; collection and backup retain the complete pack',async({page})=>{
  const {trolleys}=await seed(page),before=await page.evaluate(()=>localStorage.getItem('decompro.v1'));
  const file=await prepare(page,trolleys),reference=handoverReference(trolleys[0].id),pdf=(await readFile(await file.path())).toString('latin1');

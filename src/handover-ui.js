@@ -1,6 +1,6 @@
 import {createHandover,handoverLimit,handoverReference} from './handover-data.js';
 import {checkReadiness} from './readiness.js';
-import {validateTrolleys} from './trolleys.js';
+import {validateTrolleys,trolleyForItem} from './trolleys.js';
 import {sameRecord} from './local-import.js';
 import {firebaseErrorMessage} from './firebase-errors.js';
 
@@ -8,11 +8,11 @@ const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const localTime=()=>{const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;};
 export function openHandover({dialog,getState,getClient,canWrite,commit,download,notify}) {
  const client=getClient(),ready=getState().trolleys.filter(t=>t.status==='ready');let prepared=null,busy=false;
- dialog.innerHTML=`<div class="eyebrow">COLLECTION DAY</div><h2>Prepare a handover pack</h2><p>Choose up to ${handoverLimit} ready trolleys. Download one PDF with their inventories, recorded exceptions and signature spaces, then confirm when the equipment has left.</p><form id="handover-form"><label for="handover-company">Collection company</label><input id="handover-company" required maxlength="100" placeholder="Decommission company"><label for="handover-date">Collection date and time (your device’s time zone)</label><input id="handover-date" type="datetime-local" required value="${localTime()}"><fieldset class="handover-selection"><legend>Ready trolleys</legend>${ready.map(t=>`<label><input type="checkbox" name="handover-trolley" value="${escape(t.id)}"><span><strong>${escape(t.name)}</strong><small>${escape(t.reference)}</small><small>Property of TSU - ${escape(t.department)}</small></span></label>`).join('')||'<p>No ready trolleys. Complete their readiness checks first.</p>'}</fieldset><button class="secondary wide" id="download-handover" ${ready.length?'':'disabled'}>Download handover PDF</button><p id="handover-prepared" aria-live="polite"></p><label class="review-check"><input type="checkbox" id="confirm-handover" disabled> I checked the pack and these trolleys have been collected by the company.</label><p id="handover-error" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-handover">Close</button><button type="button" class="primary" id="collect-handover" disabled>Mark selected collected</button></div></form>`;
- dialog.showModal();const form=dialog.querySelector('form'),output=dialog.querySelector('#handover-error'),message=dialog.querySelector('#handover-prepared'),check=dialog.querySelector('#confirm-handover'),collect=dialog.querySelector('#collect-handover'),print=dialog.querySelector('#download-handover');
+ dialog.innerHTML=`<div class="eyebrow">COLLECTION DAY</div><h2>Prepare a handover pack</h2><p>Choose up to ${handoverLimit} ready trolleys. Download the equipment Excel for the college and a handover PDF with inventories, exceptions and signature spaces. Confirm collection when the equipment has left.</p><form id="handover-form"><label for="handover-company">Collection company</label><input id="handover-company" required maxlength="100" placeholder="Decommission company"><label for="handover-date">Collection date and time (your device’s time zone)</label><input id="handover-date" type="datetime-local" required value="${localTime()}"><fieldset class="handover-selection"><legend>Ready trolleys</legend>${ready.map(t=>`<label><input type="checkbox" name="handover-trolley" value="${escape(t.id)}"><span><strong>${escape(t.name)}</strong><small>${escape(t.reference)}</small><small>Property of TSU - ${escape(t.department)}</small></span></label>`).join('')||'<p>No ready trolleys. Complete their readiness checks first.</p>'}</fieldset><div class="handover-download-actions"><button class="secondary" id="download-handover" ${ready.length?'':'disabled'}>Download handover PDF</button><button type="button" class="secondary" id="download-handover-excel" ${ready.length?'':'disabled'}>Download equipment Excel</button></div><p id="handover-excel-status" aria-live="polite"></p><p id="handover-prepared" aria-live="polite"></p><label class="review-check"><input type="checkbox" id="confirm-handover" disabled> I checked the pack and these trolleys have been collected by the company.</label><p id="handover-error" aria-live="polite"></p><div class="dialog-actions"><button type="button" class="secondary" id="close-handover">Close</button><button type="button" class="primary" id="collect-handover" disabled>Mark selected collected</button></div></form>`;
+ dialog.showModal();const form=dialog.querySelector('form'),output=dialog.querySelector('#handover-error'),message=dialog.querySelector('#handover-prepared'),excelStatus=dialog.querySelector('#handover-excel-status'),check=dialog.querySelector('#confirm-handover'),collect=dialog.querySelector('#collect-handover'),print=dialog.querySelector('#download-handover'),excel=dialog.querySelector('#download-handover-excel');
  const connected=()=>dialog.isConnected&&dialog.open&&client===getClient();
- function setBusy(value){busy=value;form.querySelectorAll('input,button').forEach(node=>node.disabled=value);if(!value){print.disabled=!ready.length;check.disabled=!prepared;collect.disabled=!prepared||!check.checked;}}
- function reset(){prepared=null;check.checked=false;check.disabled=true;collect.disabled=true;message.textContent='Details changed. Download an updated pack before confirming collection.';}
+ function setBusy(value){busy=value;form.querySelectorAll('input,button').forEach(node=>node.disabled=value);if(!value){print.disabled=excel.disabled=!ready.length;check.disabled=!prepared;collect.disabled=!prepared||!check.checked;}}
+ function reset(){prepared=null;check.checked=false;check.disabled=true;collect.disabled=true;excelStatus.textContent='';message.textContent='Details changed. Download an updated pack before confirming collection.';}
  form.querySelectorAll('input:not(#confirm-handover)').forEach(input=>input.oninput=reset);
  check.onchange=()=>{collect.disabled=!prepared||!check.checked;};
  dialog.oncancel=e=>{if(busy)e.preventDefault();};dialog.querySelector('#close-handover').onclick=()=>dialog.close();
@@ -33,6 +33,23 @@ export function openHandover({dialog,getState,getClient,canWrite,commit,download
    prepared={pack,records,expectedVersions,actor:client?.profile.code||getState().active};
    message.textContent=`${handoverReference(pack.id)} · ${ids.length} trolleys. PDF download started. Print it and check the equipment before confirming.`;
   }catch(error){if(connected())output.textContent=`Pack not prepared: ${firebaseErrorMessage(error)}`;}
+  finally{if(connected())setBusy(false);}
+ };
+ excel.onclick=async()=>{
+  if(busy||!connected()||!canWrite())return;
+  output.textContent='';excelStatus.textContent='';setBusy(true);
+  try{
+   const ids=[...form.querySelectorAll('[name=handover-trolley]:checked')].map(input=>input.value);
+   if(!ids.length||ids.length>handoverLimit)throw Error(`Select between one and ${handoverLimit} ready trolleys for the Excel export.`);
+   const records=client?await client.load():structuredClone(getState());if(!connected())return;
+   const trolleys=ids.map(id=>records.trolleys.find(t=>t.id===id));
+   if(trolleys.some(t=>!t||t.status!=='ready'||!checkReadiness(t,records.items,{shared:Boolean(client)}).canReady))throw Error('A selected trolley is not ready or has unresolved checks. Review its readiness before exporting.');
+   const items=records.items.filter(item=>trolleys.some(t=>trolleyForItem(item,t)));
+   if(!items.length)throw Error('The selected trolleys have no saved equipment to export.');
+   const {supplierExcel,supplierExcelType}=await import('./supplier-excel.js');const bytes=await supplierExcel(items);if(!connected())return;
+   download(bytes,`${handoverReference(ids[0])}-equipment.xlsx`,supplierExcelType);
+   excelStatus.textContent=`Equipment Excel download started: ${items.length} item${items.length===1?'':'s'} from ${ids.length} selected trolley${ids.length===1?'':'s'}.`;
+  }catch(error){if(connected())output.textContent=`Excel export failed: ${firebaseErrorMessage(error)}`;}
   finally{if(connected())setBusy(false);}
  };
  collect.onclick=async()=>{
