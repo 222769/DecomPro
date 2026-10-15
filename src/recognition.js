@@ -1,4 +1,4 @@
-import { normalizeEquipmentDescription } from './equipment-types.js';
+import { normalizeEquipmentDescription,epsonProjectorModel } from './equipment-types.js';
 const meaningful = value => typeof value === 'string' && value.trim() && !/^(n\/?a|unknown|none|-|not known)$/i.test(value.trim());
 export const normalizeSerial = value => String(value ?? '').trim().toUpperCase();
 const labelKey = fact => `${fact.model.trim().toLowerCase()}\u0000${fact.manufacturer.trim().toLowerCase()}`;
@@ -10,7 +10,7 @@ export function cleanExamples(examples) {
   if(!meaningful(row.serial)||!meaningful(row.model)||!meaningful(row.manufacturer))continue;
   const fact={serial:normalizeSerial(row.serial),model:row.model.trim(),manufacturer:row.manufacturer.trim(),source:typeof row.source==='string'?row.source:'Confirmed record'};
   const key=`${fact.serial}\u0000${labelKey(fact)}`,previous=unique.get(key);
-  const types=descriptions.get(key)||new Set();const type=normalizeEquipmentDescription(row.description);if(type)types.add(type);descriptions.set(key,types);
+  const types=descriptions.get(key)||new Set();const type=epsonProjectorModel(fact.model,fact.manufacturer)?'Projector':normalizeEquipmentDescription(row.description);if(type)types.add(type);descriptions.set(key,types);
   if(previous)fact.source=[...new Set([...previous.source.split(' | '),...fact.source.split(' | ')])].join(' | ');
   unique.set(key,fact);
  }

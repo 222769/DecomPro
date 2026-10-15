@@ -2,10 +2,11 @@ import {test,expect} from '@playwright/test';
 import {createTrolley} from '../src/trolleys.js';
 import {defaultSettings,parseBackup} from '../src/workspace.js';
 import {handoverReference} from '../src/handover-data.js';
+import {createCollection} from '../src/collection-sessions.js';
 import {readFile} from 'node:fs/promises';
 import ExcelJS from 'exceljs';
 import {headers} from '../src/data.js';
-import {openMobileMore,openMobileSection} from './helpers/mobile-nav.js';
+import {openMobileSection} from './helpers/mobile-nav.js';
 
 async function seed(page) {
  const ready=name=>({...createTrolley(name),status:'ready',readyAt:new Date().toISOString(),readyBy:'JA'});
@@ -67,7 +68,7 @@ test('supplier Excel combines the saved handover only, ignores searches and pres
   localStorage.setItem('decompro.v1',JSON.stringify(state));
  });await page.reload();
  await prepare(page,trolleys);await page.getByLabel('I checked the pack and these trolleys have been collected').check();await page.getByRole('button',{name:'Mark selected collected'}).click();
- await page.getByLabel('Search collected trolleys').fill('Collection 01');await openMobileSection(page,'#inventory');await page.getByLabel('Search collection register').fill('HANDOVER-001');await openMobileMore(page);await page.locator('aside a[href="#collection-history"]').click();
+ await page.getByLabel('Search collected trolleys').fill('Collection 01');await page.evaluate(()=>location.hash='inventory');await page.getByLabel('Search collection register').fill('HANDOVER-001');await page.evaluate(()=>location.hash='collection-history');
  const before=await page.evaluate(()=>localStorage.getItem('decompro.v1')),download=page.waitForEvent('download');
  await page.getByRole('button',{name:'Download supplier Excel',exact:true}).click();const file=await download;
  expect(file.suggestedFilename()).toBe(`${handoverReference(trolleys[0].id)}-supplier.xlsx`);
@@ -77,6 +78,14 @@ test('supplier Excel combines the saved handover only, ignores searches and pres
  expect(sheet.getRow(2).getCell(6).value).toBe('HANDOVER-001');expect(sheet.getRow(3).getCell(6).value).toBe('00001234');expect(sheet.getRow(3).getCell(7).value).toBe('00000001');expect(sheet.getRow(3).getCell(9).value).toBe('A0001');
  expect(sheet.getRow(2).getCell(11).value).toBe('JA');expect(sheet.getRow(3).getCell(11).value).toBe('JA');expect(sheet.getRow(2).getCell(1).value).toBeInstanceOf(Date);expect(sheet.getRow(2).getCell(1).numFmt).toBe('dd/mm/yyyy');
  await expect(page.locator('.handover-export-status')).toContainText('2 items from this handover');expect(await page.evaluate(()=>localStorage.getItem('decompro.v1'))).toBe(before);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+test('a completed named collection offers the college its full eleven-column Excel in collection history',async({page})=>{
+ const {trolleys}=await seed(page),session=createCollection('College October');
+ await page.evaluate(({session,ids})=>{const state=JSON.parse(localStorage.getItem('decompro.v1'));state.collectionSessions=[session];state.collectionTrolleys=ids.map(trolleyId=>({trolleyId,sessionId:session.id}));localStorage.setItem('decompro.v1',JSON.stringify(state));},{session,ids:trolleys.slice(0,2).map(t=>t.id)});
+ await page.reload();await expect(page.locator('.completed-collection-export')).toHaveCount(0);await prepare(page,trolleys);await page.getByLabel('I checked the pack and these trolleys have been collected').check();await page.getByRole('button',{name:'Mark selected collected'}).click();
+ const card=page.locator('.completed-collection-export').filter({hasText:'College October'});await expect(card).toBeVisible();await expect(card).toContainText('2 equipment items');
+ const pending=page.waitForEvent('download');await card.getByRole('button',{name:'Download collection Excel'}).click();const file=await pending,book=new ExcelJS.Workbook();await book.xlsx.readFile(await file.path());
+ expect(file.suggestedFilename()).toContain('College October');expect(book.worksheets[0].rowCount).toBe(3);expect(book.worksheets[0].getRow(1).values.slice(1)).toEqual(headers);expect(book.worksheets[0].getCell('F2').value).toBe('HANDOVER-001');
 });
 
 test('shared supplier export requires a fresh server read and keeps cached records intact on failure',async({page})=>{

@@ -19,8 +19,8 @@ test('loading a full workbook after a recognition-only result automatically brin
 
 test('historical rescan speaks matches, multiple choices and the selected model',async({page})=>{
  await page.addInitScript(()=>{window.spoken=[];Object.defineProperty(window,'speechSynthesis',{value:{cancel(){},getVoices(){return []},speak(u){window.spoken.push(u.text)}}});});
- await setup(page);if(await page.locator('#voice').innerText() === 'Voice off')await page.locator('#voice').click();await load(page);await lookup(page,'OLD-ETCH');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Spreadsheet item found. Example maker Historical model');
- const other=[...row];other[2]='Other model';await page.locator('#rescan-serial').fill('');await load(page,[row,other]);await lookup(page,'A0001');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toBe('Multiple records found. Please select the correct spreadsheet record.');
+ await setup(page);if(await page.locator('#voice').innerText() === 'Voice off')await page.locator('#voice').click();await load(page);await lookup(page,'OLD-ETCH');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Previous item found. Example maker Historical model');
+ const other=[...row];other[2]='Other model';await page.locator('#rescan-serial').fill('');await load(page,[row,other]);await lookup(page,'A0001');await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toBe('Multiple items found. Select one.');
  const chosen=await page.locator('#historical-row-choice option').last().getAttribute('value');await page.locator('#historical-row-choice').selectOption(chosen);await expect.poll(()=>page.evaluate(()=>window.spoken.at(-1))).toContain('Example maker Other model');
 });
 

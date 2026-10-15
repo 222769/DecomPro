@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import ExcelJS from 'exceljs';
 import {suggestEquipmentDescription as suggest,normalizeEquipmentDescription} from '../../src/equipment-types.js';
-import {cleanExamples,referenceRowsFromWorkbook} from '../../src/recognition.js';
+import {cleanExamples,referenceRowsFromWorkbook,recognizeSerial} from '../../src/recognition.js';
 import {buildImportPreview} from '../../src/import-preview.js';
 import {readFile} from 'node:fs/promises';
 const facts=JSON.parse(await readFile(new URL('../../src/reference-catalogue.json',import.meta.url)));
@@ -22,6 +22,13 @@ test('bundled facts provide different hardware categories without changing seria
  assert.ok(facts.filter(f=>f.description).length>1400);
  for(const type of ['Laptop','Monitor','Desktop','Printer','Tablet','Switch'])assert.ok(facts.some(f=>f.description===type),type);
  for(const fact of facts.filter(f=>f.description==='Laptop').slice(0,20))assert.equal(suggest(fact.model,fact.manufacturer,facts),'Laptop');
+});
+test('Epson EB projector references override mistaken hard-drive labels without changing other Epson devices',()=>{
+ for(const serial of ['MRMF070041L','QVTK3Y01656','MSTF14257L','QUGF361647L']){
+  const match=recognizeSerial(serial,facts);assert.equal(match.description,'Projector');assert.equal(suggest(match.model,match.manufacturer,facts),'Projector');
+ }
+ assert.equal(cleanExamples([{serial:'EPSON-EB-1',model:'EB-455Wi',manufacturer:'Epson',description:'Hard drive'}])[0].description,'Projector');
+ assert.equal(suggest('GP20000','Epson',facts),'Scanner');assert.equal(suggest('KBB1A','Epson',facts),'Printer');
 });
 
 test('existing-record repair plans change only descriptions and preserve ambiguous and locked inventory',async()=>{

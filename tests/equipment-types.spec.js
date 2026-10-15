@@ -36,6 +36,9 @@ test('changing a recognised model recalculates the category instead of keeping t
 for(const [serial,type] of [['8F020669H','Laptop'],['C17K3999DNCR','All-in-one computer'],['TG22681204','Monitor']])test(`bundled serial-family recognition ${serial} also updates equipment type`,async({page})=>{
  await page.goto('/');await scan(page,serial);await expect(page.locator('#default-description')).toHaveValue(type);await page.reload();await expect(page.locator('#default-description')).toHaveValue(type);
 });
+test('bundled Epson EB projector with an old hard-drive label fills Projector',async({page})=>{
+ await page.goto('/');await scan(page,'MRMF070041L');await expect(page.locator('#default-description')).toHaveValue('Projector');await expect(page.locator('#recognized-maker')).toHaveValue('Epson');
+});
 test('manufacturer-only family with conflicting equipment types waits for a checked model choice',async({page})=>{
  await seed(page,[{serial:'QATYPE1001',model:'G15',manufacturer:'Lenovo',description:'Laptop',source:'Excel'},{serial:'QATYPE1002',model:'TIO24D',manufacturer:'Lenovo',description:'Monitor',source:'Excel'}]);
  await scan(page,'QATYPE1003');await expect(page.locator('#default-description')).toHaveValue('Monitor');await expect(page.locator('#model-candidate')).toBeVisible();
