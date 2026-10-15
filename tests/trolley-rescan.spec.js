@@ -20,6 +20,24 @@ test('normal scanning does not fill asset/barcode and switching modes preserves 
 for(const serial of ['N/A','UNREGISTERED-SERIAL','C17K3520DNCR'])test(`rescan rejects ${serial} rather than creating or guessing a record`,async({page})=>{
  await seed(page);const before=await stored(page);await lookup(page,serial);await expect(page.locator('#rescan-message')).toContainText('Rescan stopped');await expect(page.locator('#confirm-rescan')).toHaveCount(0);expect((await stored(page)).items).toEqual(before.items);
 });
+for(const [kind,identifier] of [['serial','NEW-SERIAL-01'],['barcode','0000090011'],['etch','ETCH-NEW-01'],['asset','A0803']])test(`unknown ${kind} can be reviewed and added to the selected trolley`,async({page})=>{
+ const {target}=await seed(page);await lookup(page,identifier);await expect(page.locator('#rescan-new-form')).toBeVisible();await page.locator('#rescan-new-kind').selectOption(kind);
+ await page.locator('#rescan-new-description').fill('Laptop');await page.locator('#rescan-new-model').fill('Reviewed model');await page.locator('#rescan-new-manufacturer').fill('Reviewed maker');
+ await page.locator('#rescan-new-checked').check();await page.getByRole('button',{name:'Add new item to current trolley'}).click();
+ await expect(page.locator('#rescan-message')).toContainText('Item added');const saved=(await stored(page)).items.at(-1);expect(saved).toMatchObject({[kind]:identifier,description:'Laptop',model:'Reviewed model',manufacturer:'Reviewed maker',trolleyId:target.id,technician:'MA'});
+ await expect(page.locator('#rescan-serial')).toHaveValue('');await lookup(page,identifier);await expect(page.locator('#confirm-rescan')).toBeVisible();await expect(page.locator('#rescan-new-form')).toHaveCount(0);
+});
+test('new rescan item requires review and refuses a duplicate appearing after lookup',async({page})=>{
+ await seed(page);await lookup(page,'NEW-ONE');await page.locator('#rescan-new-description').fill('Laptop');await page.locator('#rescan-new-model').fill('Model');await page.locator('#rescan-new-manufacturer').fill('Maker');
+ await page.getByRole('button',{name:'Add new item to current trolley'}).click();await expect(page.locator('#rescan-message')).toContainText('tick the confirmation');
+ await page.locator('#rescan-new-barcode').fill('0000123000');await page.locator('#rescan-new-checked').check();
+ await page.getByRole('button',{name:'Add new item to current trolley'}).click();await expect(page.locator('#rescan-message')).toContainText('Item not added');await expect(page.locator('#rescan-new-form')).toBeVisible();expect((await stored(page)).items).toHaveLength(1);
+});
+test('Enter adds a reviewed unknown item and keeps the next rescan ready on a phone',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await seed(page);await page.locator('#rescan-mode').check();await page.locator('#rescan-serial').fill('SCAN-NEW-01');await page.locator('#rescan-serial').press('Enter');await expect(page.locator('#rescan-new-form')).toBeVisible();
+ await page.locator('#rescan-new-description').fill('Laptop');await page.locator('#rescan-new-model').fill('L13');await page.locator('#rescan-new-manufacturer').fill('Lenovo');await page.locator('#rescan-serial').press('Enter');
+ await expect(page.locator('#rescan-message')).toContainText('Item added');await expect(page.locator('#rescan-serial')).toBeFocused();expect((await stored(page)).items.at(-1).serial).toBe('SCAN-NEW-01');expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
 
 test('ambiguous registered serials are not picked arbitrarily',async({page})=>{
  await seed(page,{duplicates:true});await lookup(page);await expect(page.locator('#rescan-message')).toContainText('More than one equipment record');await expect(page.locator('#confirm-rescan')).toHaveCount(0);
@@ -38,9 +56,13 @@ test('phone rescan preview survives navigation and normal form Enter cannot save
 
 async function connectRescanTeam(page){
  const seeded=await seed(page);await page.evaluate(state=>{window.remote={items:state.items,trolleys:state.trolleys,examples:[],corrections:[]};window.version=1;window.moveWrites=[];},seeded.state);
- await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`export async function connectFirebase(){return {uid:'rescan-tech',profile:{name:'Ali',code:'MA'},role:'technician',teamId:'college-it',email:'qa@example.invalid',stop(){},async logout(){},listen(a,b,c,d,phase){phase('connected')},versionFor(){return window.version},async load(){return structuredClone(window.remote)},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},async write(item,version,options){window.moveWrites.push({item,version,options});if(window.failOnce){window.failOnce=false;throw Error('Temporary move failure');}window.remote.items=window.remote.items.map(row=>row.id===item.id?item:row);window.version++}}}` }));
+ await page.route(/\/(?:src\/firebase-db[^/]*|assets\/firebase-db-[^/]+\.js)(?:\?.*)?$/,route=>route.fulfill({contentType:'application/javascript',body:`export async function connectFirebase(){return {uid:'rescan-tech',profile:{name:'Ali',code:'MA'},role:'technician',teamId:'college-it',email:'qa@example.invalid',stop(){},async logout(){},listen(a,b,c,d,phase){phase('connected')},versionFor(){return window.version},async load(){return structuredClone(window.remote)},async loadCollections(){return {collectionSessions:[],collectionTrolleys:[]}},async write(item,version,options){window.moveWrites.push({item,version,options});if(window.failOnce){window.failOnce=false;throw Error('Temporary move failure');}if(window.remote.items.some(row=>row.id===item.id))window.remote.items=window.remote.items.map(row=>row.id===item.id?item:row);else window.remote.items.push(item);window.version++}}}` }));
  await page.getByRole('button',{name:'Shared database',exact:true}).click();await page.getByLabel('Team account email').fill('qa@example.invalid');await page.getByLabel('Password',{exact:true}).fill('test-only');await page.getByRole('button',{name:'Sign in & connect'}).click();await expect(page.locator('#database-dialog')).not.toBeVisible();return seeded;
 }
+test('shared rescan adds a new item with current technician after checking the latest register',async({page})=>{
+ const {target}=await connectRescanTeam(page);await lookup(page,'TEAM-NEW-01');await page.locator('#rescan-new-description').fill('Tablet');await page.locator('#rescan-new-model').fill('T14');await page.locator('#rescan-new-manufacturer').fill('Lenovo');await page.locator('#rescan-new-checked').check();
+ await page.getByRole('button',{name:'Add new item to current trolley'}).click();await expect(page.locator('#rescan-message')).toContainText('saved to Firebase');const writes=await page.evaluate(()=>window.moveWrites);expect(writes).toHaveLength(1);expect(writes[0]).toMatchObject({version:0,item:{serial:'TEAM-NEW-01',technician:'MA',trolleyId:target.id}});expect((await stored(page)).items).toHaveLength(2);
+});
 
 test('shared rescan rechecks revisions, rejects stale details and then moves the updated item',async({page})=>{
  const {item,target}=await connectRescanTeam(page);await lookup(page);await page.evaluate(()=>{window.remote.items[0].asset='A0043';window.version=2;});await page.getByRole('button',{name:'Confirm trolley placement',exact:true}).click();await expect(page.locator('#rescan-message')).toContainText('changed since lookup');expect(await page.evaluate(()=>window.moveWrites.length)).toBe(0);
