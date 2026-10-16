@@ -34,6 +34,9 @@ test('desktop register leads to the guided physical check without changing troll
  await expect(page.locator('#trolley-manager')).toContainText('unresolved issue');
  const open=await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.demo.v1')).trolleys[0].status);
  expect(open).toBe('open');
+ await page.getByRole('button',{name:'Back to collection steps'}).click();
+ await expect(page.locator('#trolley-manager')).not.toBeVisible();
+ await expect(guide).toContainText('Step 3 of 4');
 });
 
 test('the next-step button is visible immediately after the desktop scan station',async({page})=>{
@@ -84,6 +87,7 @@ test('confirmed readiness advances the guide and locks the trolley for pickup',a
  await expect(page.locator('.readiness-summary')).toContainText('0 unresolved issues');
  await page.getByLabel('I checked these items and any recorded exceptions before collection.').check();
  await page.getByRole('button',{name:'Mark ready for collection'}).click();
+ await expect(page.locator('#trolley-manager')).not.toBeVisible();
  await expect(guide).toContainText('Awaiting collection');
  await expect(guide).toContainText('Step 4 of 4');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('decompro.v1')).trolleys[0].status)).toBe('ready');

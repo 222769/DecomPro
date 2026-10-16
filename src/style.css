@@ -339,7 +339,7 @@ main.workspace-lock { margin:0 auto; max-width:640px; min-height:100vh; display:
 .connection-status.compact-connection.connected .connection-chip { box-shadow:0 0 0 1px #39b78b20,0 0 18px #39b78b1c; }
 .dashboard-trolley-details { border-top:1px solid var(--border); margin-top:18px; padding-top:16px; }.dashboard-trolley-details>summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); }.dashboard-trolley-details>summary span { float:right; font-weight:400; }
 .collection-preparation { margin:0 0 26px; padding:30px; border-color:#cbd9ee; background:linear-gradient(125deg,#eef5ff,#fff 56%,#f2fbf8); scroll-margin-top:24px; }
-#inventory + #collection-preparation-station { margin-top:24px; }
+#inventory + #collection-preparation-station { margin-top:26px; }
 .preparation-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .preparation-heading h2 { font-size:clamp(24px,2vw,32px); margin:9px 0; }
 .preparation-heading p { font-size:13px; margin:0; }

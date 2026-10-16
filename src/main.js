@@ -698,7 +698,7 @@ function updateCollectionPreparation() {
   node.querySelector('.preparation-collection').onchange=event=>{preparationCollectionId=event.target.value;updateCollectionPreparation();};
   node.querySelectorAll('[data-prepare-create]').forEach(button=>button.onclick=()=>editCollection());
   node.querySelectorAll('[data-prepare-manage]').forEach(button=>button.onclick=()=>editCollection(button.dataset.prepareManage));
-  node.querySelectorAll('[data-prepare-check]').forEach(button=>button.onclick=()=>openReadiness(button.dataset.prepareCheck));
+  node.querySelectorAll('[data-prepare-check]').forEach(button=>button.onclick=()=>openReadiness(button.dataset.prepareCheck,{guideId:node.id}));
   node.querySelector('[data-prepare-handover]')?.addEventListener('click',openHandoverPack);
  }
 }
@@ -1093,11 +1093,13 @@ function openTrolleyDeletion(id) {
   }catch(error){output.textContent=`Trolley not deleted. ${error.code==='permission-denied'?'An administrator must publish the latest Firestore rules from Database before shared trolley deletion is available. ':''}${firebaseErrorMessage(error)}`;busy=false;button.disabled=!valid();cancel.disabled=false;if(/Detach this trolley/.test(error.message))detach.hidden=false;}
  };
 }
-async function openReadiness(id) {
+async function openReadiness(id,{guideId=''}={}) {
  const session=++readinessSession,client=sharedClient,dialog=document.querySelector('#trolley-manager');
  let trolley=state.trolleys.find(t=>t.id===id),register=state.items,version=client?.trolleyVersionFor(id)||0;
- dialog.innerHTML='<h2>Collection readiness</h2><p>Checking the equipment register…</p><p id="readiness-error" role="alert"></p><button class="secondary" id="close-readiness">Back to trolleys</button>';
- dialog.showModal();dialog.querySelector('#close-readiness').onclick=()=>{dialog.close();openTrolleyManager();};
+ const backLabel=guideId?'Back to collection steps':'Back to trolleys';
+ const leaveReadiness=()=>{dialog.close();if(guideId)requestAnimationFrame(()=>document.getElementById(guideId)?.scrollIntoView({block:'start'}));else openTrolleyManager();};
+ dialog.innerHTML=`<h2>Collection readiness</h2><p>Checking the equipment register…</p><p id="readiness-error" role="alert"></p><button class="secondary" id="close-readiness">${backLabel}</button>`;
+ dialog.showModal();dialog.querySelector('#close-readiness').onclick=leaveReadiness;
  try {
   if(sharedLocked&&!client)throw Error('Reconnect to Firebase before reviewing shared readiness.');
   if(client){const snapshot=await client.readinessSnapshot(id);trolley=snapshot.trolley;register=snapshot.items;version=snapshot.version;}
@@ -1110,8 +1112,8 @@ async function openReadiness(id) {
   dialog.innerHTML=`<div class="eyebrow">COLLECTION CONTROL</div><h2>Collection readiness</h2><p>${escape(trolley.name)} · ${escape(trolley.reference)}</p><div class="readiness-summary ${review.canReady?'clear':'attention'}"><strong>${review.items.length} item${review.items.length===1?'':'s'} · ${review.unresolved.length} unresolved issue${review.unresolved.length===1?'':'s'}</strong><p>${!review.items.length?'Add equipment before marking this trolley ready.':review.canReady?'The records are ready for a final physical check.':'Correct duplicates and unchecked suggestions. Explain unavailable details below.'}</p></div>${trolley.status==='ready'?`<p>Ready since ${escape(new Date(trolley.readyAt).toLocaleString('en-GB',{timeZone:'Europe/London'}))} · ${escape(trolley.readyBy)}. Reopen the trolley to change its records.</p>`:''}<div class="readiness-list">${affected.map(item=>{
    const issues=review.issues.filter(issue=>issue.itemId===item.id);
    return `<article class="readiness-card" data-readiness-item="${escape(item.id)}"><h3>Item ${review.items.indexOf(item)+1} · ${escape(item.serial)} · ${escape(item.model)}</h3><p>${escape(item.manufacturer)} · Asset ${escape(item.asset)}</p><ul>${issues.map(issue=>`<li>${escape(issue.message)}${issue.kind==='duplicate'?`<span>Also recorded in ${escape([...new Set(register.filter(row=>issue.otherIds.includes(row.id)).map(row=>row.trolley))].join(', '))}</span>`:''}${issue.resolved?'<span>Reason recorded</span>':''}</li>`).join('')}</ul>${trolley.status==='open'?`<form data-review-notes="${escape(item.id)}">${issues.filter(issue=>issue.kind==='missing').map(issue=>`<label for="note-${escape(item.id)}-${issue.field}">Why is ${issue.field==='serial'?'the serial number':issue.field} unavailable?</label><textarea id="note-${escape(item.id)}-${issue.field}" name="${issue.field}" maxlength="500" rows="2" placeholder="e.g. Label missing; checked casing and base">${escape(issue.note)}</textarea>`).join('')}${issues.some(issue=>issue.kind==='recognition')?`<label class="review-check"><input type="checkbox" name="confirmed"> I checked the model and manufacturer against this equipment.</label>`:''}${issues.some(issue=>['missing','recognition'].includes(issue.kind))?'<button class="secondary">Save review notes</button>':''}<p class="review-error" role="alert"></p></form><button class="text-button" data-fix-item="${escape(item.id)}">Edit equipment record</button>`:''}</article>`;
-  }).join('')}</div>${!affected.length&&review.items.length?'<p class="readiness-clear">No missing details, duplicates or unchecked suggestions found.</p>':''}<form id="mark-ready-form" class="readiness-footer">${trolley.status==='open'?`${review.canReady?'<label class="review-check"><input type="checkbox" id="ready-confirm" required> I checked these items and any recorded exceptions before collection.</label>':'<p>Resolve the issues above before confirming the trolley.</p>'}<button class="primary wide" ${!review.canReady?'disabled':''}>Mark ready for collection</button>`:''}<p id="readiness-error" role="alert"></p><button class="secondary wide" type="button" id="close-readiness">Back to trolleys</button></form>`;
-  dialog.querySelector('#close-readiness').onclick=()=>{dialog.close();openTrolleyManager();};
+  }).join('')}</div>${!affected.length&&review.items.length?'<p class="readiness-clear">No missing details, duplicates or unchecked suggestions found.</p>':''}<form id="mark-ready-form" class="readiness-footer">${trolley.status==='open'?`${review.canReady?'<label class="review-check"><input type="checkbox" id="ready-confirm" required> I checked these items and any recorded exceptions before collection.</label>':'<p>Resolve the issues above before confirming the trolley.</p>'}<button class="primary wide" ${!review.canReady?'disabled':''}>Mark ready for collection</button>`:''}<p id="readiness-error" role="alert"></p><button class="secondary wide" type="button" id="close-readiness">${backLabel}</button></form>`;
+  dialog.querySelector('#close-readiness').onclick=leaveReadiness;
   const reviewWritable=output=>{
    if(client!==sharedClient||(sharedLocked&&(!client||navigator.onLine===false))){output.textContent='Reconnect to Firebase before saving this review. Your entered notes stay here.';return false;}
    return true;
@@ -1130,7 +1132,7 @@ async function openReadiness(id) {
     else if(JSON.stringify(state.items.find(item=>item.id===original.id))!==JSON.stringify(original))throw Error('This record changed. Reopen the review.');
     if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the saved review.');
     commitTrolleyWorkspace({...state,items:state.items.map(item=>item.id===updated.id?updated:item)});
-    if(session===readinessSession&&dialog.open)await openReadiness(id);
+    if(session===readinessSession&&dialog.open)await openReadiness(id,{guideId});
    }catch(failure){error.textContent=firebaseErrorMessage(failure);button.disabled=false;}
   });
   dialog.querySelector('#mark-ready-form').onsubmit=async e=>{
@@ -1146,7 +1148,7 @@ async function openReadiness(id) {
     if(client)await client.writeTrolley(updated,version);
     if(client!==sharedClient)throw Error('Workspace changed. Reconnect to see the readiness status.');
     commitTrolleyWorkspace({...state,trolleys:state.trolleys.map(t=>t.id===id?updated:t)});
-    dialog.close();openTrolleyManager();document.querySelector('#trolley-manager-error').textContent='Trolley ready for collection. Print its PDF manifest for handover. Reopen it to change equipment.';
+    leaveReadiness();if(!guideId)document.querySelector('#trolley-manager-error').textContent='Trolley ready for collection. Print its PDF manifest for handover. Reopen it to change equipment.';
    }catch(failure){output.textContent=firebaseErrorMessage(failure);button.disabled=false;}
   };
  }catch(error){if(session===readinessSession&&dialog.open)dialog.querySelector('#readiness-error').textContent=firebaseErrorMessage(error);}
