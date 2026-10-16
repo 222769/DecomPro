@@ -37,14 +37,16 @@ test('deep dark uses midnight and cyan accents on phone',async({page})=>{
  await expect(page.locator('#scan')).toBeVisible();
  const styles=await page.evaluate(()=>{
   const css=selector=>getComputedStyle(document.querySelector(selector));
-  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundColor,body:css('body').backgroundColor,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName};
+  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundColor,body:css('body').backgroundImage,stationGrid:getComputedStyle(document.querySelector('.station'),'::before').backgroundImage,scanAnimation:css('.scan-icon').animationName,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName};
  });
  expect(styles.input).toBe('rgb(10, 26, 43)');
- expect(styles.inputBorder).toBe('rgb(139, 217, 234)');
+ expect(styles.inputBorder).toBe('rgb(126, 228, 238)');
  expect(styles.button).toContain('linear-gradient');
  expect(styles.active).toContain('linear-gradient');
  expect(styles.currentStep).toBe('rgb(117, 225, 233)');
- expect(styles.body).toBe('rgb(5, 11, 24)');
+ expect(styles.body).toContain('radial-gradient');
+ expect(styles.stationGrid).toContain('repeating-linear-gradient');
+ expect(styles.scanAnimation).toBe('deep-orbit');
  expect(styles.stationAnimation).toBe('deep-breathe');
  expect(styles.ambientAnimation).toBe('deep-ambient');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
@@ -55,6 +57,6 @@ test('deep dark animations respect reduced motion',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
  await page.goto('/?workspace=demo#station');
  await expect(page.locator('.step.current span')).toBeVisible();
- const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,ambient:getComputedStyle(document.body,'::before').animationName}));
- expect(animations).toEqual({station:'none',step:'none',ambient:'none'});
+ const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,scan:getComputedStyle(document.querySelector('.scan-icon')).animationName,halo:getComputedStyle(document.querySelector('.station'),'::after').animationName,button:getComputedStyle(document.querySelector('#scan-form .primary'),'::before').animationName,ambient:getComputedStyle(document.body,'::before').animationName}));
+ expect(animations).toEqual({station:'none',step:'none',scan:'none',halo:'none',button:'none',ambient:'none'});
 });

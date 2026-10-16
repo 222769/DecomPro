@@ -251,6 +251,110 @@ html[data-theme-variant=deep] .theme-palette span:first-child{background:#050b18
 html[data-theme-variant=deep] .theme-palette span:nth-child(2){background:#102941;}
 html[data-theme-variant=deep] .theme-palette span:nth-child(3){background:#6ce6ea;}
 html[data-theme-variant=deep] .theme-palette span:nth-child(4){background:#83a9ff;}
+
+/* Deep dark's lighting layers give the workspace depth without covering controls. */
+html[data-theme-variant=deep] body{
+ background:radial-gradient(ellipse 60rem 38rem at 75% -15%,#142c57 0,transparent 75%),#030815;
+}
+html[data-theme-variant=deep] body::before{
+ inset:0;
+ background:radial-gradient(ellipse 44rem 34rem at 80% 14%,#237ba466,transparent 73%),radial-gradient(ellipse 35rem 30rem at 8% 78%,#3063ac52,transparent 72%);
+ filter:blur(26px);
+ animation:deep-ambient 18s ease-in-out infinite alternate;
+}
+html[data-theme-variant=deep] body::after{
+ content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+ background:linear-gradient(#62ddeb0b 1px,transparent 1px),linear-gradient(90deg,#62ddeb0b 1px,transparent 1px);
+ background-size:52px 52px;
+ -webkit-mask-image:linear-gradient(to bottom,#0008,transparent 78%);
+ mask-image:linear-gradient(to bottom,#0008,transparent 78%);
+}
+html[data-theme-variant=deep] aside{
+ background:radial-gradient(circle at 0 0,#154872 0,transparent 20rem),linear-gradient(180deg,#071729,#040d1d 75%);
+ border-right:1px solid #4a9aba88;
+ box-shadow:12px 0 48px #010816ab,inset -1px 0 #76e9ed24;
+}
+html[data-theme-variant=deep] main>header{
+ position:relative;overflow:hidden;
+ background:radial-gradient(ellipse 28rem 15rem at 87% 28%,#2c8da468,transparent 78%),radial-gradient(ellipse 30rem 14rem at 20% 105%,#344d9b57,transparent 76%),linear-gradient(120deg,#10253d,#0b1d37);
+ border-color:#75b8d493;
+ box-shadow:0 24px 60px #000b,inset 0 1px #bcfaff40,0 0 30px #1ca6ce1f;
+}
+html[data-theme-variant=deep] main>header::before{
+ content:'';position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(110deg,transparent 30%,#9dfaff1c 49%,transparent 65%);
+ transform:translateX(-105%);animation:deep-sweep 12s ease-in-out infinite;
+}
+html[data-theme-variant=deep] main>header>*{position:relative;z-index:1;}
+html[data-theme-variant=deep] main>header h1>span{
+ background:linear-gradient(100deg,#74f6ee,#8bc3ff 80%);color:#9aeaf3;
+ -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.session-metrics>div,.collection-session-card){
+ background:radial-gradient(circle at 8% 0,#357e9560,transparent 55%),linear-gradient(140deg,#19354e,#0d1f35 78%);
+ border-color:#5386a697;
+ box-shadow:0 15px 36px #0009,inset 0 1px #d3faff2c;
+ transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.session-metrics>div,.collection-session-card):hover{
+ border-color:#87dce3;transform:translateY(-3px);
+ box-shadow:0 20px 42px #000a,0 0 24px #42c9da29,inset 0 1px #d3faff44;
+}
+html[data-theme-variant=deep] section.station{
+ isolation:isolate;overflow:hidden;
+ background:radial-gradient(ellipse 26rem 18rem at 50% 26%,#287e9b88,transparent 90%),radial-gradient(ellipse 25rem 18rem at 90% 100%,#353d9a57,transparent 80%),linear-gradient(155deg,#122c4b,#09162c 76%);
+ border-color:#80d3df9c;
+ box-shadow:0 30px 75px #000b,0 0 35px #41d3e129,inset 0 1px #d8fdff52;
+}
+html[data-theme-variant=deep] section.station::before{
+ content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;
+ background:repeating-linear-gradient(0deg,transparent 0 37px,#72edff0b 38px 39px),repeating-linear-gradient(90deg,transparent 0 37px,#72edff0b 38px 39px);
+ -webkit-mask-image:radial-gradient(ellipse at 50% 42%,#000,transparent 70%);
+ mask-image:radial-gradient(ellipse at 50% 42%,#000,transparent 70%);
+}
+html[data-theme-variant=deep] section.station::after{
+ content:'';position:absolute;left:12%;right:12%;top:-10rem;height:18rem;z-index:-1;pointer-events:none;
+ background:radial-gradient(ellipse,#5ed8e345,transparent 68%);
+ filter:blur(18px);animation:deep-halo 8s ease-in-out infinite alternate;
+}
+html[data-theme-variant=deep] .station h2{text-shadow:0 0 28px #61dce863;}
+html[data-theme-variant=deep] .scan-icon{
+ background:radial-gradient(circle,#347f9b8c,#153454 68%);
+ border-color:#95edeea8;
+ box-shadow:0 0 0 8px #4bcee61a,0 0 0 20px #4bcee609,0 0 38px #4bdced72,inset 0 1px #c8faff8a;
+ animation:deep-orbit 7s ease-in-out infinite;
+}
+html[data-theme-variant=deep] input#scan{
+ border-color:#7ee4ee;
+ box-shadow:0 0 0 4px #65d9e71c,0 0 28px #5ac9e440,inset 0 1px #e8ffff1a;
+}
+html[data-theme-variant=deep] :is(.primary,#scan-form .primary){
+ position:relative;overflow:hidden;
+ background:linear-gradient(112deg,#56dbe6,#83b8ff 74%,#a7dbff);
+ box-shadow:0 10px 30px #35c8e355,inset 0 1px #fff9;
+}
+html[data-theme-variant=deep] :is(.primary,#scan-form .primary)::before{
+ content:'';position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(115deg,transparent 25%,#fff7 49%,transparent 72%);
+ transform:translateX(-140%);animation:deep-sweep 9s ease-in-out infinite;
+}
+html[data-theme-variant=deep] :is(.primary,#scan-form .primary):hover{box-shadow:0 12px 38px #35c8e37d,inset 0 1px #fffa;}
+html[data-theme-variant=deep] .defaults{
+ background:linear-gradient(145deg,#142e47,#0b1b2f 75%);
+ border-color:#5688a5;box-shadow:0 22px 52px #0009,inset 0 1px #d9fbff30;
+}
+html[data-theme-variant=deep] .defaults-heading{color:#a5edf2;}
+html[data-theme-variant=deep] :is(.collection-dashboard,.session-summary,.named-collections,.register,.collection-preparation){
+ background:radial-gradient(ellipse 25rem 12rem at 90% 0,#286b8b4d,transparent 85%),linear-gradient(145deg,#152f49,#0a1c32 80%);
+ box-shadow:0 24px 56px #0009,inset 0 1px #d2faff26;
+}
+html[data-theme-variant=deep] :is(.nav.active,.app-nav>.nav.is-current){
+ background:linear-gradient(110deg,#246586,#263c73);border-color:#9cf2f0;
+ box-shadow:inset 3px 0 #82fff0,0 0 24px #52dae74d,0 10px 24px #0009;
+}
+html[data-theme-variant=deep] .connection-status.compact-connection.connected .connection-chip{
+ box-shadow:0 0 0 1px #7de5c04a,0 0 28px #6ddcb83d,inset 0 1px #d8ffee38;
+}
 @media(max-width:700px){
  html[data-theme-variant=deep] aside{background:#08182a;border-bottom-color:#456b87;}
  html[data-theme-variant=deep] .workspace-toolbar-actions .text-button{background:#213b57;border-color:#507493;color:#e4f5ff;}
@@ -265,12 +369,19 @@ html[data-theme-variant=deep] .theme-palette span:nth-child(4){background:#83a9f
 @keyframes deep-step{50%{box-shadow:0 0 0 6px #79e8ed34,0 0 25px #61cde88c}}
 @keyframes deep-scan{to{transform:translateY(10px);opacity:.65}}
 @keyframes deep-beacon{50%{opacity:.55;box-shadow:0 0 3px #6de6ed55}}
+@keyframes deep-sweep{0%,12%{transform:translateX(-140%)}40%,100%{transform:translateX(140%)}}
+@keyframes deep-halo{to{transform:translateY(3rem) scale(1.22);opacity:.7}}
+@keyframes deep-orbit{50%{box-shadow:0 0 0 12px #4bcee61a,0 0 0 25px #4bcee607,0 0 50px #4bdced94,inset 0 1px #c8faff8a}}
 @media(prefers-reduced-motion:reduce){
  html[data-theme-variant=deep] body::before,
  html[data-theme-variant=deep] section.station,
  html[data-theme-variant=deep] .step.current span,
  html[data-theme-variant=deep] .scan-icon::after,
  html[data-theme-variant=deep] .station-dot,
- html[data-theme-variant=deep] .connected .connection-chip i{animation:none;}
+ html[data-theme-variant=deep] .connected .connection-chip i,
+ html[data-theme-variant=deep] main>header::before,
+ html[data-theme-variant=deep] section.station::after,
+ html[data-theme-variant=deep] .scan-icon,
+ html[data-theme-variant=deep] :is(.primary,#scan-form .primary)::before{animation:none;}
  html[data-theme-variant=deep] :is(.primary,#scan-form .primary){transition:none;}
 }
