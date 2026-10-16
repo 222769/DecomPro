@@ -11,7 +11,7 @@ export function previewTheme(value=null) {
  document.documentElement.dataset.theme=dark?'dark':'light';
  if(selected==='deep')document.documentElement.dataset.themeVariant='deep';
  else delete document.documentElement.dataset.themeVariant;
- document.querySelector('meta[name="theme-color"]')?.setAttribute('content',selected==='deep'?'#050b18':dark?'#0b1220':'#f4f6fa');
+ document.querySelector('meta[name="theme-color"]')?.setAttribute('content',selected==='deep'?'#070b1a':dark?'#0b1220':'#f4f6fa');
 }
 export function saveTheme(value) {
  if(!choices.includes(value))throw Error('Choose a valid appearance.');
