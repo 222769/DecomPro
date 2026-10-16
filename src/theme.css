@@ -450,3 +450,26 @@ html[data-theme-variant=deep] body.nav-condensed .scroll-dock{
  html[data-theme-variant=deep] [data-deep-tilt]{transform:none;transition:none;}
  html[data-theme-variant=deep] :is(.primary,#scan-form .primary){transition:none;}
 }
+
+/* Keep the search field a single surface in both dark appearances. */
+html[data-theme=dark] #inventory .search-field input[type=search]{
+ flex:1;min-width:0;padding-left:0;background:transparent;border:0;border-radius:0;box-shadow:none;
+}
+html[data-theme=dark] #inventory .search-field input[type=search]:focus-visible{outline:0;}
+html[data-theme=dark] .search-field:focus-within{outline:2px solid #8be5e9;outline-offset:2px;}
+
+@media(max-width:700px){
+ html[data-theme-variant=deep] main>header{
+  min-height:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible;
+ }
+ html[data-theme-variant=deep] main>header::before,
+ html[data-theme-variant=deep] main>header::after,
+ html[data-theme-variant=deep] .register::before,
+ html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)::before{display:none;}
+ html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card){
+  border-color:#527d9b;box-shadow:0 14px 32px #0008,inset 0 1px #d8faff32;
+ }
+ html[data-theme-variant=deep] section.station{
+  border-color:#75c8d9;box-shadow:0 20px 48px #000a,0 0 28px #41d3e122,inset 0 1px #d8fdff50;
+ }
+}

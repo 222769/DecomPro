@@ -88,3 +88,18 @@ test('reduced motion prevents pointer depth',async({page})=>{
  await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+bounds.height*.4);
  await expect(station).not.toHaveAttribute('data-deep-tilt','');
 });
+
+test('Deep dark phone keeps rounded panels and highlights the visible register',async({page})=>{
+ await page.setViewportSize({width:402,height:874});
+ await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
+ await page.goto('/?workspace=demo#station');
+ await expect(page.locator('#scan')).toBeVisible();
+ expect(await page.locator('main > header').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ await page.locator('#register-search').scrollIntoViewIfNeeded();
+ await expect(page.locator('#scroll-dock a[href="#inventory"]')).toHaveAttribute('aria-current','page');
+ const search=page.locator('#register-search');
+ expect(await search.evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ await search.fill('TEST');
+ await expect(search).toHaveValue('TEST');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
+});
