@@ -263,7 +263,7 @@ html[data-theme-variant=deep] body::before{
  animation:deep-ambient 18s ease-in-out infinite alternate;
 }
 html[data-theme-variant=deep] body::after{
- content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+ content:'';position:fixed;inset:-52px;z-index:0;pointer-events:none;
  background:linear-gradient(#62ddeb0b 1px,transparent 1px),linear-gradient(90deg,#62ddeb0b 1px,transparent 1px);
  background-size:52px 52px;
  -webkit-mask-image:linear-gradient(to bottom,#0008,transparent 78%);
@@ -414,6 +414,24 @@ html[data-theme-variant=deep] .defaults{
 html[data-theme-variant=deep] body.nav-condensed .scroll-dock{
  box-shadow:0 18px 48px #000c,0 0 24px #4ac9e43b,inset 0 1px #d9faff50;
 }
+
+/* Slow, independent motion keeps the scene alive while form controls stay still. */
+html[data-theme-variant=deep] body::after{animation:deep-grid-drift 32s linear infinite;}
+html[data-theme-variant=deep] section.station::before{animation:deep-stage-flow 24s linear infinite;}
+html[data-theme-variant=deep] .scan-icon svg{animation:deep-scanner-float 4.5s ease-in-out infinite alternate;}
+html[data-theme-variant=deep] .stats .stat-icon{animation:deep-icon-float 6s ease-in-out infinite alternate;}
+html[data-theme-variant=deep] .stats>div:nth-child(2) .stat-icon{animation-delay:-2s;}
+html[data-theme-variant=deep] .stats>div:nth-child(3) .stat-icon{animation-delay:-4s;}
+html[data-theme-variant=deep] .app-nav>a.nav.active{position:relative;overflow:hidden;isolation:isolate;}
+html[data-theme-variant=deep] .app-nav>a.nav.active::after{
+ content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+ background:linear-gradient(110deg,transparent 25%,#b0ffff36 48%,transparent 70%);
+ transform:translateX(-140%);animation:deep-nav-sheen 9s ease-in-out infinite;
+}
+html[data-theme-variant=deep] .app-nav>a.nav.active>*{position:relative;z-index:1;}
+html[data-theme-variant=deep] aside.mobile-nav-open .app-nav>a.nav.active::after{display:none;}
+html[data-theme-variant=deep] .connection-status.compact-connection.connected .connection-chip{animation:deep-online 6s ease-in-out infinite;}
+html[data-theme-variant=deep] body.nav-condensed .scroll-dock :is(a,button).active{animation:deep-dock-glow 5s ease-in-out infinite;}
 @media(max-width:700px){
  html[data-theme-variant=deep] aside{background:#08182a;border-bottom-color:#456b87;}
  html[data-theme-variant=deep] .workspace-toolbar-actions .text-button{background:#213b57;border-color:#507493;color:#e4f5ff;}
@@ -433,6 +451,13 @@ html[data-theme-variant=deep] body.nav-condensed .scroll-dock{
 @keyframes deep-orbit{50%{box-shadow:0 0 0 12px #4bcee61a,0 0 0 25px #4bcee607,0 0 50px #4bdced94,inset 0 1px #c8faff8a}}
 @keyframes deep-current{to{background-position:200% 0}}
 @keyframes deep-ring{to{transform:rotateX(68deg) rotateZ(360deg)}}
+@keyframes deep-grid-drift{to{transform:translate3d(52px,52px,0)}}
+@keyframes deep-stage-flow{to{background-position:0 0,0 76px,76px 0}}
+@keyframes deep-scanner-float{to{transform:translateY(-4px) scale(1.04);filter:drop-shadow(0 0 13px #8cfaffd4)}}
+@keyframes deep-icon-float{to{transform:translateY(-3px)}}
+@keyframes deep-nav-sheen{0%,30%{transform:translateX(-140%)}65%,100%{transform:translateX(140%)}}
+@keyframes deep-online{50%{box-shadow:0 0 0 1px #7de5c055,0 0 31px #6ddcb851,inset 0 1px #d8ffee45}}
+@keyframes deep-dock-glow{50%{box-shadow:inset 0 0 0 1px #b5fbfa,0 0 18px #66e3e670}}
 @media(prefers-reduced-motion:reduce){
  html[data-theme-variant=deep] body::before,
  html[data-theme-variant=deep] section.station,
@@ -446,7 +471,14 @@ html[data-theme-variant=deep] body.nav-condensed .scroll-dock{
  html[data-theme-variant=deep] :is(.primary,#scan-form .primary)::before,
  html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)::before,
  html[data-theme-variant=deep] .steps::before,
- html[data-theme-variant=deep] .scan-icon::before{animation:none;}
+ html[data-theme-variant=deep] .scan-icon::before,
+ html[data-theme-variant=deep] body::after,
+ html[data-theme-variant=deep] section.station::before,
+ html[data-theme-variant=deep] .scan-icon svg,
+ html[data-theme-variant=deep] .stats .stat-icon,
+ html[data-theme-variant=deep] .app-nav>a.nav.active::after,
+ html[data-theme-variant=deep] .connection-status.compact-connection.connected .connection-chip,
+ html[data-theme-variant=deep] body.nav-condensed .scroll-dock :is(a,button).active{animation:none;}
  html[data-theme-variant=deep] [data-deep-tilt]{transform:none;transition:none;}
  html[data-theme-variant=deep] :is(.primary,#scan-form .primary){transition:none;}
 }

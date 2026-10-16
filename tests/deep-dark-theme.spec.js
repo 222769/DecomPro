@@ -7,6 +7,7 @@ test('deep dark previews and saves separately from the existing dark theme',asyn
  await page.reload();
  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
  await expect(page.locator('html')).not.toHaveAttribute('data-theme-variant','deep');
+ expect(await page.evaluate(()=>getComputedStyle(document.body,'::after').animationName)).toBe('none');
  const oldInput=await page.locator('#scan').evaluate(node=>getComputedStyle(node).backgroundColor);
  await page.locator('#settings').click();
  await page.locator('#appearance-theme').selectOption('deep');
@@ -37,7 +38,7 @@ test('deep dark uses midnight and cyan accents on phone',async({page})=>{
  await expect(page.locator('#scan')).toBeVisible();
  const styles=await page.evaluate(()=>{
   const css=selector=>getComputedStyle(document.querySelector(selector));
-  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundColor,body:css('body').backgroundImage,stationGrid:getComputedStyle(document.querySelector('.station'),'::before').backgroundImage,scanAnimation:css('.scan-icon').animationName,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName};
+  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundColor,body:css('body').backgroundImage,stationGrid:getComputedStyle(document.querySelector('.station'),'::before').backgroundImage,scanAnimation:css('.scan-icon').animationName,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName,gridAnimation:getComputedStyle(document.body,'::after').animationName,stageAnimation:getComputedStyle(document.querySelector('.station'),'::before').animationName,iconAnimation:css('.scan-icon svg').animationName,navAnimation:getComputedStyle(document.querySelector('.app-nav > a[href="#station"]'),'::after').animationName};
  });
  expect(styles.input).toBe('rgb(10, 26, 43)');
  expect(styles.inputBorder).toBe('rgb(126, 228, 238)');
@@ -49,6 +50,10 @@ test('deep dark uses midnight and cyan accents on phone',async({page})=>{
  expect(styles.scanAnimation).toBe('deep-orbit');
  expect(styles.stationAnimation).toBe('deep-breathe');
  expect(styles.ambientAnimation).toBe('deep-ambient');
+ expect(styles.gridAnimation).toBe('deep-grid-drift');
+ expect(styles.stageAnimation).toBe('deep-stage-flow');
+ expect(styles.iconAnimation).toBe('deep-scanner-float');
+ expect(styles.navAnimation).toBe('deep-nav-sheen');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
 });
 
@@ -57,8 +62,8 @@ test('deep dark animations respect reduced motion',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
  await page.goto('/?workspace=demo#station');
  await expect(page.locator('.step.current span')).toBeVisible();
- const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,scan:getComputedStyle(document.querySelector('.scan-icon')).animationName,halo:getComputedStyle(document.querySelector('.station'),'::after').animationName,button:getComputedStyle(document.querySelector('#scan-form .primary'),'::before').animationName,ambient:getComputedStyle(document.body,'::before').animationName}));
- expect(animations).toEqual({station:'none',step:'none',scan:'none',halo:'none',button:'none',ambient:'none'});
+ const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,scan:getComputedStyle(document.querySelector('.scan-icon')).animationName,halo:getComputedStyle(document.querySelector('.station'),'::after').animationName,button:getComputedStyle(document.querySelector('#scan-form .primary'),'::before').animationName,ambient:getComputedStyle(document.body,'::before').animationName,grid:getComputedStyle(document.body,'::after').animationName,stage:getComputedStyle(document.querySelector('.station'),'::before').animationName,icon:getComputedStyle(document.querySelector('.scan-icon svg')).animationName,nav:getComputedStyle(document.querySelector('.app-nav > a[href="#station"]'),'::after').animationName}));
+ expect(animations).toEqual({station:'none',step:'none',scan:'none',halo:'none',button:'none',ambient:'none',grid:'none',stage:'none',icon:'none',nav:'none'});
 });
 
 test('fine-pointer depth follows the pointer and clears when Deep dark is left',async({page})=>{
