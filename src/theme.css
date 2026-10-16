@@ -355,6 +355,65 @@ html[data-theme-variant=deep] :is(.nav.active,.app-nav>.nav.is-current){
 html[data-theme-variant=deep] .connection-status.compact-connection.connected .connection-chip{
  box-shadow:0 0 0 1px #7de5c04a,0 0 28px #6ddcb83d,inset 0 1px #d8ffee38;
 }
+
+/* Fine-pointer parallax and holographic depth, confined to Deep dark. */
+html[data-theme-variant=deep] main{perspective:1400px;}
+html[data-theme-variant=deep] :is(main>header,.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card){
+ transform-style:preserve-3d;
+ backface-visibility:hidden;
+}
+html[data-theme-variant=deep] :is(main>header,.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)[data-deep-tilt]{
+ transform:perspective(1200px) rotateX(var(--deep-tilt-x,0deg)) rotateY(var(--deep-tilt-y,0deg)) translateY(-3px);
+ transition:transform .14s ease-out,border-color .2s,box-shadow .2s;
+ will-change:transform;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card){position:relative;isolation:isolate;overflow:hidden;}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card){
+ border-color:#8ed7de80 #416c88 #36516d #78b9d4;
+ box-shadow:0 3px 0 #0b2a42,0 12px 0 -4px #071b31,0 22px 42px #000b,inset 0 1px #e2ffff4d;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)::before{
+ content:'';position:absolute;left:0;right:0;top:0;height:2px;z-index:2;pointer-events:none;
+ background:linear-gradient(90deg,transparent,#79f3ef99 25%,#8caeff8c 70%,transparent);
+ background-size:200% 100%;animation:deep-current 9s linear infinite;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)::after,
+html[data-theme-variant=deep] main>header::after{
+ content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+ background:radial-gradient(circle 13rem at var(--deep-spot-x,55%) var(--deep-spot-y,25%),#81f7ff30,transparent 82%);
+ opacity:.55;transition:opacity .3s;
+}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card,main>header)[data-deep-tilt]::after{opacity:1;}
+html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card,main>header)>*{position:relative;z-index:1;}
+html[data-theme-variant=deep] section.station::before{
+ background:radial-gradient(circle 15rem at var(--deep-spot-x,50%) var(--deep-spot-y,38%),#8cf8ff21,transparent 85%),repeating-linear-gradient(0deg,transparent 0 37px,#72edff0b 38px 39px),repeating-linear-gradient(90deg,transparent 0 37px,#72edff0b 38px 39px);
+}
+html[data-theme-variant=deep] section.station{
+ border-color:#a4f3ed #4b7197 #384e77 #70c8d9;
+ box-shadow:0 4px 0 #143754,0 11px 0 -3px #0a263d,0 28px 70px #000c,0 0 35px #41d3e129,inset 0 1px #d8fdff72;
+}
+html[data-theme-variant=deep] .scan-icon{
+ transform:translate3d(var(--deep-orb-x,0px),var(--deep-orb-y,0px),0);
+ transition:transform .24s ease-out;
+}
+html[data-theme-variant=deep] .scan-icon::before{
+ content:'';position:absolute;inset:-18px;pointer-events:none;border:1px solid #8af5f078;
+ border-radius:50%;box-shadow:0 0 24px #60d7e84b,inset 0 0 22px #60d7e829;
+ transform:rotateX(68deg) rotateZ(0deg);animation:deep-ring 16s linear infinite;
+}
+html[data-theme-variant=deep] .scan-icon svg{position:relative;z-index:1;filter:drop-shadow(0 0 9px #7bedf0a6);}
+html[data-theme-variant=deep] .scan-icon::after{z-index:2;}
+html[data-theme-variant=deep] .steps::before{
+ height:2px;background:linear-gradient(90deg,#305b76,#84f2ed,#6f8ed1,#305b76);
+ background-size:200% 100%;box-shadow:0 0 12px #69e2e96e;
+ animation:deep-current 8s linear infinite;
+}
+html[data-theme-variant=deep] .defaults{
+ transform:translateZ(0);box-shadow:0 24px 55px #000a,-9px 0 38px #3cbee51d,inset 0 1px #d9fbff30;
+}
+html[data-theme-variant=deep] body.nav-condensed .scroll-dock{
+ box-shadow:0 18px 48px #000c,0 0 24px #4ac9e43b,inset 0 1px #d9faff50;
+}
 @media(max-width:700px){
  html[data-theme-variant=deep] aside{background:#08182a;border-bottom-color:#456b87;}
  html[data-theme-variant=deep] .workspace-toolbar-actions .text-button{background:#213b57;border-color:#507493;color:#e4f5ff;}
@@ -365,13 +424,15 @@ html[data-theme-variant=deep] .connection-status.compact-connection.connected .c
  html[data-theme-variant=deep] .scroll-dock :is(a,button).active{background:#30698a;color:#fff;box-shadow:inset 0 0 0 1px #8ce6f1;}
 }
 @keyframes deep-ambient{from{transform:translate3d(-2%,1%,0) scale(1);opacity:.44}to{transform:translate3d(2%,-2%,0) scale(1.06);opacity:.67}}
-@keyframes deep-breathe{50%{box-shadow:0 16px 44px #010a1a99,0 0 0 1px #69d6ed50,0 0 32px #4bc7e63a,inset 0 1px #cbfaff26}}
+@keyframes deep-breathe{50%{box-shadow:0 4px 0 #143754,0 11px 0 -3px #0a263d,0 32px 76px #000c,0 0 48px #4bc7e65e,inset 0 1px #d8fdff72}}
 @keyframes deep-step{50%{box-shadow:0 0 0 6px #79e8ed34,0 0 25px #61cde88c}}
 @keyframes deep-scan{to{transform:translateY(10px);opacity:.65}}
 @keyframes deep-beacon{50%{opacity:.55;box-shadow:0 0 3px #6de6ed55}}
 @keyframes deep-sweep{0%,12%{transform:translateX(-140%)}40%,100%{transform:translateX(140%)}}
 @keyframes deep-halo{to{transform:translateY(3rem) scale(1.22);opacity:.7}}
 @keyframes deep-orbit{50%{box-shadow:0 0 0 12px #4bcee61a,0 0 0 25px #4bcee607,0 0 50px #4bdced94,inset 0 1px #c8faff8a}}
+@keyframes deep-current{to{background-position:200% 0}}
+@keyframes deep-ring{to{transform:rotateX(68deg) rotateZ(360deg)}}
 @media(prefers-reduced-motion:reduce){
  html[data-theme-variant=deep] body::before,
  html[data-theme-variant=deep] section.station,
@@ -382,6 +443,10 @@ html[data-theme-variant=deep] .connection-status.compact-connection.connected .c
  html[data-theme-variant=deep] main>header::before,
  html[data-theme-variant=deep] section.station::after,
  html[data-theme-variant=deep] .scan-icon,
- html[data-theme-variant=deep] :is(.primary,#scan-form .primary)::before{animation:none;}
+ html[data-theme-variant=deep] :is(.primary,#scan-form .primary)::before,
+ html[data-theme-variant=deep] :is(.stats>div,.dashboard-metrics>div,.dashboard-trolley,.collection-session-card)::before,
+ html[data-theme-variant=deep] .steps::before,
+ html[data-theme-variant=deep] .scan-icon::before{animation:none;}
+ html[data-theme-variant=deep] [data-deep-tilt]{transform:none;transition:none;}
  html[data-theme-variant=deep] :is(.primary,#scan-form .primary){transition:none;}
 }

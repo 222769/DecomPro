@@ -60,3 +60,31 @@ test('deep dark animations respect reduced motion',async({page})=>{
  const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,scan:getComputedStyle(document.querySelector('.scan-icon')).animationName,halo:getComputedStyle(document.querySelector('.station'),'::after').animationName,button:getComputedStyle(document.querySelector('#scan-form .primary'),'::before').animationName,ambient:getComputedStyle(document.body,'::before').animationName}));
  expect(animations).toEqual({station:'none',step:'none',scan:'none',halo:'none',button:'none',ambient:'none'});
 });
+
+test('fine-pointer depth follows the pointer and clears when Deep dark is left',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
+ await page.goto('/?workspace=demo#station');
+ const station=page.locator('section.station');
+ await station.scrollIntoViewIfNeeded();
+ const bounds=await station.boundingBox();
+ await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+bounds.height*.4);
+ await expect(station).toHaveAttribute('data-deep-tilt','');
+ await expect.poll(()=>station.evaluate(node=>node.style.getPropertyValue('--deep-spot-x'))).not.toBe('');
+ await page.evaluate(()=>delete document.documentElement.dataset.themeVariant);
+ await expect(station).not.toHaveAttribute('data-deep-tilt','');
+ await page.evaluate(()=>document.documentElement.dataset.themeVariant='deep');
+ await expect(page.locator('html')).toHaveAttribute('data-theme-variant','deep');
+});
+
+test('reduced motion prevents pointer depth',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
+ await page.goto('/?workspace=demo#station');
+ const station=page.locator('section.station');
+ await station.scrollIntoViewIfNeeded();
+ const bounds=await station.boundingBox();
+ await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+bounds.height*.4);
+ await expect(station).not.toHaveAttribute('data-deep-tilt','');
+});
