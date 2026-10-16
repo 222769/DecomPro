@@ -30,7 +30,7 @@ test('deep dark previews and saves separately from the existing dark theme',asyn
  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
 });
 
-test('Deep dark uses restrained depth and fits on phone',async({page})=>{
+test('Deep dark uses colourful depth and fits on phone',async({page})=>{
  await page.setViewportSize({width:402,height:874});
  await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
  await page.goto('/?workspace=demo#station');
@@ -38,23 +38,23 @@ test('Deep dark uses restrained depth and fits on phone',async({page})=>{
  await expect(page.locator('#scan')).toBeVisible();
  const styles=await page.evaluate(()=>{
   const css=selector=>getComputedStyle(document.querySelector(selector));
-  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundColor,body:css('body').backgroundImage,stats:[...document.querySelectorAll('.stats>div')].map(node=>getComputedStyle(node).backgroundImage),stationGrid:getComputedStyle(document.querySelector('.station'),'::before').backgroundImage,scanAnimation:css('.scan-icon').animationName,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName,gridAnimation:getComputedStyle(document.body,'::after').animationName,stageAnimation:getComputedStyle(document.querySelector('.station'),'::before').animationName,iconAnimation:css('.scan-icon svg').animationName,navAnimation:getComputedStyle(document.querySelector('.app-nav > a[href="#station"]'),'::after').animationName};
+  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundImage,currentStep:css('.step.current span').backgroundImage,body:css('body').backgroundImage,stats:[...document.querySelectorAll('.stats>div')].map(node=>getComputedStyle(node).backgroundImage),stationGrid:getComputedStyle(document.querySelector('.station'),'::before').backgroundImage,scanAnimation:css('.scan-icon').animationName,stationAnimation:css('.station').animationName,ambientAnimation:getComputedStyle(document.body,'::before').animationName,gridAnimation:getComputedStyle(document.body,'::after').animationName,stageAnimation:getComputedStyle(document.querySelector('.station'),'::before').animationName,iconAnimation:css('.scan-icon svg').animationName,navAnimation:getComputedStyle(document.querySelector('.app-nav > a[href="#station"]'),'::after').animationName};
  });
  expect(styles.input).toBe('rgb(10, 26, 43)');
- expect(styles.inputBorder).toBe('rgb(145, 197, 201)');
+ expect(styles.inputBorder).toBe('rgb(200, 168, 255)');
  expect(styles.button).toContain('linear-gradient');
  expect(styles.active).toContain('linear-gradient');
- expect(styles.currentStep).toBe('rgb(148, 208, 206)');
+ expect(styles.currentStep).toContain('linear-gradient');
  expect(styles.body).toContain('radial-gradient');
  expect(new Set(styles.stats).size).toBe(3);
  expect(styles.stationGrid).toContain('repeating-linear-gradient');
- expect(styles.scanAnimation).toBe('none');
- expect(styles.stationAnimation).toBe('none');
- expect(styles.ambientAnimation).toBe('none');
- expect(styles.gridAnimation).toBe('none');
- expect(styles.stageAnimation).toBe('none');
- expect(styles.iconAnimation).toBe('none');
- expect(styles.navAnimation).toBe('none');
+ expect(styles.scanAnimation).toBe('deep-orbit');
+ expect(styles.stationAnimation).toBe('deep-breathe');
+ expect(styles.ambientAnimation).toBe('deep-ambient');
+ expect(styles.gridAnimation).toBe('deep-grid-drift');
+ expect(styles.stageAnimation).toBe('deep-stage-flow');
+ expect(styles.iconAnimation).toBe('deep-scanner-float');
+ expect(styles.navAnimation).toBe('deep-nav-sheen');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
 });
 
@@ -65,6 +65,34 @@ test('deep dark animations respect reduced motion',async({page})=>{
  await expect(page.locator('.step.current span')).toBeVisible();
  const animations=await page.evaluate(()=>({station:getComputedStyle(document.querySelector('.station')).animationName,step:getComputedStyle(document.querySelector('.step.current span')).animationName,scan:getComputedStyle(document.querySelector('.scan-icon')).animationName,halo:getComputedStyle(document.querySelector('.station'),'::after').animationName,button:getComputedStyle(document.querySelector('#scan-form .primary'),'::before').animationName,ambient:getComputedStyle(document.body,'::before').animationName,grid:getComputedStyle(document.body,'::after').animationName,stage:getComputedStyle(document.querySelector('.station'),'::before').animationName,icon:getComputedStyle(document.querySelector('.scan-icon svg')).animationName,nav:getComputedStyle(document.querySelector('.app-nav > a[href="#station"]'),'::after').animationName}));
  expect(animations).toEqual({station:'none',step:'none',scan:'none',halo:'none',button:'none',ambient:'none',grid:'none',stage:'none',icon:'none',nav:'none'});
+});
+
+test('fine-pointer depth follows the pointer and clears when Deep dark is left',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
+ await page.goto('/?workspace=demo#station');
+ const station=page.locator('section.station');
+ await station.scrollIntoViewIfNeeded();
+ const bounds=await station.boundingBox();
+ await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+bounds.height*.4);
+ await expect(station).toHaveAttribute('data-deep-tilt','');
+ await expect.poll(()=>station.evaluate(node=>node.style.getPropertyValue('--deep-spot-x'))).not.toBe('');
+ await page.evaluate(()=>delete document.documentElement.dataset.themeVariant);
+ await expect(station).not.toHaveAttribute('data-deep-tilt','');
+ await page.evaluate(()=>document.documentElement.dataset.themeVariant='deep');
+ await expect(page.locator('html')).toHaveAttribute('data-theme-variant','deep');
+});
+
+test('reduced motion prevents pointer depth',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
+ await page.goto('/?workspace=demo#station');
+ const station=page.locator('section.station');
+ await station.scrollIntoViewIfNeeded();
+ const bounds=await station.boundingBox();
+ await page.mouse.move(bounds.x+bounds.width*.75,bounds.y+bounds.height*.4);
+ await expect(station).not.toHaveAttribute('data-deep-tilt','');
 });
 
 test('Deep dark phone keeps rounded panels and highlights the visible register',async({page})=>{
