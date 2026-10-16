@@ -231,6 +231,23 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
 }
 @media(min-width:901px) and (max-width:1200px){#desktop-sidebar-toggle{left:156px}}
 @media(max-width:900px){#desktop-sidebar-toggle{display:none}}
+.phone-camera-button{display:none}
+@media(max-width:900px){
+ .station .phone-camera-button{display:inline-flex;width:100%;min-height:46px;margin:12px 0 0;font-size:13px}
+}
+.camera-dialog{width:min(520px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 24px);overflow:auto;padding:20px;background:#f8faff}
+.camera-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.camera-header h2{margin:5px 0 0}
+.camera-close{min-width:70px;min-height:42px}
+.camera-dialog p{font-size:13px;line-height:1.55}
+.camera-preview{position:relative;overflow:hidden;min-height:260px;border:1px solid #526f96;border-radius:16px;background:#0b1829}
+.camera-preview video{display:block;width:100%;height:min(55dvh,420px);min-height:260px;object-fit:cover}
+.camera-target{position:absolute;inset:27% 12%;border:2px solid #77e2df;border-radius:14px;box-shadow:0 0 0 999px #07152c2b,inset 0 0 20px #0c213555;pointer-events:none}
+.camera-status{min-height:21px;color:#244b76;font-weight:650}
+.camera-help{color:#5d6d85}
+html[data-theme=dark] .camera-dialog{background:#15253c;color:#e9f2ff;border-color:#476487}
+html[data-theme=dark] .camera-dialog p{color:#c4d3e8}
+html[data-theme=dark] .camera-status{color:#8ddce6}
 /* Historical register imports have their own preview, separate from training. */
 .backup-actions { flex-wrap:wrap; }
 #equipment-import-dialog { width:min(800px,calc(100vw - 32px));max-width:800px;max-height:85vh;overflow:auto; }

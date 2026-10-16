@@ -28,6 +28,7 @@
   },
   "homepage": "https://github.com/222769/DecomPro#readme",
   "dependencies": {
+    "@zxing/browser": "^0.1.5",
     "exceljs": "^4.4.0",
     "firebase": "^13.0.0",
     "jsbarcode": "^3.12.3",
