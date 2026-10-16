@@ -29,7 +29,7 @@ test('deep dark previews and saves separately from the existing dark theme',asyn
  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
 });
 
-test('deep dark uses charcoal surfaces and selective highlights on phone',async({page})=>{
+test('deep dark uses warm and sage accents on charcoal without blue on phone',async({page})=>{
  await page.setViewportSize({width:402,height:874});
  await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
  await page.goto('/?workspace=demo#station');
@@ -37,11 +37,14 @@ test('deep dark uses charcoal surfaces and selective highlights on phone',async(
  await expect(page.locator('#scan')).toBeVisible();
  const styles=await page.evaluate(()=>{
   const css=selector=>getComputedStyle(document.querySelector(selector));
-  return {input:css('#scan').backgroundColor,button:css('#scan-form .primary').backgroundColor,active:css('.app-nav > a[href="#station"]').backgroundColor,card:css('.station').backgroundColor,body:css('body').backgroundColor,rescan:css('.rescan-toggle').backgroundColor,step:css('.step:not(.current) span').backgroundColor,logo:css('.brand-mark').filter};
+  return {input:css('#scan').backgroundColor,inputBorder:css('#scan').borderColor,button:css('#scan-form .primary').backgroundColor,active:css('.app-nav > a[href="#station"]').backgroundColor,currentStep:css('.step.current span').backgroundColor,metric:css('.stats .stat-icon.mint').backgroundColor,card:css('.station').backgroundColor,body:css('body').backgroundColor,rescan:css('.rescan-toggle').backgroundColor,step:css('.step:not(.current) span').backgroundColor,logo:css('.brand-mark').filter};
  });
  expect(styles.input).toBe('rgb(14, 20, 21)');
- expect(styles.button).toBe('rgb(226, 232, 228)');
- expect(styles.active).toBe('rgb(41, 46, 45)');
+ expect(styles.inputBorder).toBe('rgb(173, 139, 104)');
+ expect(styles.button).toBe('rgb(239, 186, 131)');
+ expect(styles.active).toBe('rgb(53, 41, 32)');
+ expect(styles.currentStep).toBe('rgb(239, 186, 131)');
+ expect(styles.metric).toBe('rgb(37, 64, 52)');
  expect(styles.card).toBe('rgb(17, 22, 23)');
  expect(styles.body).toBe('rgb(8, 10, 10)');
  expect(styles.rescan).toBe('rgb(40, 46, 44)');
