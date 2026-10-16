@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="DecomPro">
 <script>
 // Apply the device preference before the first paint, including loading recovery.
-(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='deep'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';if(mode==='deep')document.documentElement.dataset.themeVariant='deep';document.querySelector('meta[name="theme-color"]').content=mode==='deep'?'#03070e':dark?'#0b1220':'#f4f6fa';}catch{}})();
+(function(){try{var mode=localStorage.getItem('decompro.appearance');var dark=mode==='dark'||mode==='deep'||mode==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=dark?'dark':'light';if(mode==='deep')document.documentElement.dataset.themeVariant='deep';document.querySelector('meta[name="theme-color"]').content=mode==='deep'?'#080a0a':dark?'#0b1220':'#f4f6fa';}catch{}})();
 </script>
 <style id="startup-style">
 #startup {position:fixed;inset:0;z-index:9999;background:#f4f6fb;color:#18243b;display:grid;place-items:center;padding:24px;font:16px/1.6 system-ui,sans-serif}
@@ -26,7 +26,7 @@ html[data-theme="dark"] #startup{background:#0b1220;color:#edf3ff}
 html[data-theme="dark"] #startup section{background:#141f32;border-color:#2c3c55;box-shadow:0 16px 60px #0005}
 html[data-theme="dark"] #startup p{color:#a7b8d0}
 html[data-theme="dark"] #startup .startup-brand{color:#9cb5ff}
-html[data-theme-variant="deep"] #startup{background:#03070e;color:#f5f9ff}
+html[data-theme-variant="deep"] #startup{background:#080a0a;color:#f5f9ff}
 html[data-theme-variant="deep"] #startup section{background:#0b1523;border-color:#293d53}
 html[data-theme-variant="deep"] #startup .startup-brand{color:#7ee8e3}
 </style></head><body>

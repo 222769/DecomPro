@@ -29,7 +29,7 @@ test('deep dark previews and saves separately from the existing dark theme',asyn
  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
 });
 
-test('deep dark emphasizes scan and navigation on phone without changing layout',async({page})=>{
+test('deep dark uses charcoal surfaces and selective highlights on phone',async({page})=>{
  await page.setViewportSize({width:402,height:874});
  await page.addInitScript(()=>localStorage.setItem('decompro.appearance','deep'));
  await page.goto('/?workspace=demo#station');
@@ -37,11 +37,15 @@ test('deep dark emphasizes scan and navigation on phone without changing layout'
  await expect(page.locator('#scan')).toBeVisible();
  const styles=await page.evaluate(()=>{
   const css=selector=>getComputedStyle(document.querySelector(selector));
-  return {input:css('#scan').backgroundColor,button:css('#scan-form .primary').backgroundImage,active:css('.app-nav > a[href="#station"]').backgroundColor,body:css('body').backgroundColor};
+  return {input:css('#scan').backgroundColor,button:css('#scan-form .primary').backgroundColor,active:css('.app-nav > a[href="#station"]').backgroundColor,card:css('.station').backgroundColor,body:css('body').backgroundColor,rescan:css('.rescan-toggle').backgroundColor,step:css('.step:not(.current) span').backgroundColor,logo:css('.brand-mark').filter};
  });
- expect(styles.input).toBe('rgb(7, 19, 31)');
- expect(styles.button).toContain('linear-gradient');
- expect(styles.active).toBe('rgb(23, 54, 78)');
- expect(styles.body).toBe('rgb(3, 7, 14)');
+ expect(styles.input).toBe('rgb(14, 20, 21)');
+ expect(styles.button).toBe('rgb(226, 232, 228)');
+ expect(styles.active).toBe('rgb(41, 46, 45)');
+ expect(styles.card).toBe('rgb(17, 22, 23)');
+ expect(styles.body).toBe('rgb(8, 10, 10)');
+ expect(styles.rescan).toBe('rgb(40, 46, 44)');
+ expect(styles.step).toBe('rgb(42, 48, 47)');
+ expect(styles.logo).toContain('grayscale(1)');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(402);
 });
