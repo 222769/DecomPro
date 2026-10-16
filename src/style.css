@@ -220,7 +220,17 @@ dialog { border: 1px solid var(--border); border-radius: 18px; padding: 30px; ma
  aside{display:flex;flex-direction:column;overflow-y:auto}
  aside>*{flex-shrink:0}
  aside .aside-bottom{position:static;margin-top:auto}
+ #workspace-sidebar{transition:transform .22s ease,visibility .22s;z-index:20}
+ #desktop-sidebar-toggle{position:fixed;left:188px;top:77px;z-index:40;display:grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid #516d91;border-radius:11px;background:#243d60;color:#e8f2ff;box-shadow:0 5px 16px #06132955;transition:left .22s ease,top .22s ease,background .18s}
+ #desktop-sidebar-toggle:hover{background:#365b8a}
+ #desktop-sidebar-toggle:focus-visible{outline:3px solid #83b7ff;outline-offset:3px}
+ #desktop-sidebar-toggle svg{width:17px;height:17px}
+ body.sidebar-collapsed #workspace-sidebar{transform:translateX(-100%);visibility:hidden;pointer-events:none}
+ body.sidebar-collapsed #desktop-sidebar-toggle{left:16px;top:16px}
+ body.sidebar-collapsed main{margin-left:0}
 }
+@media(min-width:901px) and (max-width:1200px){#desktop-sidebar-toggle{left:156px}}
+@media(max-width:900px){#desktop-sidebar-toggle{display:none}}
 /* Historical register imports have their own preview, separate from training. */
 .backup-actions { flex-wrap:wrap; }
 #equipment-import-dialog { width:min(800px,calc(100vw - 32px));max-width:800px;max-height:85vh;overflow:auto; }
