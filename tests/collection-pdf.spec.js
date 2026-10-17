@@ -1,7 +1,23 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {createTrolley} from '../src/trolleys.js';
+import {collectionReportPdf} from '../src/collection-report.js';
 import {defaultSettings} from '../src/workspace.js';
+
+test('a large collection PDF keeps the complete inventory in a continuous list',async()=>{
+ const trolley=createTrolley('PDF trolley');
+ const items=Array.from({length:60},(_,index)=>({
+  id:`pdf-item-${index}`,date:'2026-10-13',description:'Laptop',manufacturer:'Lenovo',model:'ThinkPad T14',
+  serial:`LIST-SERIAL-${String(index+1).padStart(3,'0')}`,barcode:`LIST-BARCODE-${index}`,etch:`LIST-ETCH-${index}`,
+  asset:`A${index}`,source:index===36?'Storage room with a longer location to verify wrapping':'Storage',
+  reason:'EOL',trolley:trolley.name,trolleyId:trolley.id,technician:'JA'
+ }));
+ const pdf=Buffer.from(await collectionReportPdf({title:'October collection',reference:'COL-2026-10',items,trolleys:[trolley],includeSustainability:false})).toString('latin1');
+ expect((pdf.match(/\/Type \/Page\b/g)||[]).length).toBeLessThanOrEqual(10);
+ for(const item of items)expect(pdf).toContain(item.serial);
+ expect(pdf.includes('Storage room with a longer')).toBe(true);
+ expect(pdf.includes('location to verify wrapping')).toBe(true);
+});
 
 test('collection PDF includes every item detail in the trolley scope and the requested credits',async({page})=>{
  const first=createTrolley('PDF trolley'),second=createTrolley('Other trolley');
